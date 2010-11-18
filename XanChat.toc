@@ -1,6 +1,6 @@
 ## Interface: 40000
 ## Title: XanChat
-## Notes: Custom chat changes for me.  If you don't like it too bad.
+## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
 ## Version: 1.0
 
