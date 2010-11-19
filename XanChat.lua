@@ -12,10 +12,6 @@ local StickyTypeChannels = {
   CHANNEL = 1,
 };
 
-for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
-	ToggleChatColorNamesByClassGroup(true, v.type)
-end
-
 local function scrollChat(frame, delta)
 	--Faster Scroll
 	if IsControlKeyDown()  then
@@ -47,6 +43,11 @@ function XanChat_doChat()
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
 	  ChatTypeInfo[k].sticky = v;
+	end
+	
+	--toggle class colors
+	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
+		ToggleChatColorNamesByClassGroup(true, v.type)
 	end
 
 	for i = 1, NUM_CHAT_WINDOWS do
