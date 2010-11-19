@@ -49,6 +49,18 @@ function XanChat_doChat()
 	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
 		ToggleChatColorNamesByClassGroup(true, v.type)
 	end
+	--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
+	local chanNum = 1
+	local cId, cName = GetChannelName(chanNum)
+	while (cId > 0 and cName ~= nil) do
+		--set the class color for the channel
+		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..cId)
+		--increment
+		chanNum = chanNum + 1
+		cId, cName = GetChannelName(chanNum)
+		if chanNum >= 10 then break end
+	end
+	
 
 	for i = 1, NUM_CHAT_WINDOWS do
 		local f = _G[("ChatFrame%d"):format(i)]
