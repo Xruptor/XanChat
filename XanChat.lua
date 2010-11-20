@@ -1,5 +1,4 @@
 --Some stupid custom Chat modifications for me :P
-
 local StickyTypeChannels = {
   SAY = 1,
   YELL = 0,
@@ -38,6 +37,61 @@ local function scrollChat(frame, delta)
 	end
 end
 
+--DO CHAT DROPDOWN MENU
+------------------------------
+--special thanks to Tekkub for tekPlayerMenu
+
+StaticPopupDialogs["COPYNAME"] = {
+	text = "COPY NAME",
+	button2 = CANCEL,
+	hasEditBox = true,
+    hasWideEditBox = true,
+	timeout = 0,
+	exclusive = 1,
+	hideOnEscape = 1,
+	EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+	whileDead = 1,
+	maxLetters = 255,
+}
+	
+local function insertbefore(t, before, val)
+	for k,v in ipairs(t) do if v == before then return table.insert(t, k, val) end end
+	table.insert(t, val)
+end
+
+local clickers = {["COPYNAME"] = function(a1) XanChat_DoCopyName(a1) end}
+
+UnitPopupButtons["COPYNAME"] = {text = "Copy Name", dist = 0}
+
+insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "COPYNAME")
+
+hooksecurefunc("UnitPopup_HideButtons", function()
+	local dropdownMenu = UIDROPDOWNMENU_INIT_MENU
+	for i,v in pairs(UnitPopupMenus[dropdownMenu.which]) do
+		if clickers[v] then UnitPopupShown[i] = (dropdownMenu.name == UnitName("player") and 0) or 1 end
+	end
+end)
+
+hooksecurefunc("UnitPopup_OnClick", function(self)
+	local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
+	local button = self.value
+	if clickers[button] then clickers[button](dropdownFrame.name) end
+	PlaySound("UChatScrollButton")
+end)
+
+function XanChat_DoCopyName(name) 
+	local dialog = StaticPopup_Show("COPYNAME")
+	local editbox = _G[dialog:GetName().."EditBox"]  
+	editbox:SetText(name or "")
+	editbox:SetFocus()
+	editbox:HighlightText()
+	local button = _G[dialog:GetName().."Button2"]
+	button:ClearAllPoints()
+	button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
+end
+
+------------------------------
+
 function XanChat_doChat()
 		
 	--sticky channels
@@ -49,18 +103,11 @@ function XanChat_doChat()
 	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
 		ToggleChatColorNamesByClassGroup(true, v.type)
 	end
-	--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
-	local chanNum = 1
-	local cId, cName = GetChannelName(chanNum)
-	while (cId > 0 and cName ~= nil) do
-		--set the class color for the channel
-		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..cId)
-		--increment
-		chanNum = chanNum + 1
-		cId, cName = GetChannelName(chanNum)
-		if chanNum >= 10 then break end
-	end
 	
+	--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
+	for iCh = 1, 15 do
+		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
+	end
 
 	for i = 1, NUM_CHAT_WINDOWS do
 		local f = _G[("ChatFrame%d"):format(i)]
@@ -90,6 +137,11 @@ function XanChat_doChat()
 		editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
 	end
 
+end
+
+function XanChat_CopyName(origin_frame, ...)
+	print(a1)
+	print(a2)
 end
 
 --URL COPY
@@ -154,7 +206,6 @@ function ChatFrame_OnHyperlinkShow(self, link, text, button)
 		f(self, link, text, button)
 	end
 end
-
 
 local eFrame = CreateFrame("frame","XanChatEventFrame",UIParent)
 eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
