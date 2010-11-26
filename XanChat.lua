@@ -59,16 +59,21 @@ local function insertbefore(t, before, val)
 	table.insert(t, val)
 end
 
-local clickers = {["COPYNAME"] = function(a1) XanChat_DoCopyName(a1) end}
+local clickers = {["COPYNAME"] = function(a1) xanChat_DoCopyName(a1) end, ["WHO"] = SendWho, ["GUILD_INVITE"] = GuildInvite}
 
 UnitPopupButtons["COPYNAME"] = {text = "Copy Name", dist = 0}
+UnitPopupButtons["GUILD_INVITE"] = {text = "Guild Invite", dist = 0}
+UnitPopupButtons["WHO"] = {text = "Who", dist = 0}
 
+insertbefore(UnitPopupMenus["FRIEND"], "GUILD_PROMOTE", "GUILD_INVITE")
 insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "COPYNAME")
+insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "WHO")
 
 hooksecurefunc("UnitPopup_HideButtons", function()
 	local dropdownMenu = UIDROPDOWNMENU_INIT_MENU
 	for i,v in pairs(UnitPopupMenus[dropdownMenu.which]) do
-		if clickers[v] then UnitPopupShown[i] = (dropdownMenu.name == UnitName("player") and 0) or 1 end
+		if v == "GUILD_INVITE" then UnitPopupShown[i] = (not CanGuildInvite() or dropdownMenu.name == UnitName("player")) and 0 or 1
+		elseif clickers[v] then UnitPopupShown[i] = (dropdownMenu.name == UnitName("player") and 0) or 1 end
 	end
 end)
 
@@ -79,7 +84,7 @@ hooksecurefunc("UnitPopup_OnClick", function(self)
 	PlaySound("UChatScrollButton")
 end)
 
-function XanChat_DoCopyName(name) 
+function xanChat_DoCopyName(name) 
 	local dialog = StaticPopup_Show("COPYNAME")
 	local editbox = _G[dialog:GetName().."EditBox"]  
 	editbox:SetText(name or "")
@@ -92,7 +97,7 @@ end
 
 ------------------------------
 
-function XanChat_doChat()
+function xanChat_doChat()
 		
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
@@ -139,7 +144,7 @@ function XanChat_doChat()
 
 end
 
-function XanChat_CopyName(origin_frame, ...)
+function xanChat_CopyName(origin_frame, ...)
 	print(a1)
 	print(a2)
 end
@@ -207,11 +212,11 @@ function ChatFrame_OnHyperlinkShow(self, link, text, button)
 	end
 end
 
-local eFrame = CreateFrame("frame","XanChatEventFrame",UIParent)
+local eFrame = CreateFrame("frame","xanChatEventFrame",UIParent)
 eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
 function eFrame:PLAYER_LOGIN()
-	XanChat_doChat()
+	xanChat_doChat()
 	self:UnregisterEvent("PLAYER_LOGIN")
 	self.PLAYER_LOGIN = nil
 end

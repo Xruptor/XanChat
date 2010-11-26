@@ -1,7 +1,7 @@
 ## Interface: 40000
-## Title: XanChat
+## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 1.4
+## Version: 1.5
 
-XanChat.lua
+xanChat.lua
