@@ -185,20 +185,44 @@ function urlFilter(self, event, msg, author, ...)
 	end
 end
 
+StaticPopupDialogs["LINKME"] = {
+	text = "URL COPY",
+	button2 = CANCEL,
+	hasEditBox = true,
+    hasWideEditBox = true,
+	timeout = 0,
+	exclusive = 1,
+	hideOnEscape = 1,
+	EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+	whileDead = 1,
+	maxLetters = 255,
+}
+
 function xanChat_URLRef(link, text, button)
 	if (strsub(link, 1, 3) == "url") then
 		local url = strsub(link, 5)
 	
-		local activeWindow = ChatEdit_GetActiveWindow()
+		-- local activeWindow = ChatEdit_GetActiveWindow()
 		
-		if ( activeWindow ) then
-			activeWindow:Insert(url)
-			ChatEdit_FocusActiveWindow()
-		else
-			ChatEdit_GetLastActiveWindow():Show()
-			ChatEdit_GetLastActiveWindow():Insert(url)
-			ChatEdit_GetLastActiveWindow():SetFocus()
-		end
+		-- if ( activeWindow ) then
+			-- activeWindow:Insert(url)
+			-- ChatEdit_FocusActiveWindow()
+		-- else
+			-- ChatEdit_GetLastActiveWindow():Show()
+			-- ChatEdit_GetLastActiveWindow():Insert(url)
+			-- ChatEdit_GetLastActiveWindow():SetFocus()
+		-- end
+		
+		local dialog = StaticPopup_Show("LINKME")
+		
+		local editbox = _G[dialog:GetName().."EditBox"]  
+		editbox:SetText(url)
+		editbox:SetFocus()
+		editbox:HighlightText()
+		
+		local button = _G[dialog:GetName().."Button2"]
+		button:ClearAllPoints()
+		button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
 		
 	else
 		SetItemRef_orig(link, text, button)
