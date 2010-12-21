@@ -2,6 +2,6 @@
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 1.5
+## Version: 1.6
 
 xanChat.lua
