@@ -120,7 +120,7 @@ function xanChat_doChat()
 		--add more mouse wheel scrolling (alt key = scroll to top, ctrl = faster scrolling)
 		f:EnableMouseWheel(true)
 		f:SetScript('OnMouseWheel', scrollChat)
-		f:SetMaxLines(250)
+		--f:SetMaxLines(500)
 		
 		local editBox = _G[("ChatFrame%dEditBox"):format(i)]
 
@@ -144,74 +144,6 @@ function xanChat_doChat()
 
 end
 
-function xanChat_CopyName(origin_frame, ...)
-	print(a1)
-	print(a2)
-end
-
---URL COPY
-local linklinkColor = "9ACD32"
-local pattern = "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]"
-
-function string.linkColor(text, linkColor)
-	return "|cff"..linkColor..text.."|r"
-end
-
-function string.link(text, type, value, linkColor)
-	return "|H"..type..":"..tostring(value).."|h"..tostring(text):linkColor(linkColor or "ffffff").."|h"
-end
-
-StaticPopupDialogs["LINKME"] = {
-	text = "URL COPY",
-	button2 = CANCEL,
-	hasEditBox = true,
-    hasWideEditBox = true,
-	timeout = 0,
-	exclusive = 1,
-	hideOnEscape = 1,
-	EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-	whileDead = 1,
-	maxLetters = 255,
-}
-
-local function fURL(url)
-	return string.link("["..url.."]", "url", url, linkColor)
-end
-
-local function hook(self, text, ...)
-	self:fURL(text:gsub(pattern, fURL), ...)
-end
-
-function LinkMeURL()
-	for i = 1, NUM_CHAT_WINDOWS do
-		if ( i ~= 2 ) then
-			local frame = _G[("ChatFrame%d"):format(i)]
-			frame.fURL = frame.AddMessage
-			frame.AddMessage = hook
-		end
-	end
-end
-LinkMeURL()
-
-local f = ChatFrame_OnHyperlinkShow
-function ChatFrame_OnHyperlinkShow(self, link, text, button)
-	local type, value = link:match("(%a+):(.+)")
-	if ( type == "url" ) then
-		local dialog = StaticPopup_Show("LINKME")
-		local editbox = _G[dialog:GetName().."EditBox"]  
-		editbox:SetText(value)
-		editbox:SetFocus()
-		editbox:HighlightText()
-		local button = _G[dialog:GetName().."Button2"]
-            
-		button:ClearAllPoints()
-           
-		button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
-	else
-		f(self, link, text, button)
-	end
-end
-
 local eFrame = CreateFrame("frame","xanChatEventFrame",UIParent)
 eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
@@ -219,6 +151,68 @@ function eFrame:PLAYER_LOGIN()
 	xanChat_doChat()
 	self:UnregisterEvent("PLAYER_LOGIN")
 	self.PLAYER_LOGIN = nil
+	eFrame = nil
 end
 
 if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
+
+--[[------------------------
+	URL COPY
+--------------------------]]
+
+local SetItemRef_orig = SetItemRef
+
+function doColor(url)
+	url = " |cff99CC33|Hurl:"..url.."|h["..url.."]|h|r "
+	return url
+end
+
+function urlFilter(self, event, msg, author, ...)
+	if strfind(msg, "(%a+)://(%S+)%s?") then
+		return false, gsub(msg, "(%a+)://(%S+)%s?", doColor("%1://%2")), author, ...
+	end
+	if strfind(msg, "www%.([_A-Za-z0-9-]+)%.(%S+)%s?") then
+		return false, gsub(msg, "www%.([_A-Za-z0-9-]+)%.(%S+)%s?", doColor("www.%1.%2")), author, ...
+	end
+	if strfind(msg, "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?") then
+		return false, gsub(msg, "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?", doColor("%1@%2%3%4")), author, ...
+	end
+	if strfind(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?") then
+		return false, gsub(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?", doColor("%1.%2.%3.%4:%5")), author, ...
+	end
+	if strfind(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?") then
+		return false, gsub(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?", doColor("%1.%2.%3.%4")), author, ...
+	end
+end
+
+function xanChat_URLRef(link, text, button)
+	if (strsub(link, 1, 3) == "url") then
+		local url = strsub(link, 5)
+	
+		local activeWindow = ChatEdit_GetActiveWindow()
+		
+		if ( activeWindow ) then
+			activeWindow:Insert(url)
+			ChatEdit_FocusActiveWindow()
+		else
+			ChatEdit_GetLastActiveWindow():Show()
+			ChatEdit_GetLastActiveWindow():Insert(url)
+			ChatEdit_GetLastActiveWindow():SetFocus()
+		end
+		
+	else
+		SetItemRef_orig(link, text, button)
+	end
+end
+
+SetItemRef = xanChat_URLRef
+
+ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_OFFICER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_SAY", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_YELL", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", urlFilter)
