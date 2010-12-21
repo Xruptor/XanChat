@@ -183,6 +183,9 @@ function urlFilter(self, event, msg, author, ...)
 	if strfind(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?") then
 		return false, gsub(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?", doColor("%1.%2.%3.%4")), author, ...
 	end
+	if strfind(msg, "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]") then
+		return false, gsub(msg, "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]", doColor("%1")), author, ...
+	end
 end
 
 StaticPopupDialogs["LINKME"] = {
@@ -230,6 +233,13 @@ function xanChat_URLRef(link, text, button)
 end
 
 SetItemRef = xanChat_URLRef
+
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_WHISPER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY_LEADER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_LEADER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_WARNING", urlFilter)
 
 ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", urlFilter)
 ChatFrame_AddMessageEventFilter("CHAT_MSG_OFFICER", urlFilter)
