@@ -3,5 +3,6 @@
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
 ## Version: 2.0
+## SavedVariables: XCHT_DB
 
 xanChat.lua

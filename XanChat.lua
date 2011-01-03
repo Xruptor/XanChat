@@ -203,8 +203,27 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", urlFilter)
 local eFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
 eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
+local dummy = function(self) self:Hide() end
+
+StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
+  text = "xanChat: Would you like to apply the changes now?",
+  button1 = "Yes",
+  button2 = "No",
+  OnAccept = function()
+      ReloadUI()
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+}
+
 function eFrame:PLAYER_LOGIN()
 
+	--do the DB stuff
+	if not XCHT_DB then XCHT_DB = {} end
+	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
+	if XCHT_DB.hideScroll == nil then XCHT_DB.hideScroll = false end
+	
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
 	  ChatTypeInfo[k].sticky = v;
@@ -246,11 +265,64 @@ function eFrame:PLAYER_LOGIN()
 		editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
 		editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
 		editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+		
+		--hide the scroll bars
+		if XCHT_DB.hideScroll then
+			_G[("ChatFrame%sButtonFrameUpButton"):format(i)]:Hide()
+			_G[("ChatFrame%sButtonFrameUpButton"):format(i)]:SetScript("OnShow", dummy)
+			_G[("ChatFrame%sButtonFrameDownButton"):format(i)]:Hide()
+			_G[("ChatFrame%sButtonFrameDownButton"):format(i)]:SetScript("OnShow", dummy)
+			_G[("ChatFrame%sButtonFrame"):format(i)]:Hide()
+			_G[("ChatFrame%sButtonFrame"):format(i)]:SetScript("OnShow", dummy)
+		end
+		
 	end
 
 	--remove the annoying guild loot messages by replacing them with the original ones
 	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
 	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
+	
+	--show/hide the chat social buttons
+	if XCHT_DB.hideSocial then
+		ChatFrameMenuButton:Hide()
+		ChatFrameMenuButton:SetScript("OnShow", dummy)
+		FriendsMicroButton:Hide()
+		FriendsMicroButton:SetScript("OnShow", dummy)
+	end
+	
+	--DO SLASH COMMANDS
+	SLASH_XANCHAT1 = "/xanchat"
+	SlashCmdList["XANCHAT"] = function(msg)
+		local a,b,c=strfind(msg, "(%S+)")
+		
+		if a and XCHT_DB then
+			if c and c:lower() == "social" then
+				if XCHT_DB.hideSocial then
+					XCHT_DB.hideSocial = false
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Social buttons are now [|cFF99CC33ON|r]")
+				else
+					XCHT_DB.hideSocial = true
+					DEFAULT_CHAT_FRAME:AddMessage("XanDebuffTimers: Social buttons are now [|cFF99CC33OFF|r]")
+				end
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				return true
+			elseif c and c:lower() == "scroll" then
+				if XCHT_DB.hideScroll then
+					XCHT_DB.hideScroll = false
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Scroll buttons are now [|cFF99CC33ON|r]")
+				else
+					XCHT_DB.hideScroll = true
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Scroll buttons are now [|cFF99CC33OFF|r]")
+				end
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				return true
+			end
+		end
+
+		DEFAULT_CHAT_FRAME:AddMessage("xanChat")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat social - toggles the chat social buttons")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat scroll - toggles the chat scroll bars")
+	end
 	
 	self:UnregisterEvent("PLAYER_LOGIN")
 	self.PLAYER_LOGIN = nil
