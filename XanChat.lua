@@ -1,4 +1,10 @@
---Some stupid custom Chat modifications for me :P
+--Some stupid custom Chat modifications for made for myself.
+--Sharing it with the world in case anybody wants to actually use this.
+
+--[[------------------------
+	Scrolling and Chat Links
+--------------------------]]
+
 local StickyTypeChannels = {
   SAY = 1,
   YELL = 0,
@@ -95,67 +101,6 @@ function xanChat_DoCopyName(name)
 	button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
 end
 
-------------------------------
-
-function xanChat_doChat()
-		
-	--sticky channels
-	for k, v in pairs(StickyTypeChannels) do
-	  ChatTypeInfo[k].sticky = v;
-	end
-	
-	--toggle class colors
-	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
-		ToggleChatColorNamesByClassGroup(true, v.type)
-	end
-	
-	--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
-	for iCh = 1, 15 do
-		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
-	end
-
-	for i = 1, NUM_CHAT_WINDOWS do
-		local f = _G[("ChatFrame%d"):format(i)]
-
-		--add more mouse wheel scrolling (alt key = scroll to top, ctrl = faster scrolling)
-		f:EnableMouseWheel(true)
-		f:SetScript('OnMouseWheel', scrollChat)
-		--f:SetMaxLines(500)
-		
-		local editBox = _G[("ChatFrame%dEditBox"):format(i)]
-
-		if not editBox.left then
-			editBox.left = _G[("ChatFrame%sEditBoxLeft"):format(i)]
-			editBox.right = _G[("ChatFrame%sEditBoxRight"):format(i)]
-			editBox.mid = _G[("ChatFrame%sEditBoxMid"):format(i)]
-		end
-		
-		--remove alt keypress from the EditBox (no longer need alt to move around)
-		editBox:SetAltArrowKeyMode(false)
-
-		editBox.left:SetAlpha(0)
-		editBox.right:SetAlpha(0)
-		editBox.mid:SetAlpha(0)
-
-		editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
-		editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
-		editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
-	end
-
-end
-
-local eFrame = CreateFrame("frame","xanChatEventFrame",UIParent)
-eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
-
-function eFrame:PLAYER_LOGIN()
-	xanChat_doChat()
-	self:UnregisterEvent("PLAYER_LOGIN")
-	self.PLAYER_LOGIN = nil
-	eFrame = nil
-end
-
-if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
-
 --[[------------------------
 	URL COPY
 --------------------------]]
@@ -163,7 +108,7 @@ if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOG
 local SetItemRef_orig = SetItemRef
 
 function doColor(url)
-	url = " |cff99CC33|Hurl:"..url.."|h["..url.."]|h|r "
+	url = " |cff99FF33|Hurl:"..url.."|h["..url.."]|h|r "
 	return url
 end
 
@@ -250,3 +195,65 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", urlFilter)
 ChatFrame_AddMessageEventFilter("CHAT_MSG_SAY", urlFilter)
 ChatFrame_AddMessageEventFilter("CHAT_MSG_YELL", urlFilter)
 ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", urlFilter)
+
+--[[------------------------
+	CORE LOAD
+--------------------------]]
+
+local eFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
+eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
+
+function eFrame:PLAYER_LOGIN()
+
+	--sticky channels
+	for k, v in pairs(StickyTypeChannels) do
+	  ChatTypeInfo[k].sticky = v;
+	end
+	
+	--toggle class colors
+	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
+		ToggleChatColorNamesByClassGroup(true, v.type)
+	end
+	
+	--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
+	for iCh = 1, 15 do
+		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
+	end
+
+	for i = 1, NUM_CHAT_WINDOWS do
+		local f = _G[("ChatFrame%d"):format(i)]
+
+		--add more mouse wheel scrolling (alt key = scroll to top, ctrl = faster scrolling)
+		f:EnableMouseWheel(true)
+		f:SetScript('OnMouseWheel', scrollChat)
+		--f:SetMaxLines(500)
+		
+		local editBox = _G[("ChatFrame%dEditBox"):format(i)]
+
+		if not editBox.left then
+			editBox.left = _G[("ChatFrame%sEditBoxLeft"):format(i)]
+			editBox.right = _G[("ChatFrame%sEditBoxRight"):format(i)]
+			editBox.mid = _G[("ChatFrame%sEditBoxMid"):format(i)]
+		end
+		
+		--remove alt keypress from the EditBox (no longer need alt to move around)
+		editBox:SetAltArrowKeyMode(false)
+
+		editBox.left:SetAlpha(0)
+		editBox.right:SetAlpha(0)
+		editBox.mid:SetAlpha(0)
+
+		editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
+		editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
+		editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+	end
+
+	--remove the annoying guild loot messages by replacing them with the original ones
+	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
+	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
+	
+	self:UnregisterEvent("PLAYER_LOGIN")
+	self.PLAYER_LOGIN = nil
+end
+
+if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
