@@ -204,6 +204,7 @@ local eFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
 eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
 local dummy = function(self) self:Hide() end
+local msgHooks = {}
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
   text = "xanChat: Would you like to apply the changes now?",
@@ -217,12 +218,25 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
   hideOnEscape = true,
 }
 
+local AddMessage = function(frame, text, ...)
+	if type(text) == "string" then
+		text = gsub(text, "%[%d+%. General.-%]", "[GN]")
+		text = gsub(text, "%[%d+%. Trade.-%]", "[TR]")
+		text = gsub(text, "%[%d+%. WorldDefense%]", "[WD]")
+		text = gsub(text, "%[%d+%. LocalDefense.-%]", "[LD]")
+		text = gsub(text, "%[%d+%. LookingForGroup%]", "[LFG]")
+		text = gsub(text, "%[%d+%. GuildRecruitment.-%]", "[GR]")
+	end
+	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
+end
+
 function eFrame:PLAYER_LOGIN()
 
 	--do the DB stuff
 	if not XCHT_DB then XCHT_DB = {} end
 	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
 	if XCHT_DB.hideScroll == nil then XCHT_DB.hideScroll = false end
+	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
 	
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
@@ -240,48 +254,54 @@ function eFrame:PLAYER_LOGIN()
 	end
 
 	for i = 1, NUM_CHAT_WINDOWS do
-		local f = _G[("ChatFrame%d"):format(i)]
-
-		--add more mouse wheel scrolling (alt key = scroll to top, ctrl = faster scrolling)
-		f:EnableMouseWheel(true)
-		f:SetScript('OnMouseWheel', scrollChat)
-		--f:SetMaxLines(500)
+		local n = ("ChatFrame%d"):format(i)
+		local f = _G[n]
 		
-		local editBox = _G[("ChatFrame%dEditBox"):format(i)]
+		if f then
+			--add more mouse wheel scrolling (alt key = scroll to top, ctrl = faster scrolling)
+			f:EnableMouseWheel(true)
+			f:SetScript('OnMouseWheel', scrollChat)
+			--f:SetMaxLines(500)
+			
+			local editBox = _G[n.."EditBox"]
 
-		if not editBox.left then
-			editBox.left = _G[("ChatFrame%sEditBoxLeft"):format(i)]
-			editBox.right = _G[("ChatFrame%sEditBoxRight"):format(i)]
-			editBox.mid = _G[("ChatFrame%sEditBoxMid"):format(i)]
-		end
-		
-		--remove alt keypress from the EditBox (no longer need alt to move around)
-		editBox:SetAltArrowKeyMode(false)
+			if not editBox.left then
+				editBox.left = _G[n.."EditBoxLeft"]
+				editBox.right = _G[n.."EditBoxRight"]
+				editBox.mid = _G[n.."EditBoxMid"]
+			end
+			
+			--remove alt keypress from the EditBox (no longer need alt to move around)
+			editBox:SetAltArrowKeyMode(false)
 
-		editBox.left:SetAlpha(0)
-		editBox.right:SetAlpha(0)
-		editBox.mid:SetAlpha(0)
+			editBox.left:SetAlpha(0)
+			editBox.right:SetAlpha(0)
+			editBox.mid:SetAlpha(0)
 
-		editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
-		editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
-		editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
-		
-		--hide the scroll bars
-		if XCHT_DB.hideScroll then
-			_G[("ChatFrame%sButtonFrameUpButton"):format(i)]:Hide()
-			_G[("ChatFrame%sButtonFrameUpButton"):format(i)]:SetScript("OnShow", dummy)
-			_G[("ChatFrame%sButtonFrameDownButton"):format(i)]:Hide()
-			_G[("ChatFrame%sButtonFrameDownButton"):format(i)]:SetScript("OnShow", dummy)
-			_G[("ChatFrame%sButtonFrame"):format(i)]:Hide()
-			_G[("ChatFrame%sButtonFrame"):format(i)]:SetScript("OnShow", dummy)
+			editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
+			editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
+			editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+			
+			--hide the scroll bars
+			if XCHT_DB.hideScroll then
+				_G[n.."ButtonFrameUpButton"]:Hide()
+				_G[n.."ButtonFrameUpButton"]:SetScript("OnShow", dummy)
+				_G[n.."ButtonFrameDownButton"]:Hide()
+				_G[n.."ButtonFrameDownButton"]:SetScript("OnShow", dummy)
+				_G[n.."ButtonFrame"]:Hide()
+				_G[n.."ButtonFrame"]:SetScript("OnShow", dummy)
+			end
+			
+			--enable/disable short channel names by hooking into AddMessage
+			if XCHT_DB.shortNames and not msgHooks[n] then
+				msgHooks[n] = {}
+				msgHooks[n].AddMessage = f.AddMessage
+				f.AddMessage = AddMessage
+			end
 		end
 		
 	end
 
-	--remove the annoying guild loot messages by replacing them with the original ones
-	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
-	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
-	
 	--show/hide the chat social buttons
 	if XCHT_DB.hideSocial then
 		ChatFrameMenuButton:Hide()
@@ -290,6 +310,33 @@ function eFrame:PLAYER_LOGIN()
 		FriendsMicroButton:SetScript("OnShow", dummy)
 	end
 	
+	--enable short channel names for globals
+	if XCHT_DB.shortNames then
+        CHAT_WHISPER_GET 				= "[W] %s: "
+        CHAT_WHISPER_INFORM_GET 		= "[W2] %s: "
+        CHAT_YELL_GET 					= "|Hchannel:Yell|h[Y]|h %s: "
+        CHAT_SAY_GET 					= "|Hchannel:Say|h[S]|h %s: "
+        CHAT_BATTLEGROUND_GET			= "|Hchannel:Battleground|h[BG]|h %s: "
+        CHAT_BATTLEGROUND_LEADER_GET 	= [[|Hchannel:Battleground|h[BG|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
+        CHAT_GUILD_GET   				= "|Hchannel:Guild|h[G]|h %s: "
+        CHAT_OFFICER_GET 				= "|Hchannel:Officer|h[O]|h %s: "
+        CHAT_PARTY_GET        			= "|Hchannel:Party|h[P]|h %s: "
+        CHAT_PARTY_LEADER_GET 			= [[|Hchannel:Party|h[P|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
+        CHAT_PARTY_GUIDE_GET  			= CHAT_PARTY_LEADER_GET
+        CHAT_RAID_GET         			= "|Hchannel:Raid|h[R]|h %s: "
+        CHAT_RAID_LEADER_GET  			= [[|Hchannel:Raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
+        CHAT_RAID_WARNING_GET 			= [[|Hchannel:RaidWarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
+		
+        CHAT_MONSTER_PARTY_GET   		= CHAT_PARTY_GET
+        CHAT_MONSTER_SAY_GET     		= CHAT_SAY_GET
+        CHAT_MONSTER_WHISPER_GET 		= CHAT_WHISPER_GET
+        CHAT_MONSTER_YELL_GET    		= CHAT_YELL_GET
+	end
+
+	--remove the annoying guild loot messages by replacing them with the original ones
+	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
+	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
+
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
 	SlashCmdList["XANCHAT"] = function(msg)
@@ -316,12 +363,23 @@ function eFrame:PLAYER_LOGIN()
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
+			elseif c and c:lower() == "shortnames" then
+				if XCHT_DB.shortNames then
+					XCHT_DB.shortNames = false
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Short channel names are now [|cFF99CC33OFF|r]")
+				else
+					XCHT_DB.shortNames = true
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Short channel names are now [|cFF99CC33ON|r]")
+				end
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				return true
 			end
 		end
 
 		DEFAULT_CHAT_FRAME:AddMessage("xanChat")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat social - toggles the chat social buttons")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat scroll - toggles the chat scroll bars")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shortnames - toggles short channels names")
 	end
 	
 	self:UnregisterEvent("PLAYER_LOGIN")
