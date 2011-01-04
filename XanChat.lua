@@ -230,6 +230,22 @@ local AddMessage = function(frame, text, ...)
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
+local function setEditBox(sSwitch)
+	for i = 1, NUM_CHAT_WINDOWS do
+		local eb = _G[("ChatFrame%dEditBox"):format(i)]
+		
+		if sSwitch then
+			eb:ClearAllPoints()
+			eb:SetPoint("BOTTOMLEFT",  ("ChatFrame%d"):format(i), "TOPLEFT",  -5, 0)
+			eb:SetPoint("BOTTOMRIGHT", ("ChatFrame%d"):format(i), "TOPRIGHT", 5, 0)
+		else
+			eb:ClearAllPoints()
+			eb:SetPoint("TOPLEFT",  ("ChatFrame%d"):format(i), "BOTTOMLEFT",  -5, 0)
+			eb:SetPoint("TOPRIGHT", ("ChatFrame%d"):format(i), "BOTTOMRIGHT", 5, 0)
+		end
+	end
+end
+
 function eFrame:PLAYER_LOGIN()
 
 	--do the DB stuff
@@ -237,6 +253,8 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
 	if XCHT_DB.hideScroll == nil then XCHT_DB.hideScroll = false end
 	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
+	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
+	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
 	
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
@@ -282,6 +300,19 @@ function eFrame:PLAYER_LOGIN()
 			editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
 			editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
 			
+			--do editbox positioning
+			if XCHT_DB.editBoxTop then
+				setEditBox(true)
+			else
+				setEditBox()
+			end
+			
+			--when the editbox is on the top, complications occur because sometimes you are not allowed to click on the tabs.
+			--to fix this we'll just make the tab close the editbox
+			--also force the editbox to hide itself when it loses focus
+			_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
+			editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
+			
 			--hide the scroll bars
 			if XCHT_DB.hideScroll then
 				_G[n.."ButtonFrameUpButton"]:Hide()
@@ -298,6 +329,7 @@ function eFrame:PLAYER_LOGIN()
 				msgHooks[n].AddMessage = f.AddMessage
 				f.AddMessage = AddMessage
 			end
+			
 		end
 		
 	end
@@ -332,7 +364,19 @@ function eFrame:PLAYER_LOGIN()
         CHAT_MONSTER_WHISPER_GET 		= CHAT_WHISPER_GET
         CHAT_MONSTER_YELL_GET    		= CHAT_YELL_GET
 	end
-
+	
+	--do the settings for the tabs
+	if XCHT_DB.hideTabs then
+		--set the blizzard global variables to make the alpha of the chat tabs completely invisible
+		CHAT_TAB_HIDE_DELAY = 1
+		CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 1
+		CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0
+		CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1
+		CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0
+		CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1
+		CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 0
+	end
+	
 	--remove the annoying guild loot messages by replacing them with the original ones
 	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
 	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
@@ -373,6 +417,27 @@ function eFrame:PLAYER_LOGIN()
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
+			elseif c and c:lower() == "editbox" then
+				if XCHT_DB.editBoxTop then
+					XCHT_DB.editBoxTop = false
+					setEditBox()
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The edit box is now at the [|cFF99CC33BOTTOM|r]")
+				else
+					XCHT_DB.editBoxTop = true
+					setEditBox(true)
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The edit box is now at the [|cFF99CC33TOP|r]")
+				end
+				return true
+			elseif c and c:lower() == "tabs" then
+				if XCHT_DB.hideTabs then
+					XCHT_DB.hideTabs = false
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now [|cFF99CC33ON|r]")
+				else
+					XCHT_DB.hideTabs = true
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now[|cFF99CC33OFF|r]")
+				end
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				return true
 			end
 		end
 
@@ -380,6 +445,8 @@ function eFrame:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat social - toggles the chat social buttons")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat scroll - toggles the chat scroll bars")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shortnames - toggles short channels names")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat editbox - toggles editbox to show at the top or the bottom")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat tabs - toggles the chat tabs on or off")
 	end
 	
 	self:UnregisterEvent("PLAYER_LOGIN")
