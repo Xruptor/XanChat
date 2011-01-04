@@ -292,8 +292,8 @@ function eFrame:PLAYER_LOGIN()
 				_G[n.."ButtonFrame"]:SetScript("OnShow", dummy)
 			end
 			
-			--enable/disable short channel names by hooking into AddMessage
-			if XCHT_DB.shortNames and not msgHooks[n] then
+			--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
+			if XCHT_DB.shortNames and f ~= COMBATLOG and not msgHooks[n] then
 				msgHooks[n] = {}
 				msgHooks[n].AddMessage = f.AddMessage
 				f.AddMessage = AddMessage
