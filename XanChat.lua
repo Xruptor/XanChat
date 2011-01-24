@@ -281,6 +281,9 @@ function eFrame:PLAYER_LOGIN()
 			f:SetScript('OnMouseWheel', scrollChat)
 			--f:SetMaxLines(500)
 			
+			--this allows the chatframe to be put in the corners of the screen (or at the edge)
+			f:SetClampRectInsets(0,0,0,0)
+			
 			local editBox = _G[n.."EditBox"]
 
 			if not editBox.left then
