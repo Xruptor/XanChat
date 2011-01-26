@@ -246,6 +246,65 @@ local function setEditBox(sSwitch)
 	end
 end
 
+--save and restore layout functions
+local function SaveLayout(frame)
+
+	local opt = XCHT_DB[frame]
+
+	if not opt then
+		XCHT_DB[frame] = {
+			["point"] = "CENTER",
+			["relativePoint"] = "CENTER",
+			["xOfs"] = 0,
+			["yOfs"] = 0,
+		}
+		opt = XCHT_DB[frame]
+	end
+
+	local point,relativeTo,relativePoint,xOfs,yOfs = _G[frame]:GetPoint()
+	opt.point = point
+	opt.relativePoint = relativePoint
+	opt.xOfs = xOfs
+	opt.yOfs = yOfs
+end
+
+local function RestoreLayout(frame)
+
+	local frm = _G[frame]
+
+	local opt = XCHT_DB[frame]
+
+	if not opt then
+		XCHT_DB[frame] = {
+			["point"] = "CENTER",
+			["relativePoint"] = "CENTER",
+			["xOfs"] = 0,
+			["yOfs"] = 0,
+		}
+		opt = XCHT_DB[frame]
+		
+		--store current points if they exsist
+		local point,relativeTo,relativePoint,xOfs,yOfs = _G[frame]:GetPoint()
+		opt.point = point
+		opt.relativePoint = relativePoint
+		opt.xOfs = xOfs
+		opt.yOfs = yOfs
+	end
+
+	frm:ClearAllPoints()
+	frm:SetPoint( opt.point, UIParent, opt.relativePoint, opt.xOfs, opt.yOfs )
+end
+
+--hook the StopDragging for ChatFrames
+local origFCF_StopDragging = FCF_StopDragging
+FCF_StopDragging = function(chatFrame)
+	SaveLayout(chatFrame:GetName())
+	origFCF_StopDragging(chatFrame)
+end
+
+--[[------------------------
+	PLAYER_LOGIN
+--------------------------]]
 function eFrame:PLAYER_LOGIN()
 
 	--do the DB stuff
@@ -333,6 +392,8 @@ function eFrame:PLAYER_LOGIN()
 				f.AddMessage = AddMessage
 			end
 			
+			--finally restore whatever stored position the chatframes were moved to by the user
+			RestoreLayout(n)
 		end
 		
 	end
