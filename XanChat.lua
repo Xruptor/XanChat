@@ -247,60 +247,59 @@ local function setEditBox(sSwitch)
 end
 
 --save and restore layout functions
-local function SaveLayout(frame)
+local function SaveLayout(obj)
+	if (type(obj) == 'table') then obj = obj:GetName() end --get the name if a frame was passed
+	if not obj then return end
+	if not XCHT_DB.frames then XCHT_DB.frames = {} end
+	if not XCHT_DB.frames[obj] then XCHT_DB.frames[obj] = {} end
 
-	local opt = XCHT_DB[frame]
-
-	if not opt then
-		XCHT_DB[frame] = {
-			["point"] = "CENTER",
-			["relativePoint"] = "CENTER",
-			["xOfs"] = 0,
-			["yOfs"] = 0,
-		}
-		opt = XCHT_DB[frame]
+	--don't reposition docked chatframe, in fact delete them.  Make sure it's not the primary dock window
+	if _G[obj] ~= GENERAL_CHAT_DOCK.primary then
+		if ( _G[obj].isDocked ) then
+			XCHT_DB.frames[obj] = nil
+			return
+		end
 	end
 
-	local point,relativeTo,relativePoint,xOfs,yOfs = _G[frame]:GetPoint()
-	opt.point = point
-	opt.relativePoint = relativePoint
-	opt.xOfs = xOfs
-	opt.yOfs = yOfs
+	local point,relativeTo,relativePoint,xOfs,yOfs = _G[obj]:GetPoint()
+
+	XCHT_DB.frames[obj].point = point
+	XCHT_DB.frames[obj].relativePoint = relativePoint
+	XCHT_DB.frames[obj].xOfs = xOfs
+	XCHT_DB.frames[obj].yOfs = yOfs
 end
 
-local function RestoreLayout(frame)
-
-	local frm = _G[frame]
-
-	local opt = XCHT_DB[frame]
-
-	if not opt then
-		XCHT_DB[frame] = {
-			["point"] = "CENTER",
-			["relativePoint"] = "CENTER",
-			["xOfs"] = 0,
-			["yOfs"] = 0,
-		}
-		opt = XCHT_DB[frame]
-		
-		--store current points if they exsist
-		local point,relativeTo,relativePoint,xOfs,yOfs = _G[frame]:GetPoint()
-		opt.point = point
-		opt.relativePoint = relativePoint
-		opt.xOfs = xOfs
-		opt.yOfs = yOfs
+local function RestoreLayout(obj)
+	if not obj then return end
+	if not XCHT_DB.frames then XCHT_DB.frames = {} end
+	if not XCHT_DB.frames[obj] then return end
+	
+	--don't reposition docked chatframe, in fact delete them.  Make sure it's not the primary dock window
+	if _G[obj] ~= GENERAL_CHAT_DOCK.primary then
+		if ( _G[obj].isDocked ) then
+			XCHT_DB.frames[obj] = nil
+			return
+		end
 	end
 
-	frm:ClearAllPoints()
-	frm:SetPoint( opt.point, UIParent, opt.relativePoint, opt.xOfs, opt.yOfs )
+	_G[obj]:ClearAllPoints()
+	_G[obj]:SetPoint( XCHT_DB.frames[obj].point, UIParent, XCHT_DB.frames[obj].relativePoint, XCHT_DB.frames[obj].xOfs, XCHT_DB.frames[obj].yOfs )
 end
 
---hook the StopDragging for ChatFrames
-local origFCF_StopDragging = FCF_StopDragging
-FCF_StopDragging = function(chatFrame)
+--hook origFCF_SavePositionAndDimensions
+local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
+FCF_SavePositionAndDimensions = function(chatFrame)
 	SaveLayout(chatFrame:GetName())
-	origFCF_StopDragging(chatFrame)
+	origFCF_SavePositionAndDimensions(chatFrame)
 end
+
+--This is just in case the client is being mean and resetting the chatframes at loading screens or entering/leaving instances (zones)
+-- function eFrame:PLAYER_ENTERING_WORLD()
+	-- for i = 1, NUM_CHAT_WINDOWS do
+		-- local n = ("ChatFrame%d"):format(i)
+		-- RestoreLayout(n)
+	-- end
+-- end
 
 --[[------------------------
 	PLAYER_LOGIN
@@ -383,6 +382,11 @@ function eFrame:PLAYER_LOGIN()
 				_G[n.."ButtonFrameDownButton"]:SetScript("OnShow", dummy)
 				_G[n.."ButtonFrame"]:Hide()
 				_G[n.."ButtonFrame"]:SetScript("OnShow", dummy)
+				if _G[n.."ButtonFrameMinimizeButton"] then
+					--this button doesn't always appear for all chat frames
+					_G[n.."ButtonFrameMinimizeButton"]:Hide()
+					_G[n.."ButtonFrameMinimizeButton"]:SetScript("OnShow", dummy)
+				end
 			end
 			
 			--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
@@ -391,6 +395,9 @@ function eFrame:PLAYER_LOGIN()
 				msgHooks[n].AddMessage = f.AddMessage
 				f.AddMessage = AddMessage
 			end
+			
+			--delete old DB
+			if XCHT_DB[n] then XCHT_DB[n] = nil end
 			
 			--finally restore whatever stored position the chatframes were moved to by the user
 			RestoreLayout(n)

@@ -2,7 +2,7 @@
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 2.4
+## Version: 2.5
 ## SavedVariables: XCHT_DB
 
 xanChat.lua
