@@ -281,7 +281,6 @@ local function RestoreLayout(obj)
 			return
 		end
 	end
-
 	_G[obj]:ClearAllPoints()
 	_G[obj]:SetPoint( XCHT_DB.frames[obj].point, UIParent, XCHT_DB.frames[obj].relativePoint, XCHT_DB.frames[obj].xOfs, XCHT_DB.frames[obj].yOfs )
 end
