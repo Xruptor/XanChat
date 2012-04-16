@@ -220,12 +220,14 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 
 local AddMessage = function(frame, text, ...)
 	if type(text) == "string" then
-		text = gsub(text, "%[%d+%. General.-%]", "[GN]")
-		text = gsub(text, "%[%d+%. Trade.-%]", "[TR]")
-		text = gsub(text, "%[%d+%. WorldDefense%]", "[WD]")
-		text = gsub(text, "%[%d+%. LocalDefense.-%]", "[LD]")
-		text = gsub(text, "%[%d+%. LookingForGroup%]", "[LFG]")
-		text = gsub(text, "%[%d+%. GuildRecruitment.-%]", "[GR]")
+		local chatNum = string.match(text,"%d+") or ""
+		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
+		text = gsub(text, "%[%d+%. General.-%]", "["..chatNum.."GN]")
+		text = gsub(text, "%[%d+%. Trade.-%]", "["..chatNum.."TR]")
+		text = gsub(text, "%[%d+%. WorldDefense%]", "["..chatNum.."WD]")
+		text = gsub(text, "%[%d+%. LocalDefense.-%]", "["..chatNum.."LD]")
+		text = gsub(text, "%[%d+%. LookingForGroup%]", "["..chatNum.."LFG]")
+		text = gsub(text, "%[%d+%. GuildRecruitment.-%]", "["..chatNum.."GR]")
 	end
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
@@ -247,42 +249,65 @@ local function setEditBox(sSwitch)
 end
 
 --save and restore layout functions
-local function SaveLayout(obj)
-	if (type(obj) == 'table') then obj = obj:GetName() end --get the name if a frame was passed
-	if not obj then return end
+local function SaveLayout(chatFrame)
+	if not chatFrame then return end
+	
+	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
-	if not XCHT_DB.frames[obj] then XCHT_DB.frames[obj] = {} end
+	if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
 
-	--don't reposition docked chatframe, in fact delete them.  Make sure it's not the primary dock window
-	if _G[obj] ~= GENERAL_CHAT_DOCK.primary then
-		if ( _G[obj].isDocked ) then
-			XCHT_DB.frames[obj] = nil
-			return
-		end
-	end
-
-	local point,relativeTo,relativePoint,xOfs,yOfs = _G[obj]:GetPoint()
-
-	XCHT_DB.frames[obj].point = point
-	XCHT_DB.frames[obj].relativePoint = relativePoint
-	XCHT_DB.frames[obj].xOfs = xOfs
-	XCHT_DB.frames[obj].yOfs = yOfs
+ 	local centerX = chatFrame:GetLeft() + chatFrame:GetWidth() / 2
+ 	local centerY = chatFrame:GetBottom() + chatFrame:GetHeight() / 2
+ 	
+ 	local horizPoint, vertPoint;
+ 	local screenWidth, screenHeight = GetScreenWidth(), GetScreenHeight()
+ 	local xOffset, yOffset
+ 	if ( centerX > screenWidth / 2 ) then
+ 		horizPoint = "RIGHT"
+ 		xOffset = (chatFrame:GetRight() - screenWidth)/screenWidth
+ 	else
+ 		horizPoint = "LEFT"
+ 		xOffset = chatFrame:GetLeft()/screenWidth
+ 	end
+ 	
+ 	if ( centerY > screenHeight / 2 ) then
+ 		vertPoint = "TOP"
+ 		yOffset = (chatFrame:GetTop() - screenHeight)/screenHeight
+ 	else
+ 		vertPoint = "BOTTOM"
+ 		yOffset = chatFrame:GetBottom()/screenHeight
+ 	end
+	
+	XCHT_DB.frames[chatFrame:GetID()].vertPoint = vertPoint
+	XCHT_DB.frames[chatFrame:GetID()].horizPoint = horizPoint
+	XCHT_DB.frames[chatFrame:GetID()].xOffset = xOffset
+	XCHT_DB.frames[chatFrame:GetID()].yOffset = yOffset
+	XCHT_DB.frames[chatFrame:GetID()].width = chatFrame:GetWidth()
+	XCHT_DB.frames[chatFrame:GetID()].height = chatFrame:GetHeight()
+	
 end
 
-local function RestoreLayout(obj)
-	if not obj then return end
-	if not XCHT_DB.frames then XCHT_DB.frames = {} end
-	if not XCHT_DB.frames[obj] then return end
+local function RestoreLayout(chatFrame)
+	if not chatFrame then return end
 	
-	--don't reposition docked chatframe, in fact delete them.  Make sure it's not the primary dock window
-	if _G[obj] ~= GENERAL_CHAT_DOCK.primary then
-		if ( _G[obj].isDocked ) then
-			XCHT_DB.frames[obj] = nil
-			return
-		end
-	end
-	_G[obj]:ClearAllPoints()
-	_G[obj]:SetPoint( XCHT_DB.frames[obj].point, UIParent, XCHT_DB.frames[obj].relativePoint, XCHT_DB.frames[obj].xOfs, XCHT_DB.frames[obj].yOfs )
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then return end
+	if not XCHT_DB.frames[chatFrame:GetID()] then return end
+	
+	local db = XCHT_DB.frames[chatFrame:GetID()]
+	
+ 	if ( db.width and db.height ) then
+ 		chatFrame:SetSize(db.width, db.height)
+ 	end
+ 	
+ 	if ( db.vertPoint and db.horizPoint ) then
+ 		chatFrame:ClearAllPoints()
+ 		chatFrame:SetPoint(db.vertPoint..db.horizPoint, db.xOffset * GetScreenWidth(), db.yOffset * GetScreenHeight())
+ 		chatFrame:SetUserPlaced(true)
+ 	else
+ 		chatFrame:SetUserPlaced(false)
+ 	end
+	
 end
 
 --hook origFCF_SavePositionAndDimensions
@@ -292,17 +317,37 @@ FCF_SavePositionAndDimensions = function(chatFrame)
 	origFCF_SavePositionAndDimensions(chatFrame)
 end
 
---This is just in case the client is being mean and resetting the chatframes at loading screens or entering/leaving instances (zones)
--- function eFrame:PLAYER_ENTERING_WORLD()
-	-- for i = 1, NUM_CHAT_WINDOWS do
-		-- local n = ("ChatFrame%d"):format(i)
-		-- RestoreLayout(n)
-	-- end
--- end
-
 --[[------------------------
 	PLAYER_LOGIN
 --------------------------]]
+
+for i = 1, NUM_CHAT_WINDOWS do
+	local n = ("ChatFrame%d"):format(i)
+	local f = _G[n]
+	if f then
+		f:EnableMouseWheel(true)
+		f:SetScript('OnMouseWheel', scrollChat)
+		f:SetMaxLines(500)
+		f:SetClampRectInsets(0,0,0,0)
+	end
+end
+
+function eFrame:ADDON_LOADED(self, arg1)
+	if string.lower(arg1) == "xanchat" then
+		
+		for i = 1, NUM_CHAT_WINDOWS do
+			local n = ("ChatFrame%d"):format(i)
+			local f = _G[n]
+			if f then
+				RestoreLayout(f)
+			end
+		end
+
+		eFrame:UnregisterEvent("ADDON_LOADED")
+		eFrame.ADDON_LOADED = nil
+	end
+end
+	
 function eFrame:PLAYER_LOGIN()
 
 	--do the DB stuff
@@ -312,6 +357,9 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
+	
+	--ALWAYS turn off profanity filter
+	BNSetMatureLanguageFilter(false)
 	
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
@@ -333,14 +381,6 @@ function eFrame:PLAYER_LOGIN()
 		local f = _G[n]
 		
 		if f then
-			--add more mouse wheel scrolling (alt key = scroll to top, ctrl = faster scrolling)
-			f:EnableMouseWheel(true)
-			f:SetScript('OnMouseWheel', scrollChat)
-			--f:SetMaxLines(500)
-			
-			--this allows the chatframe to be put in the corners of the screen (or at the edge)
-			f:SetClampRectInsets(0,0,0,0)
-			
 			local editBox = _G[n.."EditBox"]
 
 			if not editBox.left then
@@ -398,10 +438,14 @@ function eFrame:PLAYER_LOGIN()
 			--delete old DB
 			if XCHT_DB[n] then XCHT_DB[n] = nil end
 			
-			--finally restore whatever stored position the chatframes were moved to by the user
-			RestoreLayout(n)
+			--check for recent update
+			if XCHT_DB.newLayout == nil and f:IsUserPlaced() then
+				SaveLayout(f)
+			end
+			
 		end
 		
+		if XCHT_DB.newLayout == nil then XCHT_DB.newLayout = true end
 	end
 
 	--show/hide the chat social buttons
@@ -519,8 +563,10 @@ function eFrame:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat tabs - toggles the chat tabs on or off")
 	end
 	
-	self:UnregisterEvent("PLAYER_LOGIN")
-	self.PLAYER_LOGIN = nil
+	eFrame:UnregisterEvent("PLAYER_LOGIN")
+	eFrame.PLAYER_LOGIN = nil
 end
+
+eFrame:RegisterEvent("ADDON_LOADED")
 
 if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
