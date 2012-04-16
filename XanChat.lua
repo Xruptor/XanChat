@@ -332,22 +332,6 @@ for i = 1, NUM_CHAT_WINDOWS do
 	end
 end
 
-function eFrame:ADDON_LOADED(self, arg1)
-	if string.lower(arg1) == "xanchat" then
-		
-		for i = 1, NUM_CHAT_WINDOWS do
-			local n = ("ChatFrame%d"):format(i)
-			local f = _G[n]
-			if f then
-				RestoreLayout(f)
-			end
-		end
-
-		eFrame:UnregisterEvent("ADDON_LOADED")
-		eFrame.ADDON_LOADED = nil
-	end
-end
-	
 function eFrame:PLAYER_LOGIN()
 
 	--do the DB stuff
@@ -381,6 +365,10 @@ function eFrame:PLAYER_LOGIN()
 		local f = _G[n]
 		
 		if f then
+		
+			--restore saved layout
+			RestoreLayout(f)
+			
 			local editBox = _G[n.."EditBox"]
 
 			if not editBox.left then
@@ -442,7 +430,7 @@ function eFrame:PLAYER_LOGIN()
 			if XCHT_DB.newLayout == nil and f:IsUserPlaced() then
 				SaveLayout(f)
 			end
-			
+
 		end
 		
 		if XCHT_DB.newLayout == nil then XCHT_DB.newLayout = true end
@@ -566,7 +554,5 @@ function eFrame:PLAYER_LOGIN()
 	eFrame:UnregisterEvent("PLAYER_LOGIN")
 	eFrame.PLAYER_LOGIN = nil
 end
-
-eFrame:RegisterEvent("ADDON_LOADED")
 
 if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
