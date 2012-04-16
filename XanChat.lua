@@ -313,7 +313,7 @@ end
 --hook origFCF_SavePositionAndDimensions
 local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
 FCF_SavePositionAndDimensions = function(chatFrame)
-	SaveLayout(chatFrame:GetName())
+	SaveLayout(chatFrame)
 	origFCF_SavePositionAndDimensions(chatFrame)
 end
 
