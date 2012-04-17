@@ -325,10 +325,8 @@ for i = 1, NUM_CHAT_WINDOWS do
 	local n = ("ChatFrame%d"):format(i)
 	local f = _G[n]
 	if f then
-		f:EnableMouseWheel(true)
-		f:SetScript('OnMouseWheel', scrollChat)
+		--have to do this before player login otherwise issues occurr
 		f:SetMaxLines(500)
-		f:SetClampRectInsets(0,0,0,0)
 	end
 end
 
@@ -366,8 +364,18 @@ function eFrame:PLAYER_LOGIN()
 		
 		if f then
 		
-			--restore saved layout
-			RestoreLayout(f)
+			--delete old DB
+			if XCHT_DB[n] then XCHT_DB[n] = nil end
+			
+			--few changes
+			f:EnableMouseWheel(true)
+			f:SetScript('OnMouseWheel', scrollChat)
+			f:SetClampRectInsets(0,0,0,0)
+
+			--check for recent update
+			if XCHT_DB.newLayout == nil and f:IsUserPlaced() then
+				SaveLayout(f)
+			end
 			
 			local editBox = _G[n.."EditBox"]
 
@@ -423,14 +431,8 @@ function eFrame:PLAYER_LOGIN()
 				f.AddMessage = AddMessage
 			end
 			
-			--delete old DB
-			if XCHT_DB[n] then XCHT_DB[n] = nil end
-			
-			--check for recent update
-			if XCHT_DB.newLayout == nil and f:IsUserPlaced() then
-				SaveLayout(f)
-			end
-
+			--restore saved layout
+			RestoreLayout(f)
 		end
 		
 		if XCHT_DB.newLayout == nil then XCHT_DB.newLayout = true end
