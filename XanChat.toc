@@ -1,8 +1,8 @@
-## Interface: 40300
+## Interface: 50001
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 3.3
+## Version: 3.4
 ## SavedVariables: XCHT_DB
 
 xanChat.lua
