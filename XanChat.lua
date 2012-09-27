@@ -299,8 +299,13 @@ local function RestoreLayout(chatFrame)
  	if ( db.width and db.height ) then
  		chatFrame:SetSize(db.width, db.height)
  	end
+	
+	--check to see if we can even move the frame
+	if not chatFrame:IsMovable() then
+		chatFrame:SetMovable(true)
+	end
  	
- 	if ( db.vertPoint and db.horizPoint ) then
+ 	if ( db.vertPoint and db.horizPoint and chatFrame:IsMovable() ) then
  		chatFrame:ClearAllPoints()
  		chatFrame:SetPoint(db.vertPoint..db.horizPoint, db.xOffset * GetScreenWidth(), db.yOffset * GetScreenHeight())
  		chatFrame:SetUserPlaced(true)
@@ -308,6 +313,8 @@ local function RestoreLayout(chatFrame)
  		chatFrame:SetUserPlaced(false)
  	end
 	
+	--don't let the frames get moved around after we set them.  Unless the user unlocks it and moves it
+	chatFrame:SetMovable(false)
 end
 
 --hook origFCF_SavePositionAndDimensions
