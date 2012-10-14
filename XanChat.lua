@@ -146,24 +146,13 @@ StaticPopupDialogs["LINKME"] = {
 	maxLetters = 255,
 }
 
-function xanChat_URLRef(link, text, button)
-	if (strsub(link, 1, 3) == "url") then
+local SetHyperlink = _G.ItemRefTooltip.SetHyperlink
+function _G.ItemRefTooltip:SetHyperlink(link, ...)
+	if link and (strsub(link, 1, 3) == "url") then
 		local url = strsub(link, 5)
-	
-		-- local activeWindow = ChatEdit_GetActiveWindow()
-		
-		-- if ( activeWindow ) then
-			-- activeWindow:Insert(url)
-			-- ChatEdit_FocusActiveWindow()
-		-- else
-			-- ChatEdit_GetLastActiveWindow():Show()
-			-- ChatEdit_GetLastActiveWindow():Insert(url)
-			-- ChatEdit_GetLastActiveWindow():SetFocus()
-		-- end
-		
 		local dialog = StaticPopup_Show("LINKME")
-		
 		local editbox = _G[dialog:GetName().."EditBox"]  
+		
 		editbox:SetText(url)
 		editbox:SetFocus()
 		editbox:HighlightText()
@@ -172,12 +161,11 @@ function xanChat_URLRef(link, text, button)
 		button:ClearAllPoints()
 		button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
 		
-	else
-		SetItemRef_orig(link, text, button)
-	end
+		return
+     end
+	 
+	 SetHyperlink(self, link, ...)
 end
-
-SetItemRef = xanChat_URLRef
 
 ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
 ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
