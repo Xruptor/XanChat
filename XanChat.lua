@@ -288,9 +288,12 @@ local function RestoreLayout(chatFrame)
  		chatFrame:SetSize(db.width, db.height)
  	end
 	
+	local sSwitch = false
+	
 	--check to see if we can even move the frame
 	if not chatFrame:IsMovable() then
 		chatFrame:SetMovable(true)
+		sSwitch = true
 	end
  	
  	if ( db.vertPoint and db.horizPoint and chatFrame:IsMovable() ) then
@@ -301,8 +304,9 @@ local function RestoreLayout(chatFrame)
  		chatFrame:SetUserPlaced(false)
  	end
 	
-	--don't let the frames get moved around after we set them.  Unless the user unlocks it and moves it
-	chatFrame:SetMovable(false)
+	if sSwitch then
+		chatFrame:SetMovable(false)
+	end
 end
 
 --hook origFCF_SavePositionAndDimensions
