@@ -340,7 +340,9 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
 	
 	--ALWAYS turn off profanity filter
-	BNSetMatureLanguageFilter(false)
+	if BNConnected() then
+		BNSetMatureLanguageFilter(false)
+	end
 	
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
