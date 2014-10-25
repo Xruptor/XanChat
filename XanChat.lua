@@ -554,6 +554,9 @@ function eFrame:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat tabs - toggles the chat tabs on or off")
 	end
 	
+	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
+	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFFDF2B2B%s|r] Loaded", "xanChat", ver or "1.0"))
+	
 	eFrame:UnregisterEvent("PLAYER_LOGIN")
 	eFrame.PLAYER_LOGIN = nil
 end
