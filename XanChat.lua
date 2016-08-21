@@ -5,6 +5,11 @@
 	Scrolling and Chat Links
 --------------------------]]
 
+local debugf = tekDebug and tekDebug:GetFrame("xanChat")
+local function Debug(...)
+    if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
+end
+
 local StickyTypeChannels = {
   SAY = 1,
   YELL = 0,
@@ -339,10 +344,8 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
 	
-	--ALWAYS turn off profanity filter
-	if BNConnected() then
-		BNSetMatureLanguageFilter(false)
-	end
+	--turn off profanity filter
+	SetCVar("profanityFilter", 0)
 	
 	--sticky channels
 	for k, v in pairs(StickyTypeChannels) do
