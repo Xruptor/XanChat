@@ -248,36 +248,19 @@ local function SaveLayout(chatFrame)
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
 	if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
+	
+	local db = XCHT_DB.frames[chatFrame:GetID()]
 
- 	local centerX = chatFrame:GetLeft() + chatFrame:GetWidth() / 2
- 	local centerY = chatFrame:GetBottom() + chatFrame:GetHeight() / 2
- 	
- 	local horizPoint, vertPoint;
- 	local screenWidth, screenHeight = GetScreenWidth(), GetScreenHeight()
- 	local xOffset, yOffset
- 	if ( centerX > screenWidth / 2 ) then
- 		horizPoint = "RIGHT"
- 		xOffset = (chatFrame:GetRight() - screenWidth)/screenWidth
- 	else
- 		horizPoint = "LEFT"
- 		xOffset = chatFrame:GetLeft()/screenWidth
- 	end
- 	
- 	if ( centerY > screenHeight / 2 ) then
- 		vertPoint = "TOP"
- 		yOffset = (chatFrame:GetTop() - screenHeight)/screenHeight
- 	else
- 		vertPoint = "BOTTOM"
- 		yOffset = chatFrame:GetBottom()/screenHeight
- 	end
+	local point, xOffset, yOffset = GetChatWindowSavedPosition(chatFrame:GetID())
+	local gpPoint, gpRelativeTo, gpRelativePoint, gpXOffset, gpYOffset = chatFrame:GetPoint()
 	
-	XCHT_DB.frames[chatFrame:GetID()].vertPoint = vertPoint
-	XCHT_DB.frames[chatFrame:GetID()].horizPoint = horizPoint
-	XCHT_DB.frames[chatFrame:GetID()].xOffset = xOffset
-	XCHT_DB.frames[chatFrame:GetID()].yOffset = yOffset
-	XCHT_DB.frames[chatFrame:GetID()].width = chatFrame:GetWidth()
-	XCHT_DB.frames[chatFrame:GetID()].height = chatFrame:GetHeight()
+	db.getPoint = {gpPoint, gpRelativeTo, gpRelativePoint, gpXOffset, gpYOffset}
 	
+	db.point = point
+	db.xOffset = xOffset
+	db.yOffset = yOffset
+	db.width = chatFrame:GetWidth()
+	db.height = chatFrame:GetHeight()
 end
 
 local function RestoreLayout(chatFrame)
@@ -301,9 +284,12 @@ local function RestoreLayout(chatFrame)
 		sSwitch = true
 	end
  	
- 	if ( db.vertPoint and db.horizPoint and chatFrame:IsMovable() ) then
+ 	if ( chatFrame:IsMovable() and db.point and db.xOffset ) then
  		chatFrame:ClearAllPoints()
- 		chatFrame:SetPoint(db.vertPoint..db.horizPoint, db.xOffset * GetScreenWidth(), db.yOffset * GetScreenHeight())
+		--do GetChatWindowSavedPosition first
+		chatFrame:SetPoint(db.point, db.xOffset * GetScreenWidth(), db.yOffset * GetScreenHeight())
+		--do old school positioning second
+		--ChatFrame1:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 33, 137)
  		chatFrame:SetUserPlaced(true)
  	else
  		chatFrame:SetUserPlaced(false)
@@ -314,11 +300,100 @@ local function RestoreLayout(chatFrame)
 	end
 end
 
+local function SaveSettings(chatFrame, index)
+	if not chatFrame then return end
+	
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then return end
+	if not XCHT_DB.frames[chatFrame:GetID()] then return end
+	
+	local db = XCHT_DB.frames[chatFrame:GetID()]
+	
+	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(index)
+	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
+	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
+	
+	db.chatParent = chatFrame:GetParent():GetName()
+	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
+	db.windowMessages = windowMessages
+	db.windowChannels = windowChannels	
+end
+
+local function RestoreSettings(chatFrame, index)
+	if not chatFrame then return end
+	
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then return end
+	if not XCHT_DB.frames[chatFrame:GetID()] then return end
+	
+	local db = XCHT_DB.frames[chatFrame:GetID()]
+	
+	if db.windowMessages then
+		--remove current window messages
+		local oldWindowMessages = { GetChatWindowMessages(chatFrame:GetID())}
+		for k=1, #oldWindowMessages do
+			RemoveChatWindowMessages(index, oldWindowMessages[k])
+		end
+		--add the stored ones
+		local newWindowMessages = db.windowMessages
+		for k=1, #newWindowMessages do
+			AddChatWindowMessages(index, newWindowMessages[k])
+		end
+	end
+	
+	if db.windowChannels then
+		--remove current window channels
+		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
+		for k=1, #oldWindowChannels do
+			RemoveChatWindowChannel(index, oldWindowChannels[k])
+		end
+		--add the stored ones
+		local newWindowChannels = db.windowChannels
+		for k=1, #newWindowChannels do
+			AddChatWindowChannel(index, newWindowChannels[k])
+		end
+	end
+
+	if db.windowInfo then
+		SetChatWindowName(index, db.windowInfo[1])
+		SetChatWindowSize(index, db.windowInfo[2])
+		SetChatWindowColor(index, db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
+		SetChatWindowAlpha(index, db.windowInfo[6])
+		SetChatWindowShown(index, db.windowInfo[7])
+		SetChatWindowLocked(index, db.windowInfo[8])
+		SetChatWindowDocked(index, db.windowInfo[9])
+		SetChatWindowUninteractable(index, db.windowInfo[10])
+	end
+	
+	if db.chatParent then
+		chatFrame:SetParent(db.chatParent)
+	end
+	
+	--restore layout does this already, but just in case
+	if ( db.width and db.height ) then
+		chatFrame:SetWidth(db.width) --just in case
+		chatFrame:SetHeight(db.height) --just in case
+	end
+
+end
+
 --hook origFCF_SavePositionAndDimensions
 local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
 FCF_SavePositionAndDimensions = function(chatFrame)
 	SaveLayout(chatFrame)
+	SaveSettings(chatFrame, chatFrame:GetID())
 	origFCF_SavePositionAndDimensions(chatFrame)
+end
+
+--hook old toggle
+local origFCF_ToggleLock = FCF_ToggleLock
+FCF_ToggleLock = function()
+	local chatFrame = FCF_GetCurrentChatFrame()
+	if chatFrame then
+		SaveLayout(chatFrame)
+		SaveSettings(chatFrame, chatFrame:GetID())
+	end
+	origFCF_ToggleLock()
 end
 
 --[[------------------------
@@ -329,7 +404,7 @@ for i = 1, NUM_CHAT_WINDOWS do
 	local n = ("ChatFrame%d"):format(i)
 	local f = _G[n]
 	if f then
-		--have to do this before player login otherwise issues occurr
+		--have to do this before player login otherwise issues occur
 		f:SetMaxLines(500)
 	end
 end
@@ -368,19 +443,17 @@ function eFrame:PLAYER_LOGIN()
 		
 		if f then
 		
-			--delete old DB
-			if XCHT_DB[n] then XCHT_DB[n] = nil end
+			--restore saved layout
+			RestoreLayout(f)
+			
+			--restore any settings
+			RestoreSettings(f, i)
 			
 			--few changes
 			f:EnableMouseWheel(true)
 			f:SetScript('OnMouseWheel', scrollChat)
 			f:SetClampRectInsets(0,0,0,0)
 
-			--check for recent update
-			if XCHT_DB.newLayout == nil and f:IsUserPlaced() then
-				SaveLayout(f)
-			end
-			
 			local editBox = _G[n.."EditBox"]
 
 			if not editBox.left then
@@ -435,11 +508,8 @@ function eFrame:PLAYER_LOGIN()
 				f.AddMessage = AddMessage
 			end
 			
-			--restore saved layout
-			RestoreLayout(f)
 		end
 		
-		if XCHT_DB.newLayout == nil then XCHT_DB.newLayout = true end
 	end
 
 	--show/hide the chat social buttons
@@ -561,7 +631,6 @@ function eFrame:PLAYER_LOGIN()
 	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFFDF2B2B%s|r] Loaded", "xanChat", ver or "1.0"))
 	
 	eFrame:UnregisterEvent("PLAYER_LOGIN")
-	eFrame.PLAYER_LOGIN = nil
 end
 
 if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
