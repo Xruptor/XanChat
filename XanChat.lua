@@ -1,14 +1,17 @@
 --Some stupid custom Chat modifications for made for myself.
 --Sharing it with the world in case anybody wants to actually use this.
 
---[[------------------------
-	Scrolling and Chat Links
---------------------------]]
+local eFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
+eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
 local debugf = tekDebug and tekDebug:GetFrame("xanChat")
 local function Debug(...)
     if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
 end
+
+--[[------------------------
+	Scrolling and Chat Links
+--------------------------]]
 
 local StickyTypeChannels = {
   SAY = 1,
@@ -192,9 +195,6 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", urlFilter)
 --[[------------------------
 	CORE LOAD
 --------------------------]]
-
-local eFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
-eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
 local dummy = function(self) self:Hide() end
 local msgHooks = {}
@@ -629,8 +629,26 @@ function eFrame:PLAYER_LOGIN()
 	
 	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
 	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFFDF2B2B%s|r] Loaded", "xanChat", ver or "1.0"))
+
+	eFrame:RegisterEvent("UI_SCALE_CHANGED")
 	
 	eFrame:UnregisterEvent("PLAYER_LOGIN")
+end
+
+--this is the fix for alt-tabbing resizing our chatboxes
+function eFrame:UI_SCALE_CHANGED()
+	for i = 1, NUM_CHAT_WINDOWS do
+		local n = ("ChatFrame%d"):format(i)
+		local f = _G[n]
+		
+		if f then
+			--restore saved layout
+			RestoreLayout(f)
+			
+			--restore any settings
+			RestoreSettings(f, i)
+		end
+	end
 end
 
 if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
