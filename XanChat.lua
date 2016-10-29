@@ -414,6 +414,7 @@ function eFrame:PLAYER_LOGIN()
 	--do the DB stuff
 	if not XCHT_DB then XCHT_DB = {} end
 	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
+	if XCHT_DB.addFontShadow == nil then XCHT_DB.addFontShadow = false end
 	if XCHT_DB.hideScroll == nil then XCHT_DB.hideScroll = false end
 	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
@@ -449,6 +450,13 @@ function eFrame:PLAYER_LOGIN()
 			--restore any settings
 			RestoreSettings(f, i)
 			
+			--add font shadows
+			if XCHT_DB.addFontShadow then
+				local font, size = f:GetFont()
+				f:SetFont(font, size, "THINOUTLINE")
+				f:SetShadowColor(0, 0, 0, 0)
+			end
+
 			--few changes
 			f:EnableMouseWheel(true)
 			f:SetScript('OnMouseWheel', scrollChat)
@@ -516,8 +524,8 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.hideSocial then
 		ChatFrameMenuButton:Hide()
 		ChatFrameMenuButton:SetScript("OnShow", dummy)
-		FriendsMicroButton:Hide()
-		FriendsMicroButton:SetScript("OnShow", dummy)
+		QuickJoinToastButton:Hide()
+		QuickJoinToastButton:SetScript("OnShow", dummy)
 	end
 	
 	--enable short channel names for globals
@@ -612,7 +620,17 @@ function eFrame:PLAYER_LOGIN()
 					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now [|cFF99CC33ON|r]")
 				else
 					XCHT_DB.hideTabs = true
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now[|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now [|cFF99CC33OFF|r]")
+				end
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				return true
+			elseif c and c:lower() == "shadow" then
+				if XCHT_DB.addFontShadow then
+					XCHT_DB.addFontShadow = false
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Chat font shadows are now [|cFF99CC33OFF|r]")
+				else
+					XCHT_DB.addFontShadow = true
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Chat font shadows are now [|cFF99CC33ON|r]")
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
@@ -625,6 +643,7 @@ function eFrame:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shortnames - toggles short channels names")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat editbox - toggles editbox to show at the top or the bottom")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat tabs - toggles the chat tabs on or off")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shadow - toggles text shadows for chat fonts on or off")
 	end
 	
 	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
