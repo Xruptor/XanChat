@@ -324,13 +324,13 @@ local function RestoreSettings(chatFrame, index)
 	
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then return end
-	if not XCHT_DB.frames[chatFrame:GetID()] then return end
+	if not XCHT_DB.frames[index] then return end
 	
-	local db = XCHT_DB.frames[chatFrame:GetID()]
+	local db = XCHT_DB.frames[index]
 	
 	if db.windowMessages then
 		--remove current window messages
-		local oldWindowMessages = { GetChatWindowMessages(chatFrame:GetID())}
+		local oldWindowMessages = { GetChatWindowMessages(index)}
 		for k=1, #oldWindowMessages do
 			RemoveChatWindowMessages(index, oldWindowMessages[k])
 		end
@@ -343,7 +343,7 @@ local function RestoreSettings(chatFrame, index)
 	
 	if db.windowChannels then
 		--remove current window channels
-		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
+		local oldWindowChannels = { GetChatWindowChannels(index)}
 		for k=1, #oldWindowChannels do
 			RemoveChatWindowChannel(index, oldWindowChannels[k])
 		end
@@ -450,6 +450,10 @@ function eFrame:PLAYER_LOGIN()
 			--restore any settings
 			RestoreSettings(f, i)
 			
+			--always lock the frames regardless
+			SetChatWindowLocked(i, true)
+			FCF_SetLocked(f, true)
+			
 			--add font shadows
 			if XCHT_DB.addFontShadow then
 				local font, size = f:GetFont()
@@ -461,7 +465,7 @@ function eFrame:PLAYER_LOGIN()
 			f:EnableMouseWheel(true)
 			f:SetScript('OnMouseWheel', scrollChat)
 			f:SetClampRectInsets(0,0,0,0)
-
+			
 			local editBox = _G[n.."EditBox"]
 
 			if not editBox.left then
@@ -517,7 +521,7 @@ function eFrame:PLAYER_LOGIN()
 			end
 			
 		end
-		
+
 	end
 
 	--show/hide the chat social buttons
@@ -666,6 +670,10 @@ function eFrame:UI_SCALE_CHANGED()
 			
 			--restore any settings
 			RestoreSettings(f, i)
+			
+			--always lock the frames regardless (using both calls just in case)
+			SetChatWindowLocked(i, true)
+			FCF_SetLocked(f, true)
 		end
 	end
 end
