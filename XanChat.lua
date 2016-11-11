@@ -198,6 +198,7 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", urlFilter)
 
 local dummy = function(self) self:Hide() end
 local msgHooks = {}
+local HistoryDB
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
   text = "xanChat: Would you like to apply the changes now?",
@@ -397,6 +398,46 @@ FCF_ToggleLock = function()
 end
 
 --[[------------------------
+	Edit Box History
+--------------------------]]
+
+local function OnArrowPressed(self, key)
+	if #self.historyLines == 0 then
+		return
+	end
+	if key == "DOWN" then
+		self.historyIndex = self.historyIndex - 1
+		if self.historyIndex < 1 then
+			self.historyIndex = #self.historyLines
+		end
+	elseif key == "UP" then
+		self.historyIndex = self.historyIndex + 1
+		if self.historyIndex > #self.historyLines then
+			self.historyIndex = 1
+		end
+	else
+		return
+	end
+	self:SetText(self.historyLines[self.historyIndex])
+end
+
+local function AddEditBoxHistoryLine(editBox, line)
+	if not HistoryDB then return end
+	
+	if ( strlen(line) > 0 ) then
+		for i, text in pairs(HistoryDB) do
+			if text == line then
+				return
+			end
+		end
+		tinsert(HistoryDB, #HistoryDB + 1, line)
+		if #HistoryDB > 40 then  --max number of lines we want 40 seems like a good number
+			tremove(HistoryDB, 1)
+		end
+	end
+end
+
+--[[------------------------
 	PLAYER_LOGIN
 --------------------------]]
 
@@ -411,6 +452,9 @@ end
 
 function eFrame:PLAYER_LOGIN()
 
+	local currentPlayer = UnitName("player")
+	local currentRealm = select(2, UnitFullName("player")) --get shortend realm name with no spaces and dashes
+	
 	--do the DB stuff
 	if not XCHT_DB then XCHT_DB = {} end
 	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
@@ -419,6 +463,12 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
+	
+	--setup the history DB
+	if not XCHT_HISTORY then XCHT_HISTORY = {} end
+	XCHT_HISTORY[currentRealm] = XCHT_HISTORY[currentRealm] or {}
+	XCHT_HISTORY[currentRealm][currentPlayer] = XCHT_HISTORY[currentRealm][currentPlayer] or {}
+	HistoryDB = XCHT_HISTORY[currentRealm][currentPlayer]
 	
 	--turn off profanity filter
 	SetCVar("profanityFilter", 0)
@@ -467,37 +517,52 @@ function eFrame:PLAYER_LOGIN()
 			f:SetClampRectInsets(0,0,0,0)
 			
 			local editBox = _G[n.."EditBox"]
+			
+			if editBox then
+			
+				--do the editbox history stuff
+				---------------------------------
+				editBox.historyLines = HistoryDB or {}
+				editBox.historyIndex = 0
+				editBox:HookScript("OnArrowPressed", OnArrowPressed)
+				
+				hooksecurefunc(editBox, "AddHistoryLine", AddEditBoxHistoryLine)
+	
+				for i, text in pairs(HistoryDB) do
+					editBox:AddHistoryLine(text)
+				end
+				---------------------------------
+				
+				if not editBox.left then
+					editBox.left = _G[n.."EditBoxLeft"]
+					editBox.right = _G[n.."EditBoxRight"]
+					editBox.mid = _G[n.."EditBoxMid"]
+				end
+				
+				--remove alt keypress from the EditBox (no longer need alt to move around)
+				editBox:SetAltArrowKeyMode(false)
 
-			if not editBox.left then
-				editBox.left = _G[n.."EditBoxLeft"]
-				editBox.right = _G[n.."EditBoxRight"]
-				editBox.mid = _G[n.."EditBoxMid"]
+				editBox.left:SetAlpha(0)
+				editBox.right:SetAlpha(0)
+				editBox.mid:SetAlpha(0)
+
+				editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
+				editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
+				editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+				
+				--do editbox positioning
+				if XCHT_DB.editBoxTop then
+					setEditBox(true)
+				else
+					setEditBox()
+				end
+				
+				--when the editbox is on the top, complications occur because sometimes you are not allowed to click on the tabs.
+				--to fix this we'll just make the tab close the editbox
+				--also force the editbox to hide itself when it loses focus
+				_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
+				editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
 			end
-			
-			--remove alt keypress from the EditBox (no longer need alt to move around)
-			editBox:SetAltArrowKeyMode(false)
-
-			editBox.left:SetAlpha(0)
-			editBox.right:SetAlpha(0)
-			editBox.mid:SetAlpha(0)
-
-			editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
-			editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
-			editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
-			
-			--do editbox positioning
-			if XCHT_DB.editBoxTop then
-				setEditBox(true)
-			else
-				setEditBox()
-			end
-			
-			--when the editbox is on the top, complications occur because sometimes you are not allowed to click on the tabs.
-			--to fix this we'll just make the tab close the editbox
-			--also force the editbox to hide itself when it loses focus
-			_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
-			editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
-			
 			--hide the scroll bars
 			if XCHT_DB.hideScroll then
 				_G[n.."ButtonFrameUpButton"]:Hide()
