@@ -1,8 +1,8 @@
-## Interface: 70100
+## Interface: 80000
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 4.4
+## Version: 4.5
 ## OptionalDeps: tekDebug
 ## SavedVariables: XCHT_DB, XCHT_HISTORY
 

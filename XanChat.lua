@@ -95,7 +95,7 @@ hooksecurefunc("UnitPopup_OnClick", function(self)
 	local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
 	local button = self.value
 	if clickers[button] then clickers[button](dropdownFrame.name) end
-	PlaySound("UChatScrollButton")
+	PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
 end)
 
 function xanChat_DoCopyName(name) 
