@@ -67,21 +67,20 @@ StaticPopupDialogs["COPYNAME"] = {
 	whileDead = 1,
 	maxLetters = 255,
 }
-	
-local function insertbefore(t, before, val)
-	for k,v in ipairs(t) do if v == before then return table.insert(t, k, val) end end
-	table.insert(t, val)
-end
 
+local menuList = {"PLAYER","RAID_PLAYER","PARTY","FRIEND"}
 local clickers = {["COPYNAME"] = function(a1) xanChat_DoCopyName(a1) end, ["WHO"] = SendWho, ["GUILD_INVITE"] = GuildInvite}
 
-UnitPopupButtons["COPYNAME"] = {text = "Copy Name", dist = 0}
-UnitPopupButtons["GUILD_INVITE"] = {text = "Guild Invite", dist = 0}
-UnitPopupButtons["WHO"] = {text = "Who", dist = 0}
+--removed dist as it was causing errors
+UnitPopupButtons["COPYNAME"] = {text = "Copy Name"}
+UnitPopupButtons["GUILD_INVITE"] = {text = "Guild Invite"}
+UnitPopupButtons["WHO"] = {text = "Who"}
 
-insertbefore(UnitPopupMenus["FRIEND"], "GUILD_PROMOTE", "GUILD_INVITE")
-insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "COPYNAME")
-insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "WHO")
+for k,v in pairs(menuList) do
+	table.insert(UnitPopupMenus[v], #UnitPopupMenus[v], "COPYNAME")
+	table.insert(UnitPopupMenus[v], #UnitPopupMenus[v], "GUILD_INVITE")
+	table.insert(UnitPopupMenus[v], #UnitPopupMenus[v], "WHO")
+end
 
 hooksecurefunc("UnitPopup_HideButtons", function()
 	local dropdownMenu = UIDROPDOWNMENU_INIT_MENU
@@ -406,14 +405,14 @@ local function OnArrowPressed(self, key)
 		return
 	end
 	if key == "DOWN" then
-		self.historyIndex = self.historyIndex - 1
-		if self.historyIndex < 1 then
-			self.historyIndex = #self.historyLines
-		end
-	elseif key == "UP" then
 		self.historyIndex = self.historyIndex + 1
 		if self.historyIndex > #self.historyLines then
 			self.historyIndex = 1
+		end
+	elseif key == "UP" then
+		self.historyIndex = self.historyIndex - 1
+		if self.historyIndex < 1 then
+			self.historyIndex = #self.historyLines
 		end
 	else
 		return
@@ -421,15 +420,15 @@ local function OnArrowPressed(self, key)
 	self:SetText(self.historyLines[self.historyIndex])
 end
 
+local function OnEditBoxShow(self)
+	--reset the historyindex so we can always go back to the last thing said by pressing down
+	self.historyIndex = 0
+end
+
 local function AddEditBoxHistoryLine(editBox, line)
 	if not HistoryDB then return end
 	
 	if ( strlen(line) > 0 ) then
-		for i, text in pairs(HistoryDB) do
-			if text == line then
-				return
-			end
-		end
 		tinsert(HistoryDB, #HistoryDB + 1, line)
 		if #HistoryDB > 40 then  --max number of lines we want 40 seems like a good number
 			tremove(HistoryDB, 1)
@@ -525,6 +524,7 @@ function eFrame:PLAYER_LOGIN()
 				editBox.historyLines = HistoryDB or {}
 				editBox.historyIndex = 0
 				editBox:HookScript("OnArrowPressed", OnArrowPressed)
+				editBox:HookScript("OnShow", OnEditBoxShow)
 				
 				hooksecurefunc(editBox, "AddHistoryLine", AddEditBoxHistoryLine)
 	
@@ -716,7 +716,7 @@ function eFrame:PLAYER_LOGIN()
 	end
 	
 	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
-	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFFDF2B2B%s|r] Loaded", "xanChat", ver or "1.0"))
+	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] Loaded", "xanChat", ver or "1.0"))
 
 	eFrame:RegisterEvent("UI_SCALE_CHANGED")
 	

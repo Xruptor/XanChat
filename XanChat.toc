@@ -2,7 +2,7 @@
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 4.5
+## Version: 4.6
 ## OptionalDeps: tekDebug
 ## SavedVariables: XCHT_DB, XCHT_HISTORY
 
