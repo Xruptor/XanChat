@@ -55,6 +55,11 @@ end
 ------------------------------
 --special thanks to Tekkub for tekPlayerMenu
 
+local function insertbefore(t, before, val)
+    for k,v in ipairs(t) do if v == before then return table.insert(t, k, val) end end
+    table.insert(t, val)
+end
+
 StaticPopupDialogs["COPYNAME"] = {
 	text = "COPY NAME",
 	button2 = CANCEL,
@@ -68,7 +73,6 @@ StaticPopupDialogs["COPYNAME"] = {
 	maxLetters = 255,
 }
 
-local menuList = {"PLAYER","RAID_PLAYER","PARTY","FRIEND"}
 local clickers = {["COPYNAME"] = function(a1) xanChat_DoCopyName(a1) end, ["WHO"] = SendWho, ["GUILD_INVITE"] = GuildInvite}
 
 --removed dist as it was causing errors
@@ -76,11 +80,14 @@ UnitPopupButtons["COPYNAME"] = {text = "Copy Name"}
 UnitPopupButtons["GUILD_INVITE"] = {text = "Guild Invite"}
 UnitPopupButtons["WHO"] = {text = "Who"}
 
-for k,v in pairs(menuList) do
-	table.insert(UnitPopupMenus[v], #UnitPopupMenus[v], "COPYNAME")
-	table.insert(UnitPopupMenus[v], #UnitPopupMenus[v], "GUILD_INVITE")
-	table.insert(UnitPopupMenus[v], #UnitPopupMenus[v], "WHO")
-end
+insertbefore(UnitPopupMenus["FRIEND"], "GUILD_PROMOTE", "GUILD_INVITE")
+insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "COPYNAME")
+insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "WHO")
+
+insertbefore(UnitPopupMenus["RAID_PLAYER"], "IGNORE", "COPYNAME")
+insertbefore(UnitPopupMenus["PARTY"], "IGNORE", "COPYNAME")
+insertbefore(UnitPopupMenus["PLAYER"], "IGNORE", "COPYNAME")
+
 
 hooksecurefunc("UnitPopup_HideButtons", function()
 	local dropdownMenu = UIDROPDOWNMENU_INIT_MENU
