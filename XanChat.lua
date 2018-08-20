@@ -53,12 +53,7 @@ end
 
 --DO CHAT DROPDOWN MENU
 ------------------------------
---special thanks to Tekkub for tekPlayerMenu
-
-local function insertbefore(t, before, val)
-    for k,v in ipairs(t) do if v == before then return table.insert(t, k, val) end end
-    table.insert(t, val)
-end
+local customPopups = {}
 
 StaticPopupDialogs["COPYNAME"] = {
 	text = "COPY NAME",
@@ -73,47 +68,67 @@ StaticPopupDialogs["COPYNAME"] = {
 	maxLetters = 255,
 }
 
-local clickers = {["COPYNAME"] = function(a1) xanChat_DoCopyName(a1) end, ["WHO"] = SendWho, ["GUILD_INVITE"] = GuildInvite}
+UnitPopupButtons["WHOPLAYER"] = {
+	text = "Who Player?",
+	func = function()
+		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
+		local name = dropdownFrame.name
 
---removed dist as it was causing errors
-UnitPopupButtons["COPYNAME"] = {text = "Copy Name"}
-UnitPopupButtons["GUILD_INVITE"] = {text = "Guild Invite"}
-UnitPopupButtons["WHO"] = {text = "Who"}
-
-insertbefore(UnitPopupMenus["FRIEND"], "GUILD_PROMOTE", "GUILD_INVITE")
-insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "COPYNAME")
-insertbefore(UnitPopupMenus["FRIEND"], "IGNORE", "WHO")
-
-insertbefore(UnitPopupMenus["RAID_PLAYER"], "IGNORE", "COPYNAME")
-insertbefore(UnitPopupMenus["PARTY"], "IGNORE", "COPYNAME")
-insertbefore(UnitPopupMenus["PLAYER"], "IGNORE", "COPYNAME")
-
-
-hooksecurefunc("UnitPopup_HideButtons", function()
-	local dropdownMenu = UIDROPDOWNMENU_INIT_MENU
-	for i,v in pairs(UnitPopupMenus[dropdownMenu.which]) do
-		if v == "GUILD_INVITE" then UnitPopupShown[i] = (not CanGuildInvite() or dropdownMenu.name == UnitName("player")) and 0 or 1
-		elseif clickers[v] then UnitPopupShown[i] = (dropdownMenu.name == UnitName("player") and 0) or 1 end
+		if name then
+			SendWho(name)
+		end
 	end
-end)
+}
+tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "WHOPLAYER")
+customPopups["WHOPLAYER"] = true
 
-hooksecurefunc("UnitPopup_OnClick", function(self)
-	local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
-	local button = self.value
-	if clickers[button] then clickers[button](dropdownFrame.name) end
-	PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
-end)
+UnitPopupButtons["GUILDINVITE"] = {
+	text = "Guild Invite",
+	func = function()
+		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
+		local name = dropdownFrame.name
 
-function xanChat_DoCopyName(name) 
-	local dialog = StaticPopup_Show("COPYNAME")
-	local editbox = _G[dialog:GetName().."EditBox"]  
-	editbox:SetText(name or "")
-	editbox:SetFocus()
-	editbox:HighlightText()
-	local button = _G[dialog:GetName().."Button2"]
-	button:ClearAllPoints()
-	button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
+		if name then
+			GuildInvite(name)
+		end
+	end
+}
+tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "GUILDINVITE")
+customPopups["GUILDINVITE"] = true
+
+UnitPopupButtons["COPYNAME"] = {
+	text = "Copy Name",
+	func = function()
+		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
+		local name = dropdownFrame.name
+
+		if name then
+			local dialog = StaticPopup_Show("COPYNAME")
+			local editbox = _G[dialog:GetName().."EditBox"]  
+			editbox:SetText(name or "")
+			editbox:SetFocus()
+			editbox:HighlightText()
+			local button = _G[dialog:GetName().."Button2"]
+			button:ClearAllPoints()
+			button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
+		end
+	end
+}
+tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "COPYNAME")
+customPopups["COPYNAME"] = true
+ 
+--we got to make sure our function occurs for our custom unitpopup, otherwise it will cause errors with other unitpopup entries
+local function customPopupMenu(dropdownMenu, which, unit, name, userData, ...)
+	for i=1, UIDROPDOWNMENU_MAXBUTTONS do
+		local button = _G["DropDownList" .. UIDROPDOWNMENU_MENU_LEVEL .. "Button" .. i]
+		local popup = customPopups[button.value]
+		if popup then
+			button.func = UnitPopupButtons[button.value].func
+		end
+	end
 end
+
+hooksecurefunc("UnitPopup_ShowMenu", customPopupMenu)
 
 --[[------------------------
 	URL COPY
@@ -469,6 +484,7 @@ function eFrame:PLAYER_LOGIN()
 	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
+	if XCHT_DB.hideVoice == nil then XCHT_DB.hideVoice = false end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -639,6 +655,13 @@ function eFrame:PLAYER_LOGIN()
 		CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 0
 	end
 	
+	--toggle the voice chat buttons if disabled
+	if XCHT_DB.hideVoice then
+		ChatFrameToggleVoiceDeafenButton:Hide()
+		ChatFrameToggleVoiceMuteButton:Hide()
+		ChatFrameChannelButton:Hide()
+	end
+	
 	--remove the annoying guild loot messages by replacing them with the original ones
 	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
 	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
@@ -710,6 +733,19 @@ function eFrame:PLAYER_LOGIN()
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
+			elseif c and c:lower() == "voice" then
+				if XCHT_DB.hideVoice then
+					XCHT_DB.hideVoice = false
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Voice chat buttons are now [|cFF99CC33ON|r]")
+				else
+					XCHT_DB.hideVoice = true
+					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Voice chat buttons are now [|cFF99CC33OFF|r]")
+					ChatFrameToggleVoiceDeafenButton:Hide()
+					ChatFrameToggleVoiceMuteButton:Hide()
+					ChatFrameChannelButton:Hide()
+				end
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				return true
 			end
 		end
 
@@ -720,6 +756,7 @@ function eFrame:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat editbox - toggles editbox to show at the top or the bottom")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat tabs - toggles the chat tabs on or off")
 		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shadow - toggles text shadows for chat fonts on or off")
+		DEFAULT_CHAT_FRAME:AddMessage("/xanchat voice - toggles voice chat buttons on or off")
 	end
 	
 	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
