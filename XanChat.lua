@@ -274,10 +274,7 @@ local function SaveLayout(chatFrame)
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 
 	local point, xOffset, yOffset = GetChatWindowSavedPosition(chatFrame:GetID())
-	local gpPoint, gpRelativeTo, gpRelativePoint, gpXOffset, gpYOffset = chatFrame:GetPoint()
-	
-	db.getPoint = {gpPoint, gpRelativeTo, gpRelativePoint, gpXOffset, gpYOffset}
-	
+
 	db.point = point
 	db.xOffset = xOffset
 	db.yOffset = yOffset
@@ -442,20 +439,46 @@ local function OnArrowPressed(self, key)
 	self:SetText(self.historyLines[self.historyIndex])
 end
 
-local function OnEditBoxShow(self)
-	--reset the historyindex so we can always go back to the last thing said by pressing down
-	self.historyIndex = 0
-end
-
-local function AddEditBoxHistoryLine(editBox, line)
+local function AddEditBoxHistoryLine(editBox)
 	if not HistoryDB then return end
 	
-	if ( strlen(line) > 0 ) then
-		tinsert(HistoryDB, #HistoryDB + 1, line)
-		if #HistoryDB > 40 then  --max number of lines we want 40 seems like a good number
-			tremove(HistoryDB, 1)
+	local text = ""
+	local type = editBox:GetAttribute("chatType")
+	local header = _G["SLASH_" .. type .. "1"]
+
+	if (header) then
+		text = header
+	end
+	
+	if (type == "WHISPER") then
+		text = text .. " " .. editBox:GetAttribute("tellTarget")
+	elseif (type == "CHANNEL") then
+		text = "/" .. editBox:GetAttribute("channelTarget")
+	end
+		
+	local editBoxText = editBox:GetText()
+	if (strlen(editBoxText) > 0) then
+	
+		text = text .. " " .. editBox:GetText()
+        if not text or (text == "") then
+            return
+        end
+	
+		local name = editBox:GetName()
+		HistoryDB[name] = HistoryDB[name] or {}
+
+		tinsert(HistoryDB[name], #HistoryDB[name] + 1, text)
+		if #HistoryDB[name] > 40 then  --max number of lines we want 40 seems like a good number
+			tremove(HistoryDB[name], 1)
 		end
 	end
+end
+
+local function ClearEditBoxHistory(editBox)
+	if not HistoryDB then return end
+	
+	local name = editBox:GetName()
+	HistoryDB[name] = {}
 end
 
 --[[------------------------
@@ -542,18 +565,35 @@ function eFrame:PLAYER_LOGIN()
 			
 			if editBox then
 			
+                local name = editBox:GetName()
+				HistoryDB[name] = HistoryDB[name] or {}
+			
 				--do the editbox history stuff
 				---------------------------------
-				editBox.historyLines = HistoryDB or {}
+				editBox.historyLines = HistoryDB[name]
 				editBox.historyIndex = 0
 				editBox:HookScript("OnArrowPressed", OnArrowPressed)
-				editBox:HookScript("OnShow", OnEditBoxShow)
+				editBox:HookScript("OnShow", function(self)
+					--reset the historyindex so we can always go back to the last thing said by pressing down
+					self.historyIndex = 0
+				end)
+				
+				local count = #HistoryDB[name]
+
+				--count down, check for 0 very important!  It will cause a crash because it's an infinite loop
+				if count > 0 then
+					for i=count, 1, -1 do
+						if HistoryDB[name][i] then
+							editBox:AddHistoryLine(HistoryDB[name][i])
+						else
+							break
+						end
+					end
+				end
 				
 				hooksecurefunc(editBox, "AddHistoryLine", AddEditBoxHistoryLine)
-	
-				for i, text in pairs(HistoryDB) do
-					editBox:AddHistoryLine(text)
-				end
+				hooksecurefunc(editBox, "ClearHistory", ClearEditBoxHistory)
+				
 				---------------------------------
 				
 				if not editBox.left then
