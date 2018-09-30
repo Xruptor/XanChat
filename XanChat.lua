@@ -319,7 +319,7 @@ local function RestoreLayout(chatFrame)
 	end
 end
 
-local function SaveSettings(chatFrame, index)
+local function SaveSettings(chatFrame)
 	if not chatFrame then return end
 	
 	if not XCHT_DB then return end
@@ -328,7 +328,7 @@ local function SaveSettings(chatFrame, index)
 	
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 	
-	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(index)
+	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
 	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
 	
@@ -338,50 +338,52 @@ local function SaveSettings(chatFrame, index)
 	db.windowChannels = windowChannels	
 end
 
-local function RestoreSettings(chatFrame, index)
+--https://github.com/tomrus88/BlizzardInterfaceCode/blob/master/Interface/FrameXML/ChatConfigFrame.lua
+
+local function RestoreSettings(chatFrame)
 	if not chatFrame then return end
 	
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then return end
-	if not XCHT_DB.frames[index] then return end
+	if not XCHT_DB.frames[chatFrame:GetID()] then return end
 	
-	local db = XCHT_DB.frames[index]
+	local db = XCHT_DB.frames[chatFrame:GetID()]
 	
 	if db.windowMessages then
 		--remove current window messages
-		local oldWindowMessages = { GetChatWindowMessages(index)}
+		local oldWindowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 		for k=1, #oldWindowMessages do
-			RemoveChatWindowMessages(index, oldWindowMessages[k])
+			RemoveChatWindowMessages(chatFrame:GetID(), oldWindowMessages[k])
 		end
 		--add the stored ones
 		local newWindowMessages = db.windowMessages
 		for k=1, #newWindowMessages do
-			AddChatWindowMessages(index, newWindowMessages[k])
+			AddChatWindowMessages(chatFrame:GetID(), newWindowMessages[k])
 		end
 	end
 	
 	if db.windowChannels then
 		--remove current window channels
-		local oldWindowChannels = { GetChatWindowChannels(index)}
+		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
 		for k=1, #oldWindowChannels do
-			RemoveChatWindowChannel(index, oldWindowChannels[k])
+			RemoveChatWindowChannel(chatFrame:GetID(), oldWindowChannels[k])
 		end
 		--add the stored ones
 		local newWindowChannels = db.windowChannels
 		for k=1, #newWindowChannels do
-			AddChatWindowChannel(index, newWindowChannels[k])
+			AddChatWindowChannel(chatFrame:GetID(), newWindowChannels[k])
 		end
 	end
 
 	if db.windowInfo then
-		SetChatWindowName(index, db.windowInfo[1])
-		SetChatWindowSize(index, db.windowInfo[2])
-		SetChatWindowColor(index, db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
-		SetChatWindowAlpha(index, db.windowInfo[6])
-		SetChatWindowShown(index, db.windowInfo[7])
-		SetChatWindowLocked(index, db.windowInfo[8])
-		SetChatWindowDocked(index, db.windowInfo[9])
-		SetChatWindowUninteractable(index, db.windowInfo[10])
+		SetChatWindowName(chatFrame:GetID(), db.windowInfo[1])
+		SetChatWindowSize(chatFrame:GetID(), db.windowInfo[2])
+		SetChatWindowColor(chatFrame:GetID(), db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
+		SetChatWindowAlpha(chatFrame:GetID(), db.windowInfo[6])
+		SetChatWindowShown(chatFrame:GetID(), db.windowInfo[7])
+		SetChatWindowLocked(chatFrame:GetID(), db.windowInfo[8])
+		SetChatWindowDocked(chatFrame:GetID(), db.windowInfo[9])
+		SetChatWindowUninteractable(chatFrame:GetID(), db.windowInfo[10])
 	end
 	
 	if db.chatParent then
@@ -400,7 +402,7 @@ end
 local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
 FCF_SavePositionAndDimensions = function(chatFrame)
 	SaveLayout(chatFrame)
-	SaveSettings(chatFrame, chatFrame:GetID())
+	SaveSettings(chatFrame)
 	origFCF_SavePositionAndDimensions(chatFrame)
 end
 
@@ -410,10 +412,23 @@ FCF_ToggleLock = function()
 	local chatFrame = FCF_GetCurrentChatFrame()
 	if chatFrame then
 		SaveLayout(chatFrame)
-		SaveSettings(chatFrame, chatFrame:GetID())
+		SaveSettings(chatFrame)
 	end
 	origFCF_ToggleLock()
 end
+
+local function doValueUpdate(checkBool, groupType)
+	SaveSettings(FCF_GetCurrentChatFrame() or nil)
+end
+
+hooksecurefunc("ToggleChatMessageGroup", doValueUpdate)
+hooksecurefunc("ToggleMessageSource", doValueUpdate)
+hooksecurefunc("ToggleMessageDest", doValueUpdate)
+hooksecurefunc("ToggleMessageTypeGroup", doValueUpdate)
+hooksecurefunc("ToggleMessageType", doValueUpdate)
+hooksecurefunc("ToggleChatChannel", doValueUpdate)
+hooksecurefunc("ToggleChatColorNamesByClassGroup", doValueUpdate)
+
 
 --[[------------------------
 	Edit Box History
@@ -543,7 +558,7 @@ function eFrame:PLAYER_LOGIN()
 			RestoreLayout(f)
 			
 			--restore any settings
-			RestoreSettings(f, i)
+			RestoreSettings(f)
 			
 			--always lock the frames regardless
 			SetChatWindowLocked(i, true)
@@ -818,7 +833,7 @@ function eFrame:UI_SCALE_CHANGED()
 			RestoreLayout(f)
 			
 			--restore any settings
-			RestoreSettings(f, i)
+			RestoreSettings(f)
 			
 			--always lock the frames regardless (using both calls just in case)
 			SetChatWindowLocked(i, true)
