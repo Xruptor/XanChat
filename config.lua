@@ -130,10 +130,10 @@ function configEvent:PLAYER_LOGIN()
 
 		if not value then
 			XCHT_DB.shortNames = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOff)
 		else
 			XCHT_DB.shortNames = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
 		end
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")

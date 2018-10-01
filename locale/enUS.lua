@@ -19,11 +19,11 @@ L.No = "No"
 
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 L.ChannelGeneral = "%[%d+%. General.-%]"
-L.ChannelTrade = "%[%d+%. General.-%]"
-L.ChannelWorldDefense = "%[%d+%. General.-%]"
-L.ChannelLocalDefense = "%[%d+%. General.-%]"
-L.ChannelLookingForGroup = "%[%d+%. General.-%]"
-L.ChannelGuildRecruitment = "%[%d+%. General.-%]"
+L.ChannelTrade = "%[%d+%. Trade.-%]"
+L.ChannelWorldDefense = "%[%d+%. WorldDefense%]"
+L.ChannelLocalDefense = "%[%d+%. LocalDefense.-%]"
+L.ChannelLookingForGroup = "%[%d+%. LookingForGroup%]"
+L.ChannelGuildRecruitment = "%[%d+%. GuildRecruitment.-%]"
 
 L.ShortGeneral = "GN"
 L.ShortTrade = "TR"
@@ -31,7 +31,7 @@ L.ShortWorldDefense = "WD"
 L.ShortLocalDefense = "LD"
 L.ShortLookingForGroup = "LFG"
 L.ShortGuildRecruitment = "GR"
-
+	
 --short channel globals
 --Example: "|Hchannel:  Channel Type   |h  [short channel name]   |h %s: " 
 --Example Yell: "|Hchannel:  Yell  |h  [Y]  |h %s: "   Channel Type = Yell, short name = Y
