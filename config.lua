@@ -8,15 +8,11 @@ configEvent:SetScript("OnEvent", function(self, event, ...) if self[event] then 
 local L = LibStub("AceLocale-3.0"):GetLocale("xanChat")
 local chkBoxIndex = 1
 
-function createCheckbutton(parentFrame, displayText, dbObjectValue)
+function createCheckbutton(parentFrame, displayText)
 	chkBoxIndex = chkBoxIndex + 1
 	
 	local checkbutton = CreateFrame("CheckButton", ADDON_NAME.."_config_chkbtn_" .. chkBoxIndex, parentFrame, "ChatConfigCheckButtonTemplate")
 	getglobal(checkbutton:GetName() .. 'Text'):SetText(" "..displayText)
-	
-	checkbutton:SetScript("OnShow", function()
-			checkbutton:SetChecked(dbObjectValue)
-	end)
 	
 	return checkbutton
 end
@@ -90,7 +86,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	addon.aboutPanel = LoadAboutFrame()
 	
-	addon.aboutPanel.btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo, XCHT_DB.hideSocial)
+	addon.aboutPanel.btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
+	addon.aboutPanel.btnSocial:SetScript("OnShow", function() addon.aboutPanel.btnSocial:SetChecked(XCHT_DB.hideSocial) end)
 	addon.aboutPanel.btnSocial.func = function()
 		local value = addon.aboutPanel.btnSocial:GetChecked()
 		
@@ -107,7 +104,8 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel.btnSocial:SetScript("OnClick", addon.aboutPanel.btnSocial.func)
 	addConfigEntry(addon.aboutPanel.btnSocial)
 
-	addon.aboutPanel.btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo, XCHT_DB.hideScroll)
+	addon.aboutPanel.btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
+	addon.aboutPanel.btnScroll:SetScript("OnShow", function() addon.aboutPanel.btnScroll:SetChecked(XCHT_DB.hideScroll) end)
 	addon.aboutPanel.btnScroll.func = function()
 		local value = addon.aboutPanel.btnScroll:GetChecked()
 
@@ -124,7 +122,8 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel.btnScroll:SetScript("OnClick", addon.aboutPanel.btnScroll.func)
 	addConfigEntry(addon.aboutPanel.btnScroll)
 
-	addon.aboutPanel.btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo, XCHT_DB.shortNames)
+	addon.aboutPanel.btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
+	addon.aboutPanel.btnShortNames:SetScript("OnShow", function() addon.aboutPanel.btnShortNames:SetChecked(XCHT_DB.shortNames) end)
 	addon.aboutPanel.btnShortNames.func = function()
 		local value = addon.aboutPanel.btnShortNames:GetChecked()
 
@@ -141,7 +140,8 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel.btnShortNames:SetScript("OnClick", addon.aboutPanel.btnShortNames.func)
 	addConfigEntry(addon.aboutPanel.btnShortNames)
 
-	addon.aboutPanel.btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo, XCHT_DB.editBoxTop)
+	addon.aboutPanel.btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
+	addon.aboutPanel.btnEditBox:SetScript("OnShow", function() addon.aboutPanel.btnEditBox:SetChecked(XCHT_DB.editBoxTop) end)
 	addon.aboutPanel.btnEditBox.func = function()
 		local value = addon.aboutPanel.btnEditBox:GetChecked()
 
@@ -158,7 +158,8 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel.btnEditBox:SetScript("OnClick", addon.aboutPanel.btnEditBox.func)
 	addConfigEntry(addon.aboutPanel.btnEditBox)
 
-	addon.aboutPanel.btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo, XCHT_DB.hideTabs)
+	addon.aboutPanel.btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
+	addon.aboutPanel.btnTabs:SetScript("OnShow", function() addon.aboutPanel.btnTabs:SetChecked(XCHT_DB.hideTabs) end)
 	addon.aboutPanel.btnTabs.func = function()
 		local value = addon.aboutPanel.btnTabs:GetChecked()
 
@@ -175,7 +176,8 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel.btnTabs:SetScript("OnClick", addon.aboutPanel.btnTabs.func)
 	addConfigEntry(addon.aboutPanel.btnTabs)
 
-	addon.aboutPanel.btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo, XCHT_DB.addFontShadow)
+	addon.aboutPanel.btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
+	addon.aboutPanel.btnShadow:SetScript("OnShow", function() addon.aboutPanel.btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
 	addon.aboutPanel.btnShadow.func = function()
 		local value = addon.aboutPanel.btnShadow:GetChecked()
 
@@ -192,7 +194,8 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel.btnShadow:SetScript("OnClick", addon.aboutPanel.btnShadow.func)
 	addConfigEntry(addon.aboutPanel.btnShadow)
 
-	addon.aboutPanel.btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo, XCHT_DB.hideVoice)
+	addon.aboutPanel.btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
+	addon.aboutPanel.btnVoice:SetScript("OnShow", function() addon.aboutPanel.btnVoice:SetChecked(XCHT_DB.hideVoice) end)
 	addon.aboutPanel.btnVoice.func = function()
 		local value = addon.aboutPanel.btnVoice:GetChecked()
 
