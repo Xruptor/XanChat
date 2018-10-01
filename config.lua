@@ -1,16 +1,30 @@
 local ADDON_NAME, addon = ...
-if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon
+if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon end
 
 local chkBoxIndex = 1
 
-function createCheckbutton(parentFrame, xPos, yPos, displayText)
+function createCheckbutton(parentFrame, displayText)
 	chkBoxIndex = chkBoxIndex + 1
 	
 	local checkbutton = CreateFrame("CheckButton", ADDON_NAME.."_config_chkbtn_" .. chkBoxIndex, parentFrame, "ChatConfigCheckButtonTemplate")
-	checkbutton:SetPoint("TOPLEFT", xPos, yPos)
-	getglobal(checkbutton:GetName() .. 'Text'):SetText(displayText)
+	getglobal(checkbutton:GetName() .. 'Text'):SetText(" "..displayText)
 
 	return checkbutton
+end
+
+local yModifer = 30
+local startY = -150
+local currY = 0
+
+local function addConfigEntry(objEntry)
+
+	if currY == 0 then
+		currY = startY
+	else
+		currY = currY - yModifer
+	end
+	
+	objEntry:SetPoint("TOPLEFT", 20, currY)
 end
 
 local function LoadAboutFrame()
@@ -64,3 +78,18 @@ local function LoadAboutFrame()
 end
 
 addon.aboutPanel = LoadAboutFrame()
+
+myCheckButton = createCheckbutton(addon.aboutPanel, "A Checkbox")
+myCheckButton:SetScript("OnClick", function()
+		print('click')
+end)
+addConfigEntry(myCheckButton)
+
+myCheckButton2 = createCheckbutton(addon.aboutPanel, "A Checkbox")
+myCheckButton2:SetScript("OnClick", function()
+		print('click')
+end)
+addConfigEntry(myCheckButton2)
+
+
+

@@ -2,7 +2,7 @@
 --Sharing it with the world in case anybody wants to actually use this.
 
 local ADDON_NAME, addon = ...
-if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon
+if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon end
 
 addon.eventFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
 local eFrame = addon.eventFrame
@@ -812,13 +812,15 @@ function eFrame:PLAYER_LOGIN()
 		end
 
 		DEFAULT_CHAT_FRAME:AddMessage("xanChat")
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceInfo)
+		
+		local preText = "/xanchat "
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSocial.." - "..L.SlashSocialInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashScroll.." - "..L.SlashScrollInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashShortNames.." - "..L.SlashShortNamesInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashEditBox.." - "..L.SlashEditBoxInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashTabs.." - "..L.SlashTabsInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashShadow.." - "..L.SlashShadowInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashVoice.." - "..L.SlashVoiceInfo)
 	end
 	
 	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
