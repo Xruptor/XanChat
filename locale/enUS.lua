@@ -13,7 +13,7 @@ L.WhoPlayer = "Who Player?"
 L.GuildInvite = "Guild Invite"
 L.CopyName = "Copy Name"
 L.URLCopy = "URL COPY"
-L.ApplyChanges = "xanChat: Would you like to apply the changes now?"
+L.ApplyChanges = "xanChat: UI must be reloaded to apply changes!"
 L.Yes = "Yes"
 L.No = "No"
 

@@ -561,6 +561,9 @@ function eFrame:PLAYER_LOGIN()
 		
 		if f then
 		
+		XANCHAT_Frame = XANCHAT_Frame or {}
+		XANCHAT_Frame[i] = f
+		
 			--restore saved layout
 			RestoreLayout(f)
 			
@@ -650,16 +653,13 @@ function eFrame:PLAYER_LOGIN()
 			end
 			--hide the scroll bars
 			if XCHT_DB.hideScroll then
-				_G[n.."ButtonFrameUpButton"]:Hide()
-				_G[n.."ButtonFrameUpButton"]:SetScript("OnShow", dummy)
-				_G[n.."ButtonFrameDownButton"]:Hide()
-				_G[n.."ButtonFrameDownButton"]:SetScript("OnShow", dummy)
-				_G[n.."ButtonFrame"]:Hide()
-				_G[n.."ButtonFrame"]:SetScript("OnShow", dummy)
-				if _G[n.."ButtonFrameMinimizeButton"] then
-					--this button doesn't always appear for all chat frames
-					_G[n.."ButtonFrameMinimizeButton"]:Hide()
-					_G[n.."ButtonFrameMinimizeButton"]:SetScript("OnShow", dummy)
+				if f.buttonFrame then
+					f.buttonFrame:Hide()
+					f.buttonFrame:SetScript("OnShow", dummy)
+				end
+				if f.ScrollToBottomButton then
+					f.ScrollToBottomButton:Hide()
+					f.ScrollToBottomButton:SetScript("OnShow", dummy)
 				end
 			end
 			
@@ -735,78 +735,25 @@ function eFrame:PLAYER_LOGIN()
 		
 		if a and XCHT_DB then
 			if c and c:lower() == L.SlashSocial then
-				if XCHT_DB.hideSocial then
-					XCHT_DB.hideSocial = false
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
-				else
-					XCHT_DB.hideSocial = true
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
-				end
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				addon.aboutPanel.btnSocial.func()
 				return true
 			elseif c and c:lower() == L.SlashScroll then
-				if XCHT_DB.hideScroll then
-					XCHT_DB.hideScroll = false
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOn)
-				else
-					XCHT_DB.hideScroll = true
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOff)
-				end
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				addon.aboutPanel.btnScroll.func()
 				return true
 			elseif c and c:lower() == L.SlashShortNames then
-				if XCHT_DB.shortNames then
-					XCHT_DB.shortNames = false
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOff)
-				else
-					XCHT_DB.shortNames = true
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
-				end
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				addon.aboutPanel.btnShortNames.func()
 				return true
 			elseif c and c:lower() == L.SlashEditBox then
-				if XCHT_DB.editBoxTop then
-					XCHT_DB.editBoxTop = false
-					setEditBox()
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBottom)
-				else
-					XCHT_DB.editBoxTop = true
-					setEditBox(true)
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxTop)
-				end
+				addon.aboutPanel.btnEditBox.func()
 				return true
 			elseif c and c:lower() == L.SlashTabs then
-				if XCHT_DB.hideTabs then
-					XCHT_DB.hideTabs = false
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOn)
-				else
-					XCHT_DB.hideTabs = true
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOff)
-				end
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				addon.aboutPanel.btnTabs.func()
 				return true
 			elseif c and c:lower() == L.SlashShadow then
-				if XCHT_DB.addFontShadow then
-					XCHT_DB.addFontShadow = false
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOff)
-				else
-					XCHT_DB.addFontShadow = true
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOn)
-				end
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				addon.aboutPanel.btnShadow.func()
 				return true
 			elseif c and c:lower() == L.SlashVoice then
-				if XCHT_DB.hideVoice then
-					XCHT_DB.hideVoice = false
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOn)
-				else
-					XCHT_DB.hideVoice = true
-					DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOff)
-					ChatFrameToggleVoiceDeafenButton:Hide()
-					ChatFrameToggleVoiceMuteButton:Hide()
-					ChatFrameChannelButton:Hide()
-				end
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+				addon.aboutPanel.btnVoice.func()
 				return true
 			end
 		end

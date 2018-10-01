@@ -1,14 +1,23 @@
 local ADDON_NAME, addon = ...
 if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon end
 
+addon.configEvent = CreateFrame("frame", ADDON_NAME.."_config_eventFrame",UIParent)
+local configEvent = addon.configEvent
+configEvent:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
+
+local L = LibStub("AceLocale-3.0"):GetLocale("xanChat")
 local chkBoxIndex = 1
 
-function createCheckbutton(parentFrame, displayText)
+function createCheckbutton(parentFrame, displayText, dbObjectValue)
 	chkBoxIndex = chkBoxIndex + 1
 	
 	local checkbutton = CreateFrame("CheckButton", ADDON_NAME.."_config_chkbtn_" .. chkBoxIndex, parentFrame, "ChatConfigCheckButtonTemplate")
 	getglobal(checkbutton:GetName() .. 'Text'):SetText(" "..displayText)
-
+	
+	checkbutton:SetScript("OnShow", function()
+			checkbutton:SetChecked(dbObjectValue)
+	end)
+	
 	return checkbutton
 end
 
@@ -77,19 +86,130 @@ local function LoadAboutFrame()
 	return about
 end
 
-addon.aboutPanel = LoadAboutFrame()
+function configEvent:PLAYER_LOGIN()
+	
+	addon.aboutPanel = LoadAboutFrame()
+	
+	addon.aboutPanel.btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo, XCHT_DB.hideSocial)
+	addon.aboutPanel.btnSocial.func = function()
+		local value = addon.aboutPanel.btnSocial:GetChecked()
+		
+		if not value then
+			XCHT_DB.hideSocial = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
+		else
+			XCHT_DB.hideSocial = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnSocial:SetScript("OnClick", addon.aboutPanel.btnSocial.func)
+	addConfigEntry(addon.aboutPanel.btnSocial)
 
-myCheckButton = createCheckbutton(addon.aboutPanel, "A Checkbox")
-myCheckButton:SetScript("OnClick", function()
-		print('click')
-end)
-addConfigEntry(myCheckButton)
+	addon.aboutPanel.btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo, XCHT_DB.hideScroll)
+	addon.aboutPanel.btnScroll.func = function()
+		local value = addon.aboutPanel.btnScroll:GetChecked()
 
-myCheckButton2 = createCheckbutton(addon.aboutPanel, "A Checkbox")
-myCheckButton2:SetScript("OnClick", function()
-		print('click')
-end)
-addConfigEntry(myCheckButton2)
+		if not value then
+			XCHT_DB.hideScroll = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOn)
+		else
+			XCHT_DB.hideScroll = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOff)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnScroll:SetScript("OnClick", addon.aboutPanel.btnScroll.func)
+	addConfigEntry(addon.aboutPanel.btnScroll)
 
+	addon.aboutPanel.btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo, XCHT_DB.shortNames)
+	addon.aboutPanel.btnShortNames.func = function()
+		local value = addon.aboutPanel.btnShortNames:GetChecked()
 
+		if not value then
+			XCHT_DB.shortNames = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
+		else
+			XCHT_DB.shortNames = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOff)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnShortNames:SetScript("OnClick", addon.aboutPanel.btnShortNames.func)
+	addConfigEntry(addon.aboutPanel.btnShortNames)
 
+	addon.aboutPanel.btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo, XCHT_DB.editBoxTop)
+	addon.aboutPanel.btnEditBox.func = function()
+		local value = addon.aboutPanel.btnEditBox:GetChecked()
+
+		if not value then
+			XCHT_DB.editBoxTop = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBottom)
+		else
+			XCHT_DB.editBoxTop = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxTop)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnEditBox:SetScript("OnClick", addon.aboutPanel.btnEditBox.func)
+	addConfigEntry(addon.aboutPanel.btnEditBox)
+
+	addon.aboutPanel.btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo, XCHT_DB.hideTabs)
+	addon.aboutPanel.btnTabs.func = function()
+		local value = addon.aboutPanel.btnTabs:GetChecked()
+
+		if not value then
+			XCHT_DB.hideTabs = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOn)
+		else
+			XCHT_DB.hideTabs = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOff)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnTabs:SetScript("OnClick", addon.aboutPanel.btnTabs.func)
+	addConfigEntry(addon.aboutPanel.btnTabs)
+
+	addon.aboutPanel.btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo, XCHT_DB.addFontShadow)
+	addon.aboutPanel.btnShadow.func = function()
+		local value = addon.aboutPanel.btnShadow:GetChecked()
+
+		if not value then
+			XCHT_DB.addFontShadow = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOff)
+		else
+			XCHT_DB.addFontShadow = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOn)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnShadow:SetScript("OnClick", addon.aboutPanel.btnShadow.func)
+	addConfigEntry(addon.aboutPanel.btnShadow)
+
+	addon.aboutPanel.btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo, XCHT_DB.hideVoice)
+	addon.aboutPanel.btnVoice.func = function()
+		local value = addon.aboutPanel.btnVoice:GetChecked()
+
+		if not value then
+			XCHT_DB.hideVoice = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOn)
+		else
+			XCHT_DB.hideVoice = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOff)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	addon.aboutPanel.btnVoice:SetScript("OnClick", addon.aboutPanel.btnVoice.func)
+	addConfigEntry(addon.aboutPanel.btnVoice)
+
+	configEvent:UnregisterEvent("PLAYER_LOGIN")
+end
+
+if IsLoggedIn() then configEvent:PLAYER_LOGIN() else configEvent:RegisterEvent("PLAYER_LOGIN") end
