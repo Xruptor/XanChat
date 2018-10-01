@@ -6,4 +6,10 @@
 ## OptionalDeps: tekDebug
 ## SavedVariables: XCHT_DB, XCHT_HISTORY
 
+libs\LibStub\LibStub.lua
+libs\AceLocale-3.0\AceLocale-3.0.xml
+
+locale\enUS.lua
+
 xanChat.lua
+config.lua

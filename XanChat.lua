@@ -1,13 +1,20 @@
 --Some stupid custom Chat modifications for made for myself.
 --Sharing it with the world in case anybody wants to actually use this.
 
-local eFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
+local ADDON_NAME, addon = ...
+if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon
+
+addon.eventFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
+local eFrame = addon.eventFrame
+
 eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
 local debugf = tekDebug and tekDebug:GetFrame("xanChat")
 local function Debug(...)
     if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
 end
+
+local L = LibStub("AceLocale-3.0"):GetLocale("xanChat")
 
 --[[------------------------
 	Scrolling and Chat Links
@@ -69,7 +76,7 @@ StaticPopupDialogs["COPYNAME"] = {
 }
 
 UnitPopupButtons["WHOPLAYER"] = {
-	text = "Who Player?",
+	text = L.WhoPlayer,
 	func = function()
 		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
 		local name = dropdownFrame.name
@@ -83,7 +90,7 @@ tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "WHOPLAYER")
 customPopups["WHOPLAYER"] = true
 
 UnitPopupButtons["GUILDINVITE"] = {
-	text = "Guild Invite",
+	text = L.GuildInvite,
 	func = function()
 		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
 		local name = dropdownFrame.name
@@ -97,7 +104,7 @@ tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "GUILDINVITE")
 customPopups["GUILDINVITE"] = true
 
 UnitPopupButtons["COPYNAME"] = {
-	text = "Copy Name",
+	text = L.CopyName,
 	func = function()
 		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
 		local name = dropdownFrame.name
@@ -163,7 +170,7 @@ function urlFilter(self, event, msg, author, ...)
 end
 
 StaticPopupDialogs["LINKME"] = {
-	text = "URL COPY",
+	text = L.URLCopy,
 	button2 = CANCEL,
 	hasEditBox = true,
     hasWideEditBox = true,
@@ -222,9 +229,9 @@ local msgHooks = {}
 local HistoryDB
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
-  text = "xanChat: Would you like to apply the changes now?",
-  button1 = "Yes",
-  button2 = "No",
+  text = L.ApplyChanges,
+  button1 = L.Yes,
+  button2 = L.No,
   OnAccept = function()
       ReloadUI()
   end,
@@ -237,12 +244,12 @@ local AddMessage = function(frame, text, ...)
 	if type(text) == "string" then
 		local chatNum = string.match(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
-		text = gsub(text, "%[%d+%. General.-%]", "["..chatNum.."GN]")
-		text = gsub(text, "%[%d+%. Trade.-%]", "["..chatNum.."TR]")
-		text = gsub(text, "%[%d+%. WorldDefense%]", "["..chatNum.."WD]")
-		text = gsub(text, "%[%d+%. LocalDefense.-%]", "["..chatNum.."LD]")
-		text = gsub(text, "%[%d+%. LookingForGroup%]", "["..chatNum.."LFG]")
-		text = gsub(text, "%[%d+%. GuildRecruitment.-%]", "["..chatNum.."GR]")
+		text = gsub(text, L.ChannelGeneral, "["..chatNum..L.ShortGeneral.."]")
+		text = gsub(text, L.ChannelTrade, "["..chatNum..L.ShortTrade.."]")
+		text = gsub(text, L.ChannelWorldDefense, "["..chatNum..L.ShortWorldDefense.."]")
+		text = gsub(text, L.ChannelLocalDefense, "["..chatNum..L.ShortLocalDefense.."]")
+		text = gsub(text, L.ChannelLookingForGroup, "["..chatNum..L.ShortLookingForGroup.."]")
+		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
 	end
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
@@ -677,20 +684,20 @@ function eFrame:PLAYER_LOGIN()
 	
 	--enable short channel names for globals
 	if XCHT_DB.shortNames then
-        CHAT_WHISPER_GET 				= "[W] %s: "
-        CHAT_WHISPER_INFORM_GET 		= "[W2] %s: "
-        CHAT_YELL_GET 					= "|Hchannel:Yell|h[Y]|h %s: "
-        CHAT_SAY_GET 					= "|Hchannel:Say|h[S]|h %s: "
-        CHAT_BATTLEGROUND_GET			= "|Hchannel:Battleground|h[BG]|h %s: "
-        CHAT_BATTLEGROUND_LEADER_GET 	= [[|Hchannel:Battleground|h[BG|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
-        CHAT_GUILD_GET   				= "|Hchannel:Guild|h[G]|h %s: "
-        CHAT_OFFICER_GET 				= "|Hchannel:Officer|h[O]|h %s: "
-        CHAT_PARTY_GET        			= "|Hchannel:Party|h[P]|h %s: "
-        CHAT_PARTY_LEADER_GET 			= [[|Hchannel:Party|h[P|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
-        CHAT_PARTY_GUIDE_GET  			= CHAT_PARTY_LEADER_GET
-        CHAT_RAID_GET         			= "|Hchannel:Raid|h[R]|h %s: "
-        CHAT_RAID_LEADER_GET  			= [[|Hchannel:Raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
-        CHAT_RAID_WARNING_GET 			= [[|Hchannel:RaidWarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
+        CHAT_WHISPER_GET 				= L.CHAT_WHISPER_GET
+        CHAT_WHISPER_INFORM_GET 		= L.CHAT_WHISPER_INFORM_GET
+        CHAT_YELL_GET 					= L.CHAT_YELL_GET
+        CHAT_SAY_GET 					= L.CHAT_SAY_GET
+        CHAT_BATTLEGROUND_GET			= L.CHAT_BATTLEGROUND_GET
+        CHAT_BATTLEGROUND_LEADER_GET 	= L.CHAT_BATTLEGROUND_LEADER_GET
+        CHAT_GUILD_GET   				= L.CHAT_GUILD_GET
+        CHAT_OFFICER_GET 				= L.CHAT_OFFICER_GET
+        CHAT_PARTY_GET        			= L.CHAT_PARTY_GET
+        CHAT_PARTY_LEADER_GET 			= L.CHAT_PARTY_LEADER_GET
+        CHAT_PARTY_GUIDE_GET  			= L.CHAT_PARTY_GUIDE_GET
+        CHAT_RAID_GET         			= L.CHAT_RAID_GET
+        CHAT_RAID_LEADER_GET  			= L.CHAT_RAID_LEADER_GET
+        CHAT_RAID_WARNING_GET 			= L.CHAT_RAID_WARNING_GET
 		
         CHAT_MONSTER_PARTY_GET   		= CHAT_PARTY_GET
         CHAT_MONSTER_SAY_GET     		= CHAT_SAY_GET
@@ -727,74 +734,74 @@ function eFrame:PLAYER_LOGIN()
 		local a,b,c=strfind(msg, "(%S+)")
 		
 		if a and XCHT_DB then
-			if c and c:lower() == "social" then
+			if c and c:lower() == L.SlashSocial then
 				if XCHT_DB.hideSocial then
 					XCHT_DB.hideSocial = false
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Social buttons are now [|cFF99CC33ON|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
 				else
 					XCHT_DB.hideSocial = true
-					DEFAULT_CHAT_FRAME:AddMessage("XanDebuffTimers: Social buttons are now [|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
-			elseif c and c:lower() == "scroll" then
+			elseif c and c:lower() == L.SlashScroll then
 				if XCHT_DB.hideScroll then
 					XCHT_DB.hideScroll = false
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Scroll buttons are now [|cFF99CC33ON|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOn)
 				else
 					XCHT_DB.hideScroll = true
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Scroll buttons are now [|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOff)
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
-			elseif c and c:lower() == "shortnames" then
+			elseif c and c:lower() == L.SlashShortNames then
 				if XCHT_DB.shortNames then
 					XCHT_DB.shortNames = false
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Short channel names are now [|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOff)
 				else
 					XCHT_DB.shortNames = true
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Short channel names are now [|cFF99CC33ON|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
-			elseif c and c:lower() == "editbox" then
+			elseif c and c:lower() == L.SlashEditBox then
 				if XCHT_DB.editBoxTop then
 					XCHT_DB.editBoxTop = false
 					setEditBox()
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The edit box is now at the [|cFF99CC33BOTTOM|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBottom)
 				else
 					XCHT_DB.editBoxTop = true
 					setEditBox(true)
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The edit box is now at the [|cFF99CC33TOP|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxTop)
 				end
 				return true
-			elseif c and c:lower() == "tabs" then
+			elseif c and c:lower() == L.SlashTabs then
 				if XCHT_DB.hideTabs then
 					XCHT_DB.hideTabs = false
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now [|cFF99CC33ON|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOn)
 				else
 					XCHT_DB.hideTabs = true
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: The chat tabs are now [|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOff)
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
-			elseif c and c:lower() == "shadow" then
+			elseif c and c:lower() == L.SlashShadow then
 				if XCHT_DB.addFontShadow then
 					XCHT_DB.addFontShadow = false
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Chat font shadows are now [|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOff)
 				else
 					XCHT_DB.addFontShadow = true
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Chat font shadows are now [|cFF99CC33ON|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOn)
 				end
 				StaticPopup_Show("XANCHAT_APPLYCHANGES")
 				return true
-			elseif c and c:lower() == "voice" then
+			elseif c and c:lower() == L.SlashVoice then
 				if XCHT_DB.hideVoice then
 					XCHT_DB.hideVoice = false
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Voice chat buttons are now [|cFF99CC33ON|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOn)
 				else
 					XCHT_DB.hideVoice = true
-					DEFAULT_CHAT_FRAME:AddMessage("xanChat: Voice chat buttons are now [|cFF99CC33OFF|r]")
+					DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOff)
 					ChatFrameToggleVoiceDeafenButton:Hide()
 					ChatFrameToggleVoiceMuteButton:Hide()
 					ChatFrameChannelButton:Hide()
@@ -805,13 +812,13 @@ function eFrame:PLAYER_LOGIN()
 		end
 
 		DEFAULT_CHAT_FRAME:AddMessage("xanChat")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat social - toggles the chat social buttons")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat scroll - toggles the chat scroll bars")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shortnames - toggles short channels names")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat editbox - toggles editbox to show at the top or the bottom")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat tabs - toggles the chat tabs on or off")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat shadow - toggles text shadows for chat fonts on or off")
-		DEFAULT_CHAT_FRAME:AddMessage("/xanchat voice - toggles voice chat buttons on or off")
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceInfo)
 	end
 	
 	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
