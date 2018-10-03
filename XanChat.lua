@@ -2,19 +2,19 @@
 --Sharing it with the world in case anybody wants to actually use this.
 
 local ADDON_NAME, addon = ...
-if not _G[ADDON_NAME] then _G[ADDON_NAME] = addon end
+if not _G[ADDON_NAME] then
+	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent)
+end
+addon = _G[ADDON_NAME]
 
-addon.eventFrame = CreateFrame("frame","xanChatEvent_Frame",UIParent)
-local eFrame = addon.eventFrame
+addon:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
-eFrame:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
-
-local debugf = tekDebug and tekDebug:GetFrame("xanChat")
+local debugf = tekDebug and tekDebug:GetFrame(ADDON_NAME)
 local function Debug(...)
     if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
 end
 
-local L = LibStub("AceLocale-3.0"):GetLocale("xanChat")
+local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 
 --[[------------------------
 	Scrolling and Chat Links
@@ -516,7 +516,7 @@ for i = 1, NUM_CHAT_WINDOWS do
 	end
 end
 
-function eFrame:PLAYER_LOGIN()
+function addon:PLAYER_LOGIN()
 
 	local currentPlayer = UnitName("player")
 	local currentRealm = select(2, UnitFullName("player")) --get shortend realm name with no spaces and dashes
@@ -735,30 +735,30 @@ function eFrame:PLAYER_LOGIN()
 		
 		if a and XCHT_DB then
 			if c and c:lower() == L.SlashSocial then
-				addon.aboutPanel.btnSocial.func()
+				addon.aboutPanel.btnSocial.func(true)
 				return true
 			elseif c and c:lower() == L.SlashScroll then
-				addon.aboutPanel.btnScroll.func()
+				addon.aboutPanel.btnScroll.func(true)
 				return true
 			elseif c and c:lower() == L.SlashShortNames then
-				addon.aboutPanel.btnShortNames.func()
+				addon.aboutPanel.btnShortNames.func(true)
 				return true
 			elseif c and c:lower() == L.SlashEditBox then
-				addon.aboutPanel.btnEditBox.func()
+				addon.aboutPanel.btnEditBox.func(true)
 				return true
 			elseif c and c:lower() == L.SlashTabs then
-				addon.aboutPanel.btnTabs.func()
+				addon.aboutPanel.btnTabs.func(true)
 				return true
 			elseif c and c:lower() == L.SlashShadow then
-				addon.aboutPanel.btnShadow.func()
+				addon.aboutPanel.btnShadow.func(true)
 				return true
 			elseif c and c:lower() == L.SlashVoice then
-				addon.aboutPanel.btnVoice.func()
+				addon.aboutPanel.btnVoice.func(true)
 				return true
 			end
 		end
 
-		DEFAULT_CHAT_FRAME:AddMessage("xanChat")
+		DEFAULT_CHAT_FRAME:AddMessage(ADDON_NAME, 64/255, 224/255, 208/255)
 		
 		local preText = "/xanchat "
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSocial.." - "..L.SlashSocialInfo)
@@ -770,16 +770,16 @@ function eFrame:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashVoice.." - "..L.SlashVoiceInfo)
 	end
 	
-	local ver = GetAddOnMetadata("xanChat","Version") or '1.0'
-	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] Loaded", "xanChat", ver or "1.0"))
+	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
+	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] Loaded", ADDON_NAME, ver or "1.0"))
 
-	eFrame:RegisterEvent("UI_SCALE_CHANGED")
+	addon:RegisterEvent("UI_SCALE_CHANGED")
 	
-	eFrame:UnregisterEvent("PLAYER_LOGIN")
+	addon:UnregisterEvent("PLAYER_LOGIN")
 end
 
 --this is the fix for alt-tabbing resizing our chatboxes
-function eFrame:UI_SCALE_CHANGED()
+function addon:UI_SCALE_CHANGED()
 	for i = 1, NUM_CHAT_WINDOWS do
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
@@ -798,4 +798,4 @@ function eFrame:UI_SCALE_CHANGED()
 	end
 end
 
-if IsLoggedIn() then eFrame:PLAYER_LOGIN() else eFrame:RegisterEvent("PLAYER_LOGIN") end
+if IsLoggedIn() then addon:PLAYER_LOGIN() else addon:RegisterEvent("PLAYER_LOGIN") end

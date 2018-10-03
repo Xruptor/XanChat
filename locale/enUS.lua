@@ -1,5 +1,6 @@
+local ADDON_NAME, addon = ...
 
-local L = LibStub("AceLocale-3.0"):NewLocale("xanChat", "enUS", true)
+local L = LibStub("AceLocale-3.0"):NewLocale(ADDON_NAME, "enUS", true)
 if not L then return end
 
 --for non-english fonts
@@ -53,34 +54,34 @@ L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:RaidWarning|h[RW|TInterface\GroupFrame\
 L.SlashSocial = "social"
 L.SlashSocialOn = "xanChat: Social buttons are now [|cFF99CC33ON|r]"
 L.SlashSocialOff = "xanChat: Social buttons are now [|cFF99CC33OFF|r]"
-L.SlashSocialInfo = "Toggles the chat social buttons"
+L.SlashSocialInfo = "Hide the chat social button."
 
 L.SlashScroll = "scroll"
 L.SlashScrollOn = "xanChat: Scroll buttons are now [|cFF99CC33ON|r]"
 L.SlashScrollOff = "xanChat: Scroll buttons are now [|cFF99CC33OFF|r]"
-L.SlashScrollInfo = "Toggles the chat scroll bars"
+L.SlashScrollInfo = "Hide the chat scroll bars."
 
 L.SlashShortNames = "shortnames"
 L.SlashShortNamesOn = "xanChat: Short channel names are now [|cFF99CC33ON|r]"
 L.SlashShortNamesOff = "xanChat: Short channel names are now [|cFF99CC33OFF|r]"
-L.SlashShortNamesInfo = "Toggles short channels names"
+L.SlashShortNamesInfo = "Use channel short names."
 
 L.SlashEditBox = "editbox"
 L.SlashEditBoxBottom = "xanChat: The edit box is now at the [|cFF99CC33BOTTOM|r]"
 L.SlashEditBoxTop = "xanChat: The edit box is now at the [|cFF99CC33TOP|r]"
-L.SlashEditBoxInfo = "Toggles editbox to show at the top or the bottom"
+L.SlashEditBoxInfo = "Show editbox on the top of the chat window."
 
 L.SlashTabs = "tabs"
 L.SlashTabsOn = "xanChat: The chat tabs are now [|cFF99CC33ON|r]"
 L.SlashTabsOff = "xanChat: The chat tabs are now [|cFF99CC33OFF|r]"
-L.SlashTabsInfo = "Toggles the chat tabs on or off"
+L.SlashTabsInfo = "Hide the chat tabs."
 
 L.SlashShadow = "shadow"
 L.SlashShadowOn = "xanChat: Chat font shadows are now [|cFF99CC33ON|r]"
 L.SlashShadowOff = "xanChat: Chat font shadows are now [|cFF99CC33OFF|r]"
-L.SlashShadowInfo= "Toggles text shadows for chat fonts on or off"
+L.SlashShadowInfo= "Add shadows to the chat text font."
 
 L.SlashVoice = "voice"
 L.SlashVoiceOn = "xanChat: Voice chat buttons are now [|cFF99CC33ON|r]"
 L.SlashVoiceOff = "xanChat: Voice chat buttons are now [|cFF99CC33OFF|r]"
-L.SlashVoiceInfo = "Toggles voice chat buttons on or off"
+L.SlashVoiceInfo = "Hide the chat voice button."
