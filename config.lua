@@ -11,14 +11,14 @@ configEvent:SetScript("OnEvent", function(self, event, ...) if self[event] then 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 
 local lastObject
-local function addConfigEntry(objEntry)
+local function addConfigEntry(objEntry, extraAdjust)
 	
 	objEntry:ClearAllPoints()
 	
 	if not lastObject then
 		objEntry:SetPoint("TOPLEFT", 20, -150)
 	else
-		objEntry:SetPoint("LEFT", lastObject, "BOTTOMLEFT", 0, -35)
+		objEntry:SetPoint("LEFT", lastObject, "BOTTOMLEFT", 0, -30 + (extraAdjust or 0))
 	end
 	
 	lastObject = objEntry
@@ -68,7 +68,7 @@ local function createSlider(parentFrame, displayText, minVal, maxVal)
 	slider:SetBackdrop(SliderBackdrop)
 
 	local label = slider:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	label:SetPoint("CENTER", slider, "CENTER", 0, 12)
+	label:SetPoint("CENTER", slider, "CENTER", 0, 16)
 	label:SetJustifyH("CENTER")
 	label:SetHeight(15)
 	label:SetText(displayText)
@@ -143,11 +143,11 @@ function configEvent:PLAYER_LOGIN()
 	
 	addon.aboutPanel = LoadAboutFrame()
 	
-	addon.aboutPanel.btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
-	addon.aboutPanel.btnSocial:SetScript("OnShow", function() addon.aboutPanel.btnSocial:SetChecked(XCHT_DB.hideSocial) end)
-	addon.aboutPanel.btnSocial.func = function(slashSwitch)
+	local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
+	btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
+	btnSocial.func = function(slashSwitch)
 		local value = XCHT_DB.hideSocial
-		if not slashSwitch then value = addon.aboutPanel.btnSocial:GetChecked() end
+		if not slashSwitch then value = btnSocial:GetChecked() end
 		
 		if value then
 			XCHT_DB.hideSocial = false
@@ -159,14 +159,16 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnSocial:SetScript("OnClick", addon.aboutPanel.btnSocial.func)
-	addConfigEntry(addon.aboutPanel.btnSocial)
+	btnSocial:SetScript("OnClick", btnSocial.func)
+	
+	addConfigEntry(btnSocial)
+	addon.aboutPanel.btnSocial = btnSocial
 
-	addon.aboutPanel.btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
-	addon.aboutPanel.btnScroll:SetScript("OnShow", function() addon.aboutPanel.btnScroll:SetChecked(XCHT_DB.hideScroll) end)
-	addon.aboutPanel.btnScroll.func = function(slashSwitch)
+	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
+	btnScroll:SetScript("OnShow", function() btnScroll:SetChecked(XCHT_DB.hideScroll) end)
+	btnScroll.func = function(slashSwitch)
 		local value = XCHT_DB.hideScroll
-		if not slashSwitch then value = addon.aboutPanel.btnScroll:GetChecked() end
+		if not slashSwitch then value = btnScroll:GetChecked() end
 
 		if value then
 			XCHT_DB.hideScroll = false
@@ -178,14 +180,16 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnScroll:SetScript("OnClick", addon.aboutPanel.btnScroll.func)
-	addConfigEntry(addon.aboutPanel.btnScroll)
+	btnScroll:SetScript("OnClick", btnScroll.func)
+	
+	addConfigEntry(btnScroll)
+	addon.aboutPanel.btnScroll = btnScroll
 
-	addon.aboutPanel.btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
-	addon.aboutPanel.btnShortNames:SetScript("OnShow", function() addon.aboutPanel.btnShortNames:SetChecked(XCHT_DB.shortNames) end)
-	addon.aboutPanel.btnShortNames.func = function(slashSwitch)
+	local btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
+	btnShortNames:SetScript("OnShow", function() btnShortNames:SetChecked(XCHT_DB.shortNames) end)
+	btnShortNames.func = function(slashSwitch)
 		local value = XCHT_DB.shortNames
-		if not slashSwitch then value = addon.aboutPanel.btnShortNames:GetChecked() end
+		if not slashSwitch then value = btnShortNames:GetChecked() end
 
 		if value then
 			XCHT_DB.shortNames = false
@@ -197,14 +201,16 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnShortNames:SetScript("OnClick", addon.aboutPanel.btnShortNames.func)
-	addConfigEntry(addon.aboutPanel.btnShortNames)
+	btnShortNames:SetScript("OnClick", btnShortNames.func)
+	
+	addConfigEntry(btnShortNames)
+	addon.aboutPanel.btnShortNames = btnShortNames
 
-	addon.aboutPanel.btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
-	addon.aboutPanel.btnEditBox:SetScript("OnShow", function() addon.aboutPanel.btnEditBox:SetChecked(XCHT_DB.editBoxTop) end)
-	addon.aboutPanel.btnEditBox.func = function(slashSwitch)
+	local btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
+	btnEditBox:SetScript("OnShow", function() btnEditBox:SetChecked(XCHT_DB.editBoxTop) end)
+	btnEditBox.func = function(slashSwitch)
 		local value = XCHT_DB.editBoxTop
-		if not slashSwitch then value = addon.aboutPanel.btnEditBox:GetChecked() end
+		if not slashSwitch then value = btnEditBox:GetChecked() end
 
 		if value then
 			XCHT_DB.editBoxTop = false
@@ -216,14 +222,16 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnEditBox:SetScript("OnClick", addon.aboutPanel.btnEditBox.func)
-	addConfigEntry(addon.aboutPanel.btnEditBox)
+	btnEditBox:SetScript("OnClick", btnEditBox.func)
+	
+	addConfigEntry(btnEditBox)
+	addon.aboutPanel.btnEditBox = btnEditBox
 
-	addon.aboutPanel.btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
-	addon.aboutPanel.btnTabs:SetScript("OnShow", function() addon.aboutPanel.btnTabs:SetChecked(XCHT_DB.hideTabs) end)
-	addon.aboutPanel.btnTabs.func = function(slashSwitch)
+	local btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
+	btnTabs:SetScript("OnShow", function() btnTabs:SetChecked(XCHT_DB.hideTabs) end)
+	btnTabs.func = function(slashSwitch)
 		local value = XCHT_DB.hideTabs
-		if not slashSwitch then value = addon.aboutPanel.btnTabs:GetChecked() end
+		if not slashSwitch then value = btnTabs:GetChecked() end
 
 		if value then
 			XCHT_DB.hideTabs = false
@@ -235,14 +243,16 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnTabs:SetScript("OnClick", addon.aboutPanel.btnTabs.func)
-	addConfigEntry(addon.aboutPanel.btnTabs)
+	btnTabs:SetScript("OnClick", btnTabs.func)
+	
+	addConfigEntry(btnTabs)
+	addon.aboutPanel.btnTabs = btnTabs
 
-	addon.aboutPanel.btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
-	addon.aboutPanel.btnShadow:SetScript("OnShow", function() addon.aboutPanel.btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
-	addon.aboutPanel.btnShadow.func = function(slashSwitch)
+	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
+	btnShadow:SetScript("OnShow", function() btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
+	btnShadow.func = function(slashSwitch)
 		local value = XCHT_DB.addFontShadow
-		if not slashSwitch then value = addon.aboutPanel.btnShadow:GetChecked() end
+		if not slashSwitch then value = btnShadow:GetChecked() end
 
 		if value then
 			XCHT_DB.addFontShadow = false
@@ -254,14 +264,16 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnShadow:SetScript("OnClick", addon.aboutPanel.btnShadow.func)
-	addConfigEntry(addon.aboutPanel.btnShadow)
+	btnShadow:SetScript("OnClick", btnShadow.func)
+	
+	addConfigEntry(btnShadow)
+	addon.aboutPanel.btnShadow = btnShadow
 
-	addon.aboutPanel.btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
-	addon.aboutPanel.btnVoice:SetScript("OnShow", function() addon.aboutPanel.btnVoice:SetChecked(XCHT_DB.hideVoice) end)
-	addon.aboutPanel.btnVoice.func = function(slashSwitch)
+	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
+	btnVoice:SetScript("OnShow", function() btnVoice:SetChecked(XCHT_DB.hideVoice) end)
+	btnVoice.func = function(slashSwitch)
 		local value = XCHT_DB.hideVoice
-		if not slashSwitch then value = addon.aboutPanel.btnVoice:GetChecked() end
+		if not slashSwitch then value = btnVoice:GetChecked() end
 
 		if value then
 			XCHT_DB.hideVoice = false
@@ -273,8 +285,10 @@ function configEvent:PLAYER_LOGIN()
 		
 		StaticPopup_Show("XANCHAT_APPLYCHANGES")
 	end
-	addon.aboutPanel.btnVoice:SetScript("OnClick", addon.aboutPanel.btnVoice.func)
-	addConfigEntry(addon.aboutPanel.btnVoice)
+	btnVoice:SetScript("OnClick", btnVoice.func)
+	
+	addConfigEntry(btnVoice)
+	addon.aboutPanel.btnVoice = btnVoice
 
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end

@@ -771,8 +771,8 @@ function addon:PLAYER_LOGIN()
 	end
 	
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
-	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] Loaded", ADDON_NAME, ver or "1.0"))
-
+	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] loaded:   /xanchat", ADDON_NAME, ver or "1.0"))
+	
 	addon:RegisterEvent("UI_SCALE_CHANGED")
 	
 	addon:UnregisterEvent("PLAYER_LOGIN")
