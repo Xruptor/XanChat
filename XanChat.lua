@@ -184,6 +184,9 @@ StaticPopupDialogs["LINKME"] = {
 
 local SetHyperlink = _G.ItemRefTooltip.SetHyperlink
 function _G.ItemRefTooltip:SetHyperlink(link, ...)
+
+	if type(link) ~= "string" then return end
+
 	if link and (strsub(link, 1, 3) == "url") then
 		local url = strsub(link, 5)
 		local dialog = StaticPopup_Show("LINKME")
@@ -308,22 +311,23 @@ local function RestoreLayout(chatFrame)
 	if not chatFrame:IsMovable() then
 		chatFrame:SetMovable(true)
 		sSwitch = true
+		Debug(chatFrame:GetID(), chatFrame:GetName(), "SetMovable")
 	end
  	
- 	if ( chatFrame:IsMovable() and db.point and db.xOffset ) then
+ 	if ( chatFrame:IsMovable() and db.point and db.xOffset and db.yOffset ) then
+		chatFrame:SetUserPlaced(true)
  		chatFrame:ClearAllPoints()
-		--do GetChatWindowSavedPosition first
 		chatFrame:SetPoint(db.point, db.xOffset * GetScreenWidth(), db.yOffset * GetScreenHeight())
-		--do old school positioning second
-		--ChatFrame1:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 33, 137)
- 		chatFrame:SetUserPlaced(true)
- 	else
- 		chatFrame:SetUserPlaced(false)
+		Debug(chatFrame:GetID(), chatFrame:GetName(), chatFrame:IsMovable(), chatFrame:IsUserPlaced(), "SetPoint")
  	end
 	
 	if sSwitch then
 		chatFrame:SetMovable(false)
+		Debug(chatFrame:GetID(), chatFrame:GetName(), "SetMovable Off")
 	end
+	
+	Debug(chatFrame:GetID(), chatFrame:GetName(), "Restored")
+	Debug("   --   ")
 end
 
 local function SaveSettings(chatFrame)
@@ -384,13 +388,27 @@ local function RestoreSettings(chatFrame)
 
 	if db.windowInfo then
 		SetChatWindowName(chatFrame:GetID(), db.windowInfo[1])
+		FCF_SetWindowName(chatFrame, db.windowInfo[1])
+
 		SetChatWindowSize(chatFrame:GetID(), db.windowInfo[2])
+		FCF_SetChatWindowFontSize(nil, chatFrame, db.windowInfo[2])
+		
 		SetChatWindowColor(chatFrame:GetID(), db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
+		FCF_SetWindowColor(chatFrame, db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
+		
 		SetChatWindowAlpha(chatFrame:GetID(), db.windowInfo[6])
+		FCF_SetWindowAlpha(chatFrame, db.windowInfo[6])
+		
 		SetChatWindowShown(chatFrame:GetID(), db.windowInfo[7])
+		
 		SetChatWindowLocked(chatFrame:GetID(), db.windowInfo[8])
+		FCF_SetLocked(chatFrame, db.windowInfo[8])
+		
 		SetChatWindowDocked(chatFrame:GetID(), db.windowInfo[9])
+		FCF_DockFrame(chatFrame, db.windowInfo[9])
+		
 		SetChatWindowUninteractable(chatFrame:GetID(), db.windowInfo[10])
+		FCF_SetUninteractable(chatFrame, db.windowInfo[10])
 	end
 	
 	if db.chatParent then
@@ -403,25 +421,6 @@ local function RestoreSettings(chatFrame)
 		chatFrame:SetHeight(db.height) --just in case
 	end
 
-end
-
---hook origFCF_SavePositionAndDimensions
-local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
-FCF_SavePositionAndDimensions = function(chatFrame)
-	SaveLayout(chatFrame)
-	SaveSettings(chatFrame)
-	origFCF_SavePositionAndDimensions(chatFrame)
-end
-
---hook old toggle
-local origFCF_ToggleLock = FCF_ToggleLock
-FCF_ToggleLock = function()
-	local chatFrame = FCF_GetCurrentChatFrame()
-	if chatFrame then
-		SaveLayout(chatFrame)
-		SaveSettings(chatFrame)
-	end
-	origFCF_ToggleLock()
 end
 
 local function doValueUpdate(checkBool, groupType)
@@ -561,14 +560,20 @@ function addon:PLAYER_LOGIN()
 		
 		if f then
 		
-		XANCHAT_Frame = XANCHAT_Frame or {}
-		XANCHAT_Frame[i] = f
-		
+			XANCHAT_Frame = XANCHAT_Frame or {}
+			XANCHAT_Frame[i] = f
+
 			--restore saved layout
 			RestoreLayout(f)
 			
 			--restore any settings
 			RestoreSettings(f)
+
+			--save our settings
+			hooksecurefunc(f, "StopMovingOrSizing", function(self)
+				SaveLayout(f)
+				SaveSettings(f)
+			end)
 			
 			--always lock the frames regardless
 			SetChatWindowLocked(i, true)
@@ -686,10 +691,14 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.shortNames then
         CHAT_WHISPER_GET 				= L.CHAT_WHISPER_GET
         CHAT_WHISPER_INFORM_GET 		= L.CHAT_WHISPER_INFORM_GET
+		CHAT_BN_WHISPER_GET           	= L.CHAT_WHISPER_GET
+		CHAT_BN_WHISPER_INFORM_GET    	= L.CHAT_WHISPER_INFORM_GET
         CHAT_YELL_GET 					= L.CHAT_YELL_GET
         CHAT_SAY_GET 					= L.CHAT_SAY_GET
         CHAT_BATTLEGROUND_GET			= L.CHAT_BATTLEGROUND_GET
         CHAT_BATTLEGROUND_LEADER_GET 	= L.CHAT_BATTLEGROUND_LEADER_GET
+		CHAT_INSTANCE_CHAT_GET        	= L.CHAT_BATTLEGROUND_GET
+		CHAT_INSTANCE_CHAT_LEADER_GET 	= L.CHAT_BATTLEGROUND_LEADER_GET
         CHAT_GUILD_GET   				= L.CHAT_GUILD_GET
         CHAT_OFFICER_GET 				= L.CHAT_OFFICER_GET
         CHAT_PARTY_GET        			= L.CHAT_PARTY_GET
