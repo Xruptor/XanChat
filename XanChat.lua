@@ -32,6 +32,8 @@ local StickyTypeChannels = {
   CHANNEL = 1,
 };
 
+local addonLoaded = false
+
 local function scrollChat(frame, delta)
 	--Faster Scroll
 	if IsControlKeyDown()  then
@@ -275,17 +277,22 @@ end
 
 --save and restore layout functions
 local function SaveLayout(chatFrame)
+	if not addonLoaded then return end
 	if not chatFrame then return end
 	
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
 	if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
 	
+	if chatFrame.isMoving or chatFrame.isDragging then return end
+
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 
-	local point, xOffset, yOffset = GetChatWindowSavedPosition(chatFrame:GetID())
+	local point, relativeTo, relativePoint, xOffset, yOffset = chatFrame:GetPoint()
 
 	db.point = point
+	db.relativeTo = relativeTo
+	db.relativePoint = relativePoint
 	db.xOffset = xOffset
 	db.yOffset = yOffset
 	db.width = chatFrame:GetWidth()
@@ -311,42 +318,50 @@ local function RestoreLayout(chatFrame)
 	if not chatFrame:IsMovable() then
 		chatFrame:SetMovable(true)
 		sSwitch = true
-		Debug(chatFrame:GetID(), chatFrame:GetName(), "SetMovable")
+	end
+	if not chatFrame:IsMouseEnabled() then
+		chatFrame:EnableMouse(true)
 	end
  	
- 	if ( chatFrame:IsMovable() and db.point and db.xOffset and db.yOffset ) then
+ 	if ( chatFrame:IsMovable() and db.point and db.xOffset) then
 		chatFrame:SetUserPlaced(true)
- 		chatFrame:ClearAllPoints()
-		chatFrame:SetPoint(db.point, db.xOffset * GetScreenWidth(), db.yOffset * GetScreenHeight())
-		Debug(chatFrame:GetID(), chatFrame:GetName(), chatFrame:IsMovable(), chatFrame:IsUserPlaced(), "SetPoint")
+		
+		--don't move docked chats
+		if chatFrame == DEFAULT_CHAT_FRAME or not chatFrame.isDocked or not db.windowInfo[9] then
+			chatFrame:ClearAllPoints()
+			chatFrame:SetPoint(db.point, db.relativeTo, db.relativePoint, db.xOffset, db.yOffset)
+		else
+			FCF_DockFrame(chatFrame, db.windowInfo[9])
+		end
+	
  	end
 	
 	if sSwitch then
 		chatFrame:SetMovable(false)
-		Debug(chatFrame:GetID(), chatFrame:GetName(), "SetMovable Off")
 	end
-	
-	Debug(chatFrame:GetID(), chatFrame:GetName(), "Restored")
-	Debug("   --   ")
 end
 
 local function SaveSettings(chatFrame)
+	if not addonLoaded then return end
 	if not chatFrame then return end
 	
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then return end
 	if not XCHT_DB.frames[chatFrame:GetID()] then return end
-	
+
+	if chatFrame.isMoving or chatFrame.isDragging then return end
+
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 	
 	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
 	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
-	
+
 	db.chatParent = chatFrame:GetParent():GetName()
 	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
 	db.windowMessages = windowMessages
 	db.windowChannels = windowChannels	
+	
 end
 
 --https://github.com/tomrus88/BlizzardInterfaceCode/blob/master/Interface/FrameXML/ChatConfigFrame.lua
@@ -388,27 +403,13 @@ local function RestoreSettings(chatFrame)
 
 	if db.windowInfo then
 		SetChatWindowName(chatFrame:GetID(), db.windowInfo[1])
-		FCF_SetWindowName(chatFrame, db.windowInfo[1])
-
 		SetChatWindowSize(chatFrame:GetID(), db.windowInfo[2])
-		FCF_SetChatWindowFontSize(nil, chatFrame, db.windowInfo[2])
-		
 		SetChatWindowColor(chatFrame:GetID(), db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
-		FCF_SetWindowColor(chatFrame, db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
-		
 		SetChatWindowAlpha(chatFrame:GetID(), db.windowInfo[6])
-		FCF_SetWindowAlpha(chatFrame, db.windowInfo[6])
-		
 		SetChatWindowShown(chatFrame:GetID(), db.windowInfo[7])
-		
 		SetChatWindowLocked(chatFrame:GetID(), db.windowInfo[8])
-		FCF_SetLocked(chatFrame, db.windowInfo[8])
-		
 		SetChatWindowDocked(chatFrame:GetID(), db.windowInfo[9])
-		FCF_DockFrame(chatFrame, db.windowInfo[9])
-		
 		SetChatWindowUninteractable(chatFrame:GetID(), db.windowInfo[10])
-		FCF_SetUninteractable(chatFrame, db.windowInfo[10])
 	end
 	
 	if db.chatParent then
@@ -425,6 +426,25 @@ end
 
 local function doValueUpdate(checkBool, groupType)
 	SaveSettings(FCF_GetCurrentChatFrame() or nil)
+end
+
+--hook origFCF_SavePositionAndDimensions
+local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
+FCF_SavePositionAndDimensions = function(chatFrame)
+    SaveLayout(chatFrame)
+    SaveSettings(chatFrame)
+    origFCF_SavePositionAndDimensions(chatFrame)
+end
+
+--hook old toggle
+local origFCF_ToggleLock = FCF_ToggleLock
+FCF_ToggleLock = function()
+    local chatFrame = FCF_GetCurrentChatFrame()
+    if chatFrame then
+        SaveLayout(chatFrame)
+        SaveSettings(chatFrame)
+    end
+    origFCF_ToggleLock()
 end
 
 hooksecurefunc("ToggleChatMessageGroup", doValueUpdate)
@@ -557,24 +577,56 @@ function addon:PLAYER_LOGIN()
 	for i = 1, NUM_CHAT_WINDOWS do
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
+		local fTab = _G[n.."Tab"]
 		
 		if f then
 		
 			XANCHAT_Frame = XANCHAT_Frame or {}
 			XANCHAT_Frame[i] = f
 
+			--restore any settings
+			RestoreSettings(f)
+			
 			--restore saved layout
 			RestoreLayout(f)
 			
-			--restore any settings
-			RestoreSettings(f)
-
-			--save our settings
+			--ChatFrame
+			f:HookScript("OnMouseDown", function(self, button)
+				if not f.isMoving and not f.isLocked then
+					f.isMoving = true
+					self:StartMoving()
+				end
+			end)
+			f:HookScript("OnMouseUp", function(self, button)
+				if f.isMoving then
+					f.isMoving = false
+					self:StopMovingOrSizing()
+				end
+			end)
+			f:HookScript("OnDragStart", function(self, button)
+				if not f.isDragging and not f.isLocked then
+					f.isDragging = true
+					self:StartMoving()
+				end
+			end)
+			f:HookScript("OnDragStop", function(self, button)
+				if f.isDragging then
+					f.isDragging = false
+					self:StopMovingOrSizing()
+				end
+			end)
+			
+			--ChatFrame
 			hooksecurefunc(f, "StopMovingOrSizing", function(self)
 				SaveLayout(f)
 				SaveSettings(f)
 			end)
-			
+			--Tab
+			hooksecurefunc(fTab, "StopMovingOrSizing", function(self)
+				SaveLayout(f)
+				SaveSettings(f)
+			end)
+
 			--always lock the frames regardless
 			SetChatWindowLocked(i, true)
 			FCF_SetLocked(f, true)
@@ -785,6 +837,8 @@ function addon:PLAYER_LOGIN()
 	addon:RegisterEvent("UI_SCALE_CHANGED")
 	
 	addon:UnregisterEvent("PLAYER_LOGIN")
+	
+	addonLoaded = true
 end
 
 --this is the fix for alt-tabbing resizing our chatboxes
@@ -794,11 +848,12 @@ function addon:UI_SCALE_CHANGED()
 		local f = _G[n]
 		
 		if f then
-			--restore saved layout
-			RestoreLayout(f)
-			
+		
 			--restore any settings
 			RestoreSettings(f)
+			
+			--restore saved layout
+			RestoreLayout(f)
 			
 			--always lock the frames regardless (using both calls just in case)
 			SetChatWindowLocked(i, true)
