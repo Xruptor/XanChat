@@ -233,18 +233,6 @@ local dummy = function(self) self:Hide() end
 local msgHooks = {}
 local HistoryDB
 
-StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
-  text = L.ApplyChanges,
-  button1 = L.Yes,
-  button2 = L.No,
-  OnAccept = function()
-      ReloadUI()
-  end,
-  timeout = 0,
-  whileDead = true,
-  hideOnEscape = true,
-}
-
 local AddMessage = function(frame, text, ...)
 	if type(text) == "string" then
 		local chatNum = string.match(text,"%d+") or ""
