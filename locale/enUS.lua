@@ -83,3 +83,8 @@ L.SlashEditBoxBorder = "editboxborder"
 L.SlashEditBoxBorderOn = "xanChat: EditBox Border is [|cFF99CC33ON|r]"
 L.SlashEditBoxBorderOff = "xanChat: EditBox Border is [|cFF99CC33OFF|r]"
 L.SlashEditBoxBorderInfo = "Hide the EditBox Border."
+
+L.SlashSimpleEditBox = "simpleeditbox"
+L.SlashSimpleEditBoxOn = "xanChat: Simple EditBox is [|cFF99CC33ON|r]"
+L.SlashSimpleEditBoxOff = "xanChat: Simple EditBox is [|cFF99CC33OFF|r]"
+L.SlashSimpleEditBoxInfo = "Show a simplified EditBox with tooltip border."

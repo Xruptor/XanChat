@@ -554,6 +554,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
 	if XCHT_DB.hideVoice == nil then XCHT_DB.hideVoice = false end
 	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
+	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -696,7 +697,21 @@ function addon:PLAYER_LOGIN()
 				editBox.right:SetAlpha(0)
 				editBox.mid:SetAlpha(0)
 				
-				if not XCHT_DB.hideEditboxBorder then
+				local editBoxBackdrop = {
+					bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+					edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]], edgeSize = 16,
+					insets = { left = 3, right = 3, top = 3, bottom = 3 }
+				}
+
+				if XCHT_DB.enableSimpleEditbox then
+					editBox.focusLeft:SetTexture(nil)
+					editBox.focusRight:SetTexture(nil)
+					editBox.focusMid:SetTexture(nil)
+					editBox:SetBackdrop(editBoxBackdrop)
+					editBox:SetBackdropColor(0, 0, 0, 0.6)
+					editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
+					
+				elseif not XCHT_DB.hideEditboxBorder then
 					editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
 					editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
 					editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
@@ -830,6 +845,9 @@ function addon:PLAYER_LOGIN()
 			elseif c and c:lower() == L.SlashEditBoxBorder then
 				addon.aboutPanel.btnEditBoxBorder.func(true)
 				return true
+			elseif c and c:lower() == L.SlashSimpleEditBox then
+				addon.aboutPanel.btnSimpleEditBox.func(true)
+				return true
 			end
 		end
 
@@ -844,6 +862,7 @@ function addon:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashShadow.." - "..L.SlashShadowInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashVoice.." - "..L.SlashVoiceInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashEditBoxBorder.." - "..L.SlashEditBoxBorderInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSimpleEditBox.." - "..L.SlashSimpleEditBoxInfo)
 	end
 	
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'

@@ -298,9 +298,11 @@ function configEvent:PLAYER_LOGIN()
 
 		if value then
 			XCHT_DB.hideEditboxBorder = false
+			XCHT_DB.enableSimpleEditbox = false --turn this off
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOn)
 		else
 			XCHT_DB.hideEditboxBorder = true
+			XCHT_DB.enableSimpleEditbox = false --turn this off
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOff)
 		end
 		
@@ -311,6 +313,29 @@ function configEvent:PLAYER_LOGIN()
 	addConfigEntry(btnEditBoxBorder, 0, -20)
 	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
+	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SlashSimpleEditBoxInfo)
+	btnSimpleEditBox:SetScript("OnShow", function() btnSimpleEditBox:SetChecked(XCHT_DB.enableSimpleEditbox) end)
+	btnSimpleEditBox.func = function(slashSwitch)
+		local value = XCHT_DB.enableSimpleEditbox
+		if not slashSwitch then value = btnSimpleEditBox:GetChecked() end
+
+		if value then
+			XCHT_DB.enableSimpleEditbox = false
+			XCHT_DB.hideEditboxBorder = false --turn this off
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOff)
+		else
+			XCHT_DB.enableSimpleEditbox = true
+			XCHT_DB.hideEditboxBorder = false --turn this off
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOn)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	btnSimpleEditBox:SetScript("OnClick", btnSimpleEditBox.func)
+	
+	addConfigEntry(btnSimpleEditBox, 0, -20)
+	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
+	
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
 
