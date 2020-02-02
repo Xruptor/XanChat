@@ -289,6 +289,27 @@ function configEvent:PLAYER_LOGIN()
 	
 	addConfigEntry(btnVoice, 0, -20)
 	addon.aboutPanel.btnVoice = btnVoice
+	
+	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
+	btnEditBoxBorder:SetScript("OnShow", function() btnEditBoxBorder:SetChecked(XCHT_DB.hideEditboxBorder) end)
+	btnEditBoxBorder.func = function(slashSwitch)
+		local value = XCHT_DB.hideEditboxBorder
+		if not slashSwitch then value = btnEditBoxBorder:GetChecked() end
+
+		if value then
+			XCHT_DB.hideEditboxBorder = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOn)
+		else
+			XCHT_DB.hideEditboxBorder = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOff)
+		end
+		
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+	btnEditBoxBorder:SetScript("OnClick", btnEditBoxBorder.func)
+	
+	addConfigEntry(btnEditBoxBorder, 0, -20)
+	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end

@@ -78,3 +78,8 @@ L.SlashVoice = "voice"
 L.SlashVoiceOn = "xanChat: Voice chat buttons are now [|cFF99CC33ON|r]"
 L.SlashVoiceOff = "xanChat: Voice chat buttons are now [|cFF99CC33OFF|r]"
 L.SlashVoiceInfo = "Hide the chat voice button."
+
+L.SlashEditBoxBorder = "editboxborder"
+L.SlashEditBoxBorderOn = "xanChat: EditBox Border is [|cFF99CC33ON|r]"
+L.SlashEditBoxBorderOff = "xanChat: EditBox Border is [|cFF99CC33OFF|r]"
+L.SlashEditBoxBorderInfo = "Hide the EditBox Border."

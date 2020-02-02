@@ -233,6 +233,18 @@ local dummy = function(self) self:Hide() end
 local msgHooks = {}
 local HistoryDB
 
+StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
+  text = L.ApplyChanges,
+  button1 = L.Yes,
+  button2 = L.No,
+  OnAccept = function()
+      ReloadUI()
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+}
+
 local AddMessage = function(frame, text, ...)
 	if type(text) == "string" then
 		local chatNum = string.match(text,"%d+") or ""
@@ -279,7 +291,8 @@ local function SaveLayout(chatFrame)
 	local point, relativeTo, relativePoint, xOffset, yOffset = chatFrame:GetPoint()
 
 	db.point = point
-	db.relativeTo = relativeTo
+	--relativeTo returns the actual object, we just want the name
+	db.relativeTo = relativeTo:GetName()
 	db.relativePoint = relativePoint
 	db.xOffset = xOffset
 	db.yOffset = yOffset
@@ -314,10 +327,13 @@ local function RestoreLayout(chatFrame)
  	if ( chatFrame:IsMovable() and db.point and db.xOffset) then
 		chatFrame:SetUserPlaced(true)
 		
+		--error check for invalid object type for relativeTo
+		if db.relativeTo == nil or type(db.relativeTo) == "table" then db.relativeTo = "UIParent" end --reset it if it's a table, we just want the name
+		
 		--don't move docked chats
 		if chatFrame == DEFAULT_CHAT_FRAME or not chatFrame.isDocked or not db.windowInfo[9] then
 			chatFrame:ClearAllPoints()
-			chatFrame:SetPoint(db.point, db.relativeTo, db.relativePoint, db.xOffset, db.yOffset)
+			chatFrame:SetPoint(db.point, _G[db.relativeTo], db.relativePoint, db.xOffset, db.yOffset)
 		else
 			FCF_DockFrame(chatFrame, db.windowInfo[9])
 		end
@@ -537,6 +553,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
 	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
 	if XCHT_DB.hideVoice == nil then XCHT_DB.hideVoice = false end
+	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -678,10 +695,16 @@ function addon:PLAYER_LOGIN()
 				editBox.left:SetAlpha(0)
 				editBox.right:SetAlpha(0)
 				editBox.mid:SetAlpha(0)
-
-				editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
-				editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
-				editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+				
+				if not XCHT_DB.hideEditboxBorder then
+					editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
+					editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
+					editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+				else
+					editBox.focusLeft:SetTexture(nil)
+					editBox.focusRight:SetTexture(nil)
+					editBox.focusMid:SetTexture(nil)
+				end
 				
 				--do editbox positioning
 				if XCHT_DB.editBoxTop then
@@ -804,6 +827,9 @@ function addon:PLAYER_LOGIN()
 			elseif c and c:lower() == L.SlashVoice then
 				addon.aboutPanel.btnVoice.func(true)
 				return true
+			elseif c and c:lower() == L.SlashEditBoxBorder then
+				addon.aboutPanel.btnEditBoxBorder.func(true)
+				return true
 			end
 		end
 
@@ -817,6 +843,7 @@ function addon:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashTabs.." - "..L.SlashTabsInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashShadow.." - "..L.SlashShadowInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashVoice.." - "..L.SlashVoiceInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashEditBoxBorder.." - "..L.SlashEditBoxBorderInfo)
 	end
 	
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
