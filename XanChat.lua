@@ -289,10 +289,17 @@ local function SaveLayout(chatFrame)
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 
 	local point, relativeTo, relativePoint, xOffset, yOffset = chatFrame:GetPoint()
+	
+	--error check for invalid object type for relativeTo
+	if relativeTo == nil then
+		relativeTo = "UIParent"
+	elseif type(relativeTo) == "table" then
+		relativeTo = relativeTo:GetName() or "UIParent"
+	end
 
 	db.point = point
 	--relativeTo returns the actual object, we just want the name
-	db.relativeTo = relativeTo:GetName()
+	db.relativeTo = relativeTo
 	db.relativePoint = relativePoint
 	db.xOffset = xOffset
 	db.yOffset = yOffset
