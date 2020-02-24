@@ -468,6 +468,158 @@ hooksecurefunc("ToggleChatColorNamesByClassGroup", doValueUpdate)
 
 
 --[[------------------------
+	CHAT COPY
+--------------------------]]
+
+local function CreatCopyFrame()
+	--check to see if we have the frame already, if we do then return it
+	if addon.copyFrame then return addon.copyFrame end
+
+	local frame = CreateFrame("Frame", "xanChatCopyFrame", UIParent)
+	frame:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", 
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",    
+		edgeSize = 10, 
+		insets = {top = -1, left = -1, bottom = -1, right = -1}
+	})
+	
+	frame:SetBackdropColor(0, 0, 0, .5)
+	frame:SetWidth(600)
+	frame:SetHeight(400)
+	frame:SetPoint("CENTER", UIParent, "CENTER")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetToplevel(true)
+	tinsert(UISpecialFrames, "xanChatCopyFrame")
+	frame:Hide()
+
+	local scrollArea = CreateFrame("ScrollFrame", "xanChatCopyScroll", frame, "InputScrollFrameTemplate")
+	scrollArea:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -32)
+	scrollArea:SetBackdrop(nil)
+	scrollArea.CharCount:Hide()
+	scrollArea:SetHeight(frame:GetHeight() - 41)
+	scrollArea:SetWidth(frame:GetWidth() - 16)
+
+	--remove the stupid textures
+	scrollArea.BottomLeftTex:SetTexture(nil)
+	scrollArea.BottomRightTex:SetTexture(nil)
+	scrollArea.BottomTex:SetTexture(nil)
+	scrollArea.LeftTex:SetTexture(nil)
+	scrollArea.RightTex:SetTexture(nil)
+	scrollArea.MiddleTex:SetTexture(nil)
+	scrollArea.TopLeftTex:SetTexture(nil)
+	scrollArea.TopRightTex:SetTexture(nil)
+	scrollArea.TopTex:SetTexture(nil)
+	frame.copyScrollArea = scrollArea
+	scrollArea:Show()
+	
+	scrollArea.EditBox:SetFont("Fonts\\ARIALN.ttf", 15)
+	scrollArea.EditBox:SetText("")
+	scrollArea.EditBox:SetWidth(scrollArea:GetWidth() - 15)
+	scrollArea.EditBox:SetBackdrop(nil)
+	frame.editBox = scrollArea.EditBox
+	
+	local close = CreateFrame("Button", "iCopyCloseButton", frame, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", frame, "TOPRIGHT")
+	frame.close = close
+	
+	frame:Show()
+	
+	--store it for the future
+	addon.copyFrame = frame
+	
+	return frame
+end
+
+local function GetChatText(id)
+
+	local copyFrame = CreatCopyFrame()
+	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
+	
+	local msgCount = _G["ChatFrame" .. id]:GetNumMessages()
+	local motdString = COMMUNITIES_MESSAGE_OF_THE_DAY_FORMAT:gsub("\"%%s\"", "")
+	
+	for i = 1, msgCount do
+		local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..id]:GetMessageInfo(i)
+		
+		--fix situations where links end the color prematurely
+		if (r and g and b and chatTypeID) then
+			local colorCode = RGBToColorCode(r, g, b)
+			chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
+			chatMsg = colorCode..chatMsg
+		end
+		
+		--sometimes the guild motd doesn't color, so fix it
+		if IsInGuild() then
+			--check for our MOTD
+			if string.find(chatMsg, GUILD.." "..motdString)then
+				chatMsg = RGBTableToColorCode(ChatTypeInfo.GUILD)..chatMsg
+			end
+		end
+		
+		--if it's the first line don't start with newline
+		if (i == 1) then
+			copyFrame.editBox:Insert(chatMsg.."|r")
+		else
+			copyFrame.editBox:Insert("\n"..chatMsg.."|r")
+		end	
+	end
+	
+	copyFrame:Show()
+end
+
+local function CreateCopyChatButtons(i)
+
+	local copyFrame = CreatCopyFrame()
+	
+	local obj = CreateFrame("Button", "xanCopyChatButton"..i, _G['ChatFrame'..i])
+	obj.bg = obj:CreateTexture(nil,	"ARTWORK")
+	obj.bg:SetTexture("Interface\\AddOns\\xanChat\\media\\copy")
+	obj.bg:SetAllPoints(obj)
+	obj:SetPoint("BOTTOMRIGHT", -2, -3)
+	obj.texture = obj.bg
+	obj:SetFrameLevel(7)
+	obj:SetWidth(18)
+	obj:SetHeight(18)
+	obj:Hide()
+	obj:SetScript("OnClick", function(self, arg)
+		if (copyFrame:IsVisible()) then
+    		copyFrame:Hide()
+    	else
+			--this allows it to refresh if we hide the window
+			GetChatText(i)
+		end
+	end)
+
+	_G['ChatFrame'..i]:SetScript("OnEnter", function(self)
+		if (XCHT_DB.enableCopyButton) then
+			obj:Show()
+		end
+	end)
+	_G['ChatFrame'..i]:SetScript("OnLeave", function(self)
+		obj:Hide()
+	end)
+	_G['ChatFrame'..i].ScrollToBottomButton:SetScript("OnEnter", function(self)
+		if (XCHT_DB.enableCopyButton) then
+			obj:Show()
+		end
+	end)
+	_G['ChatFrame'..i].ScrollToBottomButton:SetScript("OnLeave", function(self)
+		obj:Hide()
+	end)
+	
+	--prevent object blinking because chat continues to scroll
+	function obj.show()
+		obj:Show()
+	end
+	function obj.hide()
+		obj:Hide()
+	end
+	
+	obj:SetScript("OnEnter", obj.show)
+	obj:SetScript("OnLeave", obj.hide)
+end
+
+--[[------------------------
 	Edit Box History
 --------------------------]]
 
@@ -562,6 +714,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.hideVoice == nil then XCHT_DB.hideVoice = false end
 	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
 	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
+	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -593,6 +746,8 @@ function addon:PLAYER_LOGIN()
 		local fTab = _G[n.."Tab"]
 		
 		if f then
+			--create the copy chat buttons
+			CreateCopyChatButtons(i)
 		
 			XANCHAT_Frame = XANCHAT_Frame or {}
 			XANCHAT_Frame[i] = f
