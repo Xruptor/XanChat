@@ -208,22 +208,101 @@ function _G.ItemRefTooltip:SetHyperlink(link, ...)
 	 SetHyperlink(self, link, ...)
 end
 
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_WHISPER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY_LEADER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_LEADER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_WARNING", urlFilter)
+--register them all
+for group, values in pairs(ChatTypeGroup) do
+	for _, value in pairs(values) do
+		ChatFrame_AddMessageEventFilter(value, urlFilter)
+	end
+end
 
-ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_OFFICER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_SAY", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_YELL", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", urlFilter)
+--[[------------------------
+	Extra Player Info
+--------------------------]]
+--https://www.wowinterface.com/forums/showthread.php?t=39328
+
+function playerInfoFilter(self, event, msg, author, ...)
+	Debug('test', self, event, msg, author)
+	return false
+end
+
+--register them all
+for group, values in pairs(ChatTypeGroup) do
+	for _, value in pairs(values) do
+	Debug(value)
+		ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
+	end
+end
+
+-- CHAT_MSG_ACHIEVEMENT
+-- CHAT_MSG_ADDON
+-- CHAT_MSG_ADDON_LOGGED
+-- CHAT_MSG_AFK
+-- CHAT_MSG_BATTLEGROUND
+-- CHAT_MSG_BATTLEGROUND_LEADER
+-- CHAT_MSG_BG_SYSTEM_ALLIANCE
+-- CHAT_MSG_BG_SYSTEM_HORDE
+-- CHAT_MSG_BG_SYSTEM_NEUTRAL
+-- CHAT_MSG_BN
+-- CHAT_MSG_BN_CONVERSATION
+-- CHAT_MSG_BN_CONVERSATION_LIST
+-- CHAT_MSG_BN_CONVERSATION_NOTICE
+-- CHAT_MSG_BN_INLINE_TOAST_ALERT
+-- CHAT_MSG_BN_INLINE_TOAST_BROADCAST
+-- CHAT_MSG_BN_INLINE_TOAST_BROADCAST_INFORM
+-- CHAT_MSG_BN_INLINE_TOAST_CONVERSATION
+-- CHAT_MSG_BN_WHISPER
+-- CHAT_MSG_BN_WHISPER_INFORM
+-- CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE
+-- CHAT_MSG_CHANNEL
+-- CHAT_MSG_CHANNEL_JOIN
+-- CHAT_MSG_CHANNEL_LEAVE
+-- CHAT_MSG_CHANNEL_LIST
+-- CHAT_MSG_CHANNEL_NOTICE
+-- CHAT_MSG_CHANNEL_NOTICE_USER
+-- CHAT_MSG_COMBAT_FACTION_CHANGE
+-- CHAT_MSG_COMBAT_HONOR_GAIN
+-- CHAT_MSG_COMBAT_MISC_INFO
+-- CHAT_MSG_COMBAT_XP_GAIN
+-- CHAT_MSG_COMMUNITIES_CHANNEL
+-- CHAT_MSG_CURRENCY
+-- CHAT_MSG_DND
+-- CHAT_MSG_EMOTE
+-- CHAT_MSG_FILTERED
+-- CHAT_MSG_GUILD
+-- CHAT_MSG_GUILD_ACHIEVEMENT
+-- CHAT_MSG_GUILD_ITEM_LOOTED
+-- CHAT_MSG_IGNORED
+-- CHAT_MSG_INSTANCE_CHAT
+-- CHAT_MSG_INSTANCE_CHAT_LEADER
+-- CHAT_MSG_LOOT
+-- CHAT_MSG_MONEY
+-- CHAT_MSG_MONSTER_EMOTE
+-- CHAT_MSG_MONSTER_PARTY
+-- CHAT_MSG_MONSTER_SAY
+-- CHAT_MSG_MONSTER_WHISPER
+-- CHAT_MSG_MONSTER_YELL
+-- CHAT_MSG_OFFICER
+-- CHAT_MSG_OPENING
+-- CHAT_MSG_PARTY
+-- CHAT_MSG_PARTY_LEADER
+-- CHAT_MSG_PET_BATTLE_COMBAT_LOG
+-- CHAT_MSG_PET_BATTLE_INFO
+-- CHAT_MSG_PET_INFO
+-- CHAT_MSG_RAID
+-- CHAT_MSG_RAID_BOSS_EMOTE
+-- CHAT_MSG_RAID_BOSS_WHISPER
+-- CHAT_MSG_RAID_LEADER
+-- CHAT_MSG_RAID_WARNING
+-- CHAT_MSG_RESTRICTED
+-- CHAT_MSG_SAY
+-- CHAT_MSG_SKILL
+-- CHAT_MSG_SYSTEM
+-- CHAT_MSG_TARGETICONS
+-- CHAT_MSG_TEXT_EMOTE
+-- CHAT_MSG_TRADESKILLS
+-- CHAT_MSG_WHISPER
+-- CHAT_MSG_WHISPER_INFORM
+-- CHAT_MSG_YELL
 
 --[[------------------------
 	CORE LOAD
@@ -256,6 +335,7 @@ local AddMessage = function(frame, text, ...)
 		text = gsub(text, L.ChannelLookingForGroup, "["..chatNum..L.ShortLookingForGroup.."]")
 		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
 	end
+	--local red, green, blue, messageId, holdTime = ...
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
@@ -715,6 +795,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
 	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
 	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
+	if XCHT_DB.enableExtraPlayerInfo == nil then XCHT_DB.enableExtraPlayerInfo = true end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
