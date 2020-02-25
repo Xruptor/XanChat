@@ -220,89 +220,188 @@ end
 --------------------------]]
 --https://www.wowinterface.com/forums/showthread.php?t=39328
 
-function playerInfoFilter(self, event, msg, author, ...)
-	Debug('test', self, event, msg, author)
-	return false
-end
+-- function playerInfoFilter(self, event, msg, author, ...)
+	-- --Debug(self, event, msg, author)
+	-- return false
+-- end
 
 --register them all
-for group, values in pairs(ChatTypeGroup) do
-	for _, value in pairs(values) do
-	Debug(value)
-		ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
+-- for group, values in pairs(ChatTypeGroup) do
+	-- for _, value in pairs(values) do
+		-- ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
+	-- end
+-- end
+
+local function ToHex(r, g, b, a)
+	return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
+end
+
+function parsePlayerInfo(frame, text, ...)
+	--local red, green, blue, messageId, holdTime = ...
+	text = text or "" --fix string just in case, avoid nulls
+	local playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
+	if playerLink then
+		--local playerName, playerServer = playerLink:match("([^%-]+)%-?(.*)")
+		local playerLevel = 120
+		local colorFunc = GetQuestDifficultyColor or GetDifficultyColor
+		local color = colorFunc(playerLevel)
+		if color then
+			--local colorCode = RGBTableToColorCode(colorFunc(playerLevel))
+			local colorCode = ToHex(color.r, color.g, color.b, 1)
+			if colorCode then
+				playerLevel = "|c"..colorCode..playerLevel.."|r"
+				return "|Hplayer:"..playerLink.."|h["..player.."]|h", "|Hplayer:"..playerLink.."|h["..playerLevel..":"..player.."]|h", playerLink, player
+			end
+		end
+	end
+	Debug(playerLink, player, pmsg, playerName, playerServer)
+end
+
+--string.gsub has issues with special characters when doing replaces. So use this instead
+function plainTextReplace(text, old, new)
+	local b, e = text:find(old, 1, true)
+	if b == nil then
+		return text
+	else
+		return text:sub(1,b-1)..new..text:sub(e+1)
 	end
 end
 
--- CHAT_MSG_ACHIEVEMENT
--- CHAT_MSG_ADDON
--- CHAT_MSG_ADDON_LOGGED
--- CHAT_MSG_AFK
--- CHAT_MSG_BATTLEGROUND
--- CHAT_MSG_BATTLEGROUND_LEADER
--- CHAT_MSG_BG_SYSTEM_ALLIANCE
--- CHAT_MSG_BG_SYSTEM_HORDE
--- CHAT_MSG_BG_SYSTEM_NEUTRAL
--- CHAT_MSG_BN
--- CHAT_MSG_BN_CONVERSATION
--- CHAT_MSG_BN_CONVERSATION_LIST
--- CHAT_MSG_BN_CONVERSATION_NOTICE
--- CHAT_MSG_BN_INLINE_TOAST_ALERT
--- CHAT_MSG_BN_INLINE_TOAST_BROADCAST
--- CHAT_MSG_BN_INLINE_TOAST_BROADCAST_INFORM
--- CHAT_MSG_BN_INLINE_TOAST_CONVERSATION
--- CHAT_MSG_BN_WHISPER
--- CHAT_MSG_BN_WHISPER_INFORM
--- CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE
--- CHAT_MSG_CHANNEL
--- CHAT_MSG_CHANNEL_JOIN
--- CHAT_MSG_CHANNEL_LEAVE
--- CHAT_MSG_CHANNEL_LIST
--- CHAT_MSG_CHANNEL_NOTICE
--- CHAT_MSG_CHANNEL_NOTICE_USER
--- CHAT_MSG_COMBAT_FACTION_CHANGE
--- CHAT_MSG_COMBAT_HONOR_GAIN
--- CHAT_MSG_COMBAT_MISC_INFO
--- CHAT_MSG_COMBAT_XP_GAIN
--- CHAT_MSG_COMMUNITIES_CHANNEL
--- CHAT_MSG_CURRENCY
--- CHAT_MSG_DND
--- CHAT_MSG_EMOTE
--- CHAT_MSG_FILTERED
--- CHAT_MSG_GUILD
--- CHAT_MSG_GUILD_ACHIEVEMENT
--- CHAT_MSG_GUILD_ITEM_LOOTED
--- CHAT_MSG_IGNORED
--- CHAT_MSG_INSTANCE_CHAT
--- CHAT_MSG_INSTANCE_CHAT_LEADER
--- CHAT_MSG_LOOT
--- CHAT_MSG_MONEY
--- CHAT_MSG_MONSTER_EMOTE
--- CHAT_MSG_MONSTER_PARTY
--- CHAT_MSG_MONSTER_SAY
--- CHAT_MSG_MONSTER_WHISPER
--- CHAT_MSG_MONSTER_YELL
--- CHAT_MSG_OFFICER
--- CHAT_MSG_OPENING
--- CHAT_MSG_PARTY
--- CHAT_MSG_PARTY_LEADER
--- CHAT_MSG_PET_BATTLE_COMBAT_LOG
--- CHAT_MSG_PET_BATTLE_INFO
--- CHAT_MSG_PET_INFO
--- CHAT_MSG_RAID
--- CHAT_MSG_RAID_BOSS_EMOTE
--- CHAT_MSG_RAID_BOSS_WHISPER
--- CHAT_MSG_RAID_LEADER
--- CHAT_MSG_RAID_WARNING
--- CHAT_MSG_RESTRICTED
--- CHAT_MSG_SAY
--- CHAT_MSG_SKILL
--- CHAT_MSG_SYSTEM
--- CHAT_MSG_TARGETICONS
--- CHAT_MSG_TEXT_EMOTE
--- CHAT_MSG_TRADESKILLS
--- CHAT_MSG_WHISPER
--- CHAT_MSG_WHISPER_INFORM
--- CHAT_MSG_YELL
+function stripAndLowercase(text)
+	text = string.lower(text)
+	text = text:gsub("%s+", "") --remove empty spaces
+	return text
+end
+
+function addToPlayerList(name, realm, level, class, BNname)
+	if not name or not level or not class then return end
+	if not addon.playerList then addon.playerList = {} end
+	if not realm then realm = GetRealmName() end
+	addon.playerList[name.."@"..stripAndLowercase(realm)] = {name=name, realm=realm, stripRealm=stripAndLowercase(realm), level=level, class=class, BNname=BNname}
+end
+
+function initUpdateCurrentPlayer()
+	local class = select(2, UnitClass("player"))
+	local name, realm = UnitName("player")
+	local level = UnitLevel("player")
+	--Debug('player', name, realm, level, class)
+	addToPlayerList(name, realm, level, class)
+end
+
+local function doRaidUpdate()
+	local GetNumRaidMembers = GetNumGroupMembers or GetNumRaidMembers
+	for i = 1, GetNumRaidMembers() do
+		local name, rank, subgroup, level, class, fileName, zone, online, isDead, role, isML = GetRaidRosterInfo(i)
+		local playerName, playerServer = UnitName("raid"..i)
+		if playerName and playerServer then
+			--Debug('raid1', playerName, playerServer, level, class)
+			addToPlayerList(playerName, playerServer, level, class)
+		else
+			--Debug('raid2', name, GetRealmName(), level, class)
+			addToPlayerList(name, GetRealmName(), level, class)
+		end
+	end
+end
+local function doPartyUpdate()
+	--GetNumPartyMembers was replaced so lets check for that
+	local GetNumPartyMembers = GetNumSubgroupMembers or GetNumPartyMembers
+	for i = 1, GetNumPartyMembers() do
+		local unit = "party" .. i
+		local _, class = UnitClass(unit)
+		local name, server = UnitName(unit)
+		local level = UnitLevel(unit)
+		--Debug('party', name, server or GetRealmName(), level, class)
+		addToPlayerList(name, server or GetRealmName(), level, class)
+	end
+end
+
+local function doFriendUpdate()
+	for i = 1, C_FriendList.GetNumFriends() do
+		local info = C_FriendList.GetFriendInfoByIndex(i)
+		--make sure they are online
+		if info and info.connected then
+			--Debug('friend', info.name, GetRealmName(), info.level, info.className)
+			addToPlayerList(info.name, GetRealmName(), info.level, info.className)
+		end
+	end
+	
+	local numBNet, onlineBNet = BNGetNumFriends()
+	for i = 1, numBNet do
+		local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+		local friendInfo = accountInfo.gameAccountInfo
+		--make sure they are online and playing WOW
+		if friendInfo and friendInfo.isOnline and friendInfo.clientProgram == BNET_CLIENT_WOW then
+			--Whether or not the friend is known by their BattleTag
+			local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
+			
+			if friendInfo.characterName and friendInfo.realmName and friendInfo.className and friendInfo.characterLevel then
+				addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
+			end
+		end
+	end
+end
+
+function addon:FRIENDLIST_UPDATE()
+	doFriendUpdate()
+end
+
+function addon:BN_FRIEND_ACCOUNT_ONLINE()
+	doFriendUpdate()
+end
+
+function addon:GUILD_ROSTER_UPDATE()
+	if IsInGuild()  then
+		C_GuildInfo.GuildRoster()
+		for i = 1, GetNumGuildMembers(true) do
+			local name, _, _, level, _, _, _, _, online, _, class = GetGuildRosterInfo(i)
+			if online then
+				--only do online players
+				local playerName, playerServer = name:match("([^%-]+)%-?(.*)")
+				if playerName and playerServer then
+					--Debug('guild1', playerName, playerServer, level, class)
+					addToPlayerList(playerName, playerServer, level, class)
+				else
+					--Debug('guild2', name, GetRealmName(), level, class)
+					addToPlayerList(name, GetRealmName(), level, class)
+				end
+			end
+		end
+	end
+end
+
+function addon:RAID_ROSTER_UPDATE()
+	doRaidUpdate()
+end
+
+function addon:GROUP_ROSTER_UPDATE()
+	doRaidUpdate()
+	doPartyUpdate()
+end
+
+function addon:PARTY_MEMBERS_CHANGED()
+	doPartyUpdate()
+end
+
+function addon:PLAYER_LEVEL_UP()
+	initUpdateCurrentPlayer()
+end
+
+function initPlayerInfo()
+    addon:RegisterEvent("FRIENDLIST_UPDATE")
+	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE")
+    addon:RegisterEvent("GUILD_ROSTER_UPDATE")
+    addon:RegisterEvent("RAID_ROSTER_UPDATE")
+	
+	--added in 5.0.4 to replace PARTY_MEMBERS_CHANGED and RAID_ROSTER_UPDATE
+    if select(4, GetBuildInfo()) >= 50000 then
+		addon:RegisterEvent("GROUP_ROSTER_UPDATE")
+    end
+	--this was removed in patch 8.0.1 so lets check for it
+    if select(4, GetBuildInfo()) < 80000 and select(4, GetBuildInfo()) >= 20000 then
+		addon:RegisterEvent("PARTY_MEMBERS_CHANGED")
+    end
+    addon:RegisterEvent("PLAYER_LEVEL_UP")
+end
 
 --[[------------------------
 	CORE LOAD
@@ -325,7 +424,7 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 }
 
 local AddMessage = function(frame, text, ...)
-	if type(text) == "string" then
+	if XCHT_DB.shortNames and type(text) == "string" then
 		local chatNum = string.match(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
 		text = gsub(text, L.ChannelGeneral, "["..chatNum..L.ShortGeneral.."]")
@@ -335,7 +434,16 @@ local AddMessage = function(frame, text, ...)
 		text = gsub(text, L.ChannelLookingForGroup, "["..chatNum..L.ShortLookingForGroup.."]")
 		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
 	end
-	--local red, green, blue, messageId, holdTime = ...
+	--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
+	if XCHT_DB.enableExtraPlayerInfo and type(text) == "string" and string.find(text, "|Hplayer:", 1, true) then
+		local old, new, playerLink, player = parsePlayerInfo(frame, text, ...)
+		if old and new and string.find(text, old, 1, true) then
+			--Debug('replacing', old, new, playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
+			--Debug('found', playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
+			text = plainTextReplace(text, old, new)
+		end
+	end
+	
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
@@ -454,8 +562,6 @@ local function SaveSettings(chatFrame)
 	db.windowChannels = windowChannels	
 	
 end
-
---https://github.com/tomrus88/BlizzardInterfaceCode/blob/master/Interface/FrameXML/ChatConfigFrame.lua
 
 local function RestoreSettings(chatFrame)
 	if not chatFrame then return end
@@ -763,6 +869,7 @@ local function ClearEditBoxHistory(editBox)
 	
 	local name = editBox:GetName()
 	HistoryDB[name] = {}
+	
 end
 
 --[[------------------------
@@ -802,6 +909,13 @@ function addon:PLAYER_LOGIN()
 	XCHT_HISTORY[currentRealm] = XCHT_HISTORY[currentRealm] or {}
 	XCHT_HISTORY[currentRealm][currentPlayer] = XCHT_HISTORY[currentRealm][currentPlayer] or {}
 	HistoryDB = XCHT_HISTORY[currentRealm][currentPlayer]
+	
+	--iniate playerInfo events
+	initPlayerInfo()
+    if IsInGuild() then
+      C_GuildInfo.GuildRoster()
+    end
+	initUpdateCurrentPlayer()
 	
 	--turn off profanity filter
 	SetCVar("profanityFilter", 0)
@@ -977,6 +1091,7 @@ function addon:PLAYER_LOGIN()
 				_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
 				editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
 			end
+			
 			--hide the scroll bars
 			if XCHT_DB.hideScroll then
 				if f.buttonFrame then
@@ -990,7 +1105,7 @@ function addon:PLAYER_LOGIN()
 			end
 			
 			--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
-			if XCHT_DB.shortNames and f ~= COMBATLOG and not msgHooks[n] then
+			if f ~= COMBATLOG and not msgHooks[n] then
 				msgHooks[n] = {}
 				msgHooks[n].AddMessage = f.AddMessage
 				f.AddMessage = AddMessage
