@@ -213,6 +213,14 @@ for group, values in pairs(ChatTypeGroup) do
 	for _, value in pairs(values) do
 		ChatFrame_AddMessageEventFilter(value, urlFilter)
 	end
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", urlFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", urlFilter)
 end
 
 --[[------------------------
@@ -220,17 +228,32 @@ end
 --------------------------]]
 --https://www.wowinterface.com/forums/showthread.php?t=39328
 
--- function playerInfoFilter(self, event, msg, author, ...)
-	-- --Debug(self, event, msg, author)
-	-- return false
--- end
+local messageIndex = 0
+local lastMsgEvent = {}
+
+function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
+	--Debug('filter', self, event, msg, author)
+	--capture the events for AddMessage since they aren't forwarded.  Filters always go first before AddMessage
+	--use a messageIndex to keep track when messages are filtered or not, otherwise AddMessage can have something sent that didn't go through these filters.
+	messageIndex = messageIndex + 1
+	lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
+	return false
+end
 
 --register them all
--- for group, values in pairs(ChatTypeGroup) do
-	-- for _, value in pairs(values) do
-		-- ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
-	-- end
--- end
+for group, values in pairs(ChatTypeGroup) do
+	for _, value in pairs(values) do
+		ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
+	end
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", playerInfoFilter)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", playerInfoFilter)
+end
 
 local function ToHex(r, g, b, a)
 	return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
@@ -240,9 +263,53 @@ function parsePlayerInfo(frame, text, ...)
 	--local red, green, blue, messageId, holdTime = ...
 	text = text or "" --fix string just in case, avoid nulls
 	local playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
+	
 	if playerLink then
-		--local playerName, playerServer = playerLink:match("([^%-]+)%-?(.*)")
-		local playerLevel = 120
+		local linkName, linkMessageID, linkChannel = strsplit(":", playerLink)
+		local playerName, playerServer
+		
+		if linkName then
+			playerName, playerServer = linkName:match("([^%-]+)%-?(.*)")
+			--last case scenario, using a really crappy method
+			if not playerName or not playerServer then
+				local findFirst = string.find(linkName, "-")
+				if findFirst then
+					playerName = string.sub(linkName, 1, findFirst - 1)
+					playerServer = string.sub(linkName, findFirst + 1)
+				else
+					--didn't find anything, so give up
+					return
+				end
+			end
+		end
+		if not playerName or not playerServer then return end
+		
+		local playerInfo
+
+		--lets check our list
+		if addon.playerList[playerName.."@"..stripAndLowercase(playerServer)] then
+			playerInfo = addon.playerList[playerName.."@"..stripAndLowercase(playerServer)]
+		elseif addon.playerList[playerName.."@"..playerServer] then
+			playerInfo = addon.playerList[playerName.."@"..playerServer]
+
+		--TODO check for BNET friend
+		else
+			--last resort for playername checking
+			for k, v in pairs(addon.playerList) do
+				--just in case
+				if k and v then
+					local pN, pR = strsplit("@", k)
+					if pN and pR and pN == playerName then
+						playerInfo = v
+						break
+					end
+				end
+			end
+		end
+		if not playerInfo then return end
+		
+		--Debug(playerInfo.name, playerInfo.realm, playerInfo.level, playerInfo.class, playerInfo.BNname)
+		local playerLevel = playerInfo.level
 		local colorFunc = GetQuestDifficultyColor or GetDifficultyColor
 		local color = colorFunc(playerLevel)
 		if color then
@@ -254,7 +321,6 @@ function parsePlayerInfo(frame, text, ...)
 			end
 		end
 	end
-	Debug(playerLink, player, pmsg, playerName, playerServer)
 end
 
 --string.gsub has issues with special characters when doing replaces. So use this instead
@@ -423,7 +489,22 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
   hideOnEscape = true,
 }
 
+local function ContainsWholeWord(input, word)
+	--return string.find(input, "%f[%a]" .. word .. "%f[%A]")
+	return string.find(input, "%f[^%z%s]"..word.."%f[%z%s]")
+end
+
+function replaceText(source, findStr, replaceStr, wholeword)
+	if wholeword then
+		--findStr = '%f[%a]'..findStr..'%f[%A]'  --does not properly escape certain characters like : and /
+		findStr = "%f[^%z%s]"..findStr.."%f[%z%s]"
+	end
+	return (source:gsub(findStr, replaceStr))
+end
+
+local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
+	--Debug('message', frame, text, string.join(", ", tostringall(...)))
 	if XCHT_DB.shortNames and type(text) == "string" then
 		local chatNum = string.match(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
@@ -444,6 +525,48 @@ local AddMessage = function(frame, text, ...)
 		end
 	end
 	
+	--https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
+	--ChatFrame_MessageEventHandler
+	if lastMsgEvent and lastMsgEvent.event and strsub(lastMsgEvent.event, 1, 8) == "CHAT_MSG" then
+	
+		local msgType = strsub(lastMsgEvent.event, 10)
+		local info = ChatTypeInfo[msgType]
+		local chatGroup = Chat_GetChatCategory(msgType)
+		
+		--lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
+		if lastMsgEvent and lastMsgEvent.messageIndex and lastMsgEvent.messageIndex ~= lastMsgIndex then
+			lastMsgIndex = lastMsgEvent.messageIndex
+			--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
+			
+			if XCHT_DB.enableExtraPlayerInfo and chatGroup and msgType then
+				if chatGroup == "SYSTEM" or msgType == "SYSTEM" or msgType == "SKILL" or msgType == "CURRENCY" or msgType == "MONEY" or msgType == "OPENING" or msgType == "TRADESKILLS" or 
+					msgType == "PET_INFO" or msgType == "LOOT" or string.find(lastMsgEvent.event, "_NOTICE", 1, true) or string.find(msgType, "_NOTICE", 1, true) then
+					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
+					
+					--check for names
+					for k, v in pairs(addon.playerList) do
+						--just in case
+						if k and v then
+							local pN, pR = strsplit("@", k)
+							if pN and pR and v.class then
+								--do the replace here
+								local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class] or RAID_CLASS_COLORS[v.class]
+								if color then
+									local colorCode = ToHex(color.r, color.g, color.b, 1)
+									--replace only WHOLE word player names.  If the player name has already been altered then ignore it.  We don't want player names within actual words
+									text = replaceText(text, pN, "|c"..colorCode..pN.."|r", true)
+									--Debug('replacing', text, pN, "|c"..colorCode..pN.."|r")
+								end
+							end
+						end
+					end
+					
+				end
+			end
+			
+		end
+	end
+
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
