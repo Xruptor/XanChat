@@ -213,15 +213,15 @@ for group, values in pairs(ChatTypeGroup) do
 	for _, value in pairs(values) do
 		ChatFrame_AddMessageEventFilter(value, urlFilter)
 	end
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", urlFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", urlFilter)
 end
+ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", urlFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", urlFilter)
 
 --[[------------------------
 	Extra Player Info
@@ -245,15 +245,15 @@ for group, values in pairs(ChatTypeGroup) do
 	for _, value in pairs(values) do
 		ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
 	end
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", playerInfoFilter)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", playerInfoFilter)
 end
+ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", playerInfoFilter)
+ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", playerInfoFilter)
 
 local function ToHex(r, g, b, a)
 	return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
