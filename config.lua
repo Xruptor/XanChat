@@ -157,7 +157,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnSocial:SetScript("OnClick", btnSocial.func)
 	
@@ -178,7 +180,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOff)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnScroll:SetScript("OnClick", btnScroll.func)
 	
@@ -199,7 +203,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnShortNames:SetScript("OnClick", btnShortNames.func)
 	
@@ -220,7 +226,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxTop)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnEditBox:SetScript("OnClick", btnEditBox.func)
 	
@@ -241,7 +249,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOff)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnTabs:SetScript("OnClick", btnTabs.func)
 	
@@ -262,7 +272,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOn)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnShadow:SetScript("OnClick", btnShadow.func)
 	
@@ -283,7 +295,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOff)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnVoice:SetScript("OnClick", btnVoice.func)
 	
@@ -306,7 +320,9 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOff)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnEditBoxBorder:SetScript("OnClick", btnEditBoxBorder.func)
 	
@@ -329,12 +345,60 @@ function configEvent:PLAYER_LOGIN()
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOn)
 		end
 		
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnSimpleEditBox:SetScript("OnClick", btnSimpleEditBox.func)
 	
 	addConfigEntry(btnSimpleEditBox, 0, -20)
 	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
+	
+	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteInfo)
+	btnCopyPaste:SetScript("OnShow", function() btnCopyPaste:SetChecked(XCHT_DB.enableCopyButton) end)
+	btnCopyPaste.func = function(slashSwitch)
+		local value = XCHT_DB.enableCopyButton
+		if not slashSwitch then value = btnCopyPaste:GetChecked() end
+
+		if value then
+			XCHT_DB.enableCopyButton = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteOff)
+		else
+			XCHT_DB.enableCopyButton = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnCopyPaste:SetScript("OnClick", btnCopyPaste.func)
+	
+	addConfigEntry(btnCopyPaste, 0, -20)
+	addon.aboutPanel.btnCopyPaste = btnCopyPaste
+	
+	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
+	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
+	btnPlayerChatStyle.func = function(slashSwitch)
+		local value = XCHT_DB.enablePlayerChatStyle
+		if not slashSwitch then value = btnPlayerChatStyle:GetChecked() end
+
+		if value then
+			XCHT_DB.enablePlayerChatStyle = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashPlayerChatStyleOff)
+		else
+			XCHT_DB.enablePlayerChatStyle = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashPlayerChatStyleOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
+	
+	addConfigEntry(btnPlayerChatStyle, 0, -20)
+	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
 	
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end

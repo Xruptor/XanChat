@@ -264,6 +264,8 @@ function parsePlayerInfo(frame, text, ...)
 	text = text or "" --fix string just in case, avoid nulls
 	local playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
 	
+	--gsub(message, '|HBNplayer:(.-)|h%[(.-)%]|h', FormatBNPlayer)
+	
 	if playerLink then
 		local linkName, linkMessageID, linkChannel = strsplit(":", playerLink)
 		local playerName, playerServer
@@ -291,8 +293,6 @@ function parsePlayerInfo(frame, text, ...)
 			playerInfo = addon.playerList[playerName.."@"..stripAndLowercase(playerServer)]
 		elseif addon.playerList[playerName.."@"..playerServer] then
 			playerInfo = addon.playerList[playerName.."@"..playerServer]
-
-		--TODO check for BNET friend
 		else
 			--last resort for playername checking
 			for k, v in pairs(addon.playerList) do
@@ -478,15 +478,24 @@ local msgHooks = {}
 local HistoryDB
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
-  text = L.ApplyChanges,
-  button1 = L.Yes,
-  button2 = L.No,
-  OnAccept = function()
-      ReloadUI()
-  end,
-  timeout = 0,
-  whileDead = true,
-  hideOnEscape = true,
+	text = L.ApplyChanges,
+	button1 = L.Yes,
+	button2 = L.No,
+	OnShow = function ()
+		addon.xanChatReloadPopup = true
+	end,
+	OnHide = function ()
+		addon.xanChatReloadPopup = false
+	end,
+	OnAccept = function()
+	  ReloadUI()
+	end,
+	OnCancel = function ()
+		addon.xanChatReloadPopup = false
+	end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
 }
 
 local function ContainsWholeWord(input, word)
@@ -516,7 +525,7 @@ local AddMessage = function(frame, text, ...)
 		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
 	end
 	--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
-	if XCHT_DB.enableExtraPlayerInfo and type(text) == "string" and string.find(text, "|Hplayer:", 1, true) then
+	if XCHT_DB.enablePlayerChatStyle and type(text) == "string" and string.find(text, "|Hplayer:", 1, true) then
 		local old, new, playerLink, player = parsePlayerInfo(frame, text, ...)
 		if old and new and string.find(text, old, 1, true) then
 			--Debug('replacing', old, new, playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
@@ -538,7 +547,7 @@ local AddMessage = function(frame, text, ...)
 			lastMsgIndex = lastMsgEvent.messageIndex
 			--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 			
-			if XCHT_DB.enableExtraPlayerInfo and chatGroup and msgType then
+			if XCHT_DB.enablePlayerChatStyle and chatGroup and msgType then
 				if chatGroup == "SYSTEM" or msgType == "SYSTEM" or msgType == "SKILL" or msgType == "CURRENCY" or msgType == "MONEY" or msgType == "OPENING" or msgType == "TRADESKILLS" or 
 					msgType == "PET_INFO" or msgType == "LOOT" or string.find(lastMsgEvent.event, "_NOTICE", 1, true) or string.find(msgType, "_NOTICE", 1, true) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
@@ -678,12 +687,40 @@ local function SaveSettings(chatFrame)
 	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
 	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
-
+	local windowMessageColors = {}
+	local windowChannelColors = {}
+	
+	--CHAT_CONFIG_CHANNEL_LIST
+	--ChatConfigFrame
+	
+	--OTHER CATEGORY under Chat Settings
+	--ChatFrame_RemoveAllMessageGroups
+	--ChatFrame_AddMessageGroup
+	
+	--to get more information about colors and how to change it, check on CHAT_CONFIG_CURRENT_COLOR_SWATCH
+	--lets save the message colors
+	for k=1, #windowMessages do
+		if ChatTypeGroup[windowMessages[k]] then
+			local colorR, colorG, colorB, messageType = GetMessageTypeColor(windowMessages[k])
+			if colorR and colorG and colorB then
+				windowMessageColors[k] = {colorR, colorG, colorB, windowMessages[k]}
+			end
+		end
+	end
+	
+	--lets save the channel colors
+	for k=1, #windowChannels do
+		if Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k]) then
+			windowChannelColors[k] = {Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k])}
+		end
+	end
+		
 	db.chatParent = chatFrame:GetParent():GetName()
 	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
 	db.windowMessages = windowMessages
-	db.windowChannels = windowChannels	
-	
+	db.windowChannels = windowChannels
+	db.windowChannelColors = windowChannelColors
+	db.windowMessageColors = windowMessageColors
 end
 
 local function RestoreSettings(chatFrame)
@@ -708,6 +745,17 @@ local function RestoreSettings(chatFrame)
 		end
 	end
 	
+	--lets set the windowMessageColors
+	if db.windowMessageColors then
+		--add the stored ones
+		local newWindowMessageColors = db.windowMessageColors
+		for k=1, #newWindowMessageColors do
+			if newWindowMessageColors[k] and newWindowMessageColors[k][4] then
+				ChangeChatColor(newWindowMessageColors[k][4], newWindowMessageColors[k][1], newWindowMessageColors[k][2], newWindowMessageColors[k][3])
+			end
+		end
+	end
+	
 	if db.windowChannels then
 		--remove current window channels
 		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
@@ -718,6 +766,17 @@ local function RestoreSettings(chatFrame)
 		local newWindowChannels = db.windowChannels
 		for k=1, #newWindowChannels do
 			AddChatWindowChannel(chatFrame:GetID(), newWindowChannels[k])
+		end
+	end
+	
+	--lets set the windowChannelColors
+	if db.windowChannelColors then
+		--add the stored ones
+		local newWindowChannelColors = db.windowChannelColors
+		for k=1, #newWindowChannelColors do
+			if newWindowChannelColors[k] and newWindowChannelColors[k][1] then
+				ChangeChatColor("CHANNEL"..k, newWindowChannelColors[k][1], newWindowChannelColors[k][2], newWindowChannelColors[k][3])
+			end
 		end
 	end
 
@@ -1005,6 +1064,12 @@ for i = 1, NUM_CHAT_WINDOWS do
 	if f then
 		--have to do this before player login otherwise issues occur
 		f:SetMaxLines(500)
+		
+		--restore any settings
+		RestoreSettings(f)
+		
+		--restore saved layout
+		RestoreLayout(f)
 	end
 end
 
@@ -1025,7 +1090,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
 	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
 	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
-	if XCHT_DB.enableExtraPlayerInfo == nil then XCHT_DB.enableExtraPlayerInfo = true end
+	if XCHT_DB.enablePlayerChatStyle == nil then XCHT_DB.enablePlayerChatStyle = true end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1329,6 +1394,12 @@ function addon:PLAYER_LOGIN()
 			elseif c and c:lower() == L.SlashSimpleEditBox then
 				addon.aboutPanel.btnSimpleEditBox.func(true)
 				return true
+			elseif c and c:lower() == L.SlashCopyPaste then
+				addon.aboutPanel.btnCopyPaste.func(true)
+				return true
+			elseif c and c:lower() == L.SlashPlayerChatStyle then
+				addon.aboutPanel.btnPlayerChatStyle.func(true)
+				return true
 			end
 		end
 
@@ -1344,6 +1415,8 @@ function addon:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashVoice.." - "..L.SlashVoiceInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashEditBoxBorder.." - "..L.SlashEditBoxBorderInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSimpleEditBox.." - "..L.SlashSimpleEditBoxInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashCopyPaste.." - "..L.SlashCopyPasteInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashPlayerChatStyle.." - "..L.SlashPlayerChatStyleInfo)
 	end
 	
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
