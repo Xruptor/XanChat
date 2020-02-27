@@ -263,6 +263,8 @@ function parsePlayerInfo(frame, text, ...)
 	--local red, green, blue, messageId, holdTime = ...
 	text = text or "" --fix string just in case, avoid nulls
 	local playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
+	--check if our actual player has a hyphen server
+	local chkPlayer, chkServer = player:match("([^%-]+)%-?(.*)")
 	
 	--gsub(message, '|HBNplayer:(.-)|h%[(.-)%]|h', FormatBNPlayer)
 	
@@ -272,19 +274,26 @@ function parsePlayerInfo(frame, text, ...)
 		
 		if linkName then
 			playerName, playerServer = linkName:match("([^%-]+)%-?(.*)")
-			--last case scenario, using a really crappy method
+			
 			if not playerName or not playerServer then
-				local findFirst = string.find(linkName, "-")
-				if findFirst then
-					playerName = string.sub(linkName, 1, findFirst - 1)
-					playerServer = string.sub(linkName, findFirst + 1)
+				if chkPlayer and chkServer and string.len(chkPlayer) > 0 and string.len(chkServer) > 0 then
+					playerName = chkPlayer
+					playerServer = chkServer
 				else
-					--didn't find anything, so give up
-					return
+					--last case scenario, using a really crappy method
+					local findFirst = string.find(linkName, "-")
+					if findFirst then
+						playerName = string.sub(linkName, 1, findFirst - 1)
+						playerServer = string.sub(linkName, findFirst + 1)
+					else
+						--didn't find anything, so give up
+						return
+					end
 				end
 			end
 		end
 		if not playerName or not playerServer then return end
+		if string.len(playerName) <= 0 or string.len(playerServer) <= 0 then return end
 		
 		local playerInfo
 
@@ -293,6 +302,8 @@ function parsePlayerInfo(frame, text, ...)
 			playerInfo = addon.playerList[playerName.."@"..stripAndLowercase(playerServer)]
 		elseif addon.playerList[playerName.."@"..playerServer] then
 			playerInfo = addon.playerList[playerName.."@"..playerServer]
+		elseif addon.playerList[stripAndLowercase(playerName).."@"..stripAndLowercase(playerServer)] then
+			playerInfo = addon.playerList[stripAndLowercase(playerName).."@"..stripAndLowercase(playerServer)]
 		else
 			--last resort for playername checking
 			for k, v in pairs(addon.playerList) do
@@ -312,12 +323,12 @@ function parsePlayerInfo(frame, text, ...)
 		local playerLevel = playerInfo.level
 		local colorFunc = GetQuestDifficultyColor or GetDifficultyColor
 		local color = colorFunc(playerLevel)
-		if color then
+		if color and playerInfo.level > 0 then
 			--local colorCode = RGBTableToColorCode(colorFunc(playerLevel))
 			local colorCode = ToHex(color.r, color.g, color.b, 1)
 			if colorCode then
 				playerLevel = "|c"..colorCode..playerLevel.."|r"
-				return "|Hplayer:"..playerLink.."|h["..player.."]|h", "|Hplayer:"..playerLink.."|h["..playerLevel..":"..player.."]|h", playerLink, player
+				return "|Hplayer:"..playerLink.."|h["..player.."]|h", "|Hplayer:"..playerLink.."|h["..playerLevel..":"..player.."]|h", playerLink, player, playerName, playerServer, playerInfo
 			end
 		end
 	end
@@ -342,7 +353,33 @@ end
 function addToPlayerList(name, realm, level, class, BNname)
 	if not name or not level or not class then return end
 	if not addon.playerList then addon.playerList = {} end
-	if not realm then realm = GetRealmName() end
+	if level <= 0 then return end --don't store anything with no actual level
+	
+	--do the class list if it's missing, this is to check for localized classes, so we can get proper color
+	if not addon.chkClassList then 
+		addon.chkClassList = {}
+		for i = 1, GetNumClasses() do
+			local className, classFile, classID = GetClassInfo(i)
+			addon.chkClassList[className] = classFile
+		end
+	end
+	
+	local playerName, playerServer = name:match("([^%-]+)%-?(.*)")
+	
+	if playerName and string.len(playerName) > 0 then
+		name = playerName
+	end
+	if playerServer and string.len(playerServer) > 0 then
+		realm = playerServer
+	end
+	if not realm or string.len(realm) <= 0 then
+		realm = GetRealmName()
+	end
+	if not name or not realm then return end
+	
+	--fix the class color if needed, get the non-local blizzard one, that way we can grab the correct color
+	if addon.chkClassList[class] then class = addon.chkClassList[class] end
+	
 	addon.playerList[name.."@"..stripAndLowercase(realm)] = {name=name, realm=realm, stripRealm=stripAndLowercase(realm), level=level, class=class, BNname=BNname}
 end
 
@@ -377,7 +414,7 @@ local function doPartyUpdate()
 		local name, server = UnitName(unit)
 		local level = UnitLevel(unit)
 		--Debug('party', name, server or GetRealmName(), level, class)
-		addToPlayerList(name, server or GetRealmName(), level, class)
+		addToPlayerList(name, server, level, class)
 	end
 end
 
@@ -400,7 +437,7 @@ local function doFriendUpdate()
 			--Whether or not the friend is known by their BattleTag
 			local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
 			
-			if friendInfo.characterName and friendInfo.realmName and friendInfo.className and friendInfo.characterLevel then
+			if friendInfo.characterName and friendInfo.realmName and friendInfo.characterLevel and friendInfo.className then
 				addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
 			end
 		end
@@ -453,6 +490,8 @@ function addon:PLAYER_LEVEL_UP()
 end
 
 function initPlayerInfo()
+	if not XCHT_DB.enablePlayerChatStyle then return end
+	
     addon:RegisterEvent("FRIENDLIST_UPDATE")
 	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE")
     addon:RegisterEvent("GUILD_ROSTER_UPDATE")
@@ -526,7 +565,7 @@ local AddMessage = function(frame, text, ...)
 	end
 	--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
 	if XCHT_DB.enablePlayerChatStyle and type(text) == "string" and string.find(text, "|Hplayer:", 1, true) then
-		local old, new, playerLink, player = parsePlayerInfo(frame, text, ...)
+		local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
 		if old and new and string.find(text, old, 1, true) then
 			--Debug('replacing', old, new, playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
 			--Debug('found', playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
@@ -541,6 +580,8 @@ local AddMessage = function(frame, text, ...)
 		local msgType = strsub(lastMsgEvent.event, 10)
 		local info = ChatTypeInfo[msgType]
 		local chatGroup = Chat_GetChatCategory(msgType)
+		
+		--Debug(lastMsgEvent, lastMsgEvent.event, lastMsgEvent.messageIndex, text)
 		
 		--lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
 		if lastMsgEvent and lastMsgEvent.messageIndex and lastMsgEvent.messageIndex ~= lastMsgIndex then
@@ -557,14 +598,48 @@ local AddMessage = function(frame, text, ...)
 						--just in case
 						if k and v then
 							local pN, pR = strsplit("@", k)
-							if pN and pR and v.class then
+							local origText = text
+							if pN and pR and string.find(text, pN, 1, true) and v.class then
+								--Debug('found', pN, pR, string.find(text, pN, 1, true), v.class)
 								--do the replace here
 								local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class] or RAID_CLASS_COLORS[v.class]
 								if color then
+									--Debug('found-color', pN, pR, v.class)
 									local colorCode = ToHex(color.r, color.g, color.b, 1)
-									--replace only WHOLE word player names.  If the player name has already been altered then ignore it.  We don't want player names within actual words
-									text = replaceText(text, pN, "|c"..colorCode..pN.."|r", true)
-									--Debug('replacing', text, pN, "|c"..colorCode..pN.."|r")
+									--replace if we have the name and hyphen server
+									local hasReplaced = false
+									
+									--only do this for CHAT_MSG_SYSTEM, like leave and join group
+									if msgType == "SYSTEM" and v.realm and string.find(text, pN.."-"..v.realm, 1, true) then
+										--we don't want to do whole word replacements on everything
+										--have to escape the hyphen for matching using %
+										--make sure that whole word searching is off
+										text = replaceText(text, pN.."%-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r", false)
+										hasReplaced = true
+										--Debug('replacing-1', origText, pN, pR, pN.."%-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r", text)
+									end
+									--only do this for CHAT_MSG_SYSTEM, like leave and join group
+									if msgType == "SYSTEM" and v.stripRealm and string.find(text, pN.."-"..v.stripRealm, 1, true) then
+										--we don't want to do whole word replacements on everything
+										--have to escape the hyphen for matching using %
+										--make sure that whole word searching is off
+										text = replaceText(text, pN.."%-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r", false)
+										hasReplaced = true
+										--Debug('replacing-2', origText, pN, pR, pN.."%-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r", text)
+									end
+									if not hasReplaced then
+										--replace only whole words
+										text = replaceText(text, pN, "|c"..colorCode..pN.."|r", true)
+										hasReplaced = true
+										--Debug('replacing-3', origText, pN, pR, "|c"..colorCode..pN.."|r", text)
+									end
+									--break if we replaced, otherwise continue searching the users
+									if hasReplaced then
+										break
+									end
+								else
+									--something went wrong, exit the loop
+									break
 								end
 							end
 						end
