@@ -16,6 +16,8 @@ end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 
+local IsRetail = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+
 --[[------------------------
 	Scrolling and Chat Links
 --------------------------]]
@@ -59,85 +61,6 @@ local function scrollChat(frame, delta)
 		end
 	end
 end
-
---DO CHAT DROPDOWN MENU
-------------------------------
-local customPopups = {}
-
-StaticPopupDialogs["COPYNAME"] = {
-	text = "COPY NAME",
-	button2 = CANCEL,
-	hasEditBox = true,
-    hasWideEditBox = true,
-	timeout = 0,
-	exclusive = 1,
-	hideOnEscape = 1,
-	EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-	whileDead = 1,
-	maxLetters = 255,
-}
-
-UnitPopupButtons["WHOPLAYER"] = {
-	text = L.WhoPlayer,
-	func = function()
-		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
-		local name = dropdownFrame.name
-
-		if name then
-			SendWho(name)
-		end
-	end
-}
-tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "WHOPLAYER")
-customPopups["WHOPLAYER"] = true
-
-UnitPopupButtons["GUILDINVITE"] = {
-	text = L.GuildInvite,
-	func = function()
-		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
-		local name = dropdownFrame.name
-
-		if name then
-			GuildInvite(name)
-		end
-	end
-}
-tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "GUILDINVITE")
-customPopups["GUILDINVITE"] = true
-
-UnitPopupButtons["COPYNAME"] = {
-	text = L.CopyName,
-	func = function()
-		local dropdownFrame = UIDROPDOWNMENU_INIT_MENU
-		local name = dropdownFrame.name
-
-		if name then
-			local dialog = StaticPopup_Show("COPYNAME")
-			local editbox = _G[dialog:GetName().."EditBox"]  
-			editbox:SetText(name or "")
-			editbox:SetFocus()
-			editbox:HighlightText()
-			local button = _G[dialog:GetName().."Button2"]
-			button:ClearAllPoints()
-			button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
-		end
-	end
-}
-tinsert(UnitPopupMenus["FRIEND"], #UnitPopupMenus["FRIEND"] - 1, "COPYNAME")
-customPopups["COPYNAME"] = true
- 
---we got to make sure our function occurs for our custom unitpopup, otherwise it will cause errors with other unitpopup entries
-local function customPopupMenu(dropdownMenu, which, unit, name, userData, ...)
-	for i=1, UIDROPDOWNMENU_MAXBUTTONS do
-		local button = _G["DropDownList" .. UIDROPDOWNMENU_MENU_LEVEL .. "Button" .. i]
-		local popup = customPopups[button.value]
-		if popup then
-			button.func = UnitPopupButtons[button.value].func
-		end
-	end
-end
-
-hooksecurefunc("UnitPopup_ShowMenu", customPopupMenu)
 
 --[[------------------------
 	URL COPY
