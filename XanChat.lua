@@ -681,6 +681,8 @@ local function SaveLayout(chatFrame)
 	db.yOffset = yOffset
 	db.width = chatFrame:GetWidth()
 	db.height = chatFrame:GetHeight()
+	
+	--SetChatWindowSavedPosition(chatFrame:GetID(), vertPoint..horizPoint, xOffset, yOffset);
 end
 
 local function RestoreLayout(chatFrame)
@@ -694,6 +696,8 @@ local function RestoreLayout(chatFrame)
 	
  	if ( db.width and db.height ) then
  		chatFrame:SetSize(db.width, db.height)
+		--force the sizing in blizzards settings
+		SetChatWindowSavedDimensions(chatFrame:GetID(), db.width, db.height)
  	end
 	
 	local sSwitch = false
@@ -726,6 +730,7 @@ local function RestoreLayout(chatFrame)
 	if sSwitch then
 		chatFrame:SetMovable(false)
 	end
+
 end
 
 local function SaveSettings(chatFrame)
@@ -854,12 +859,6 @@ local function RestoreSettings(chatFrame)
 		chatFrame:SetParent(db.chatParent)
 	end
 	
-	--restore layout does this already, but just in case
-	if ( db.width and db.height ) then
-		chatFrame:SetWidth(db.width) --just in case
-		chatFrame:SetHeight(db.height) --just in case
-	end
-
 	--handling chat frame fading
 	if XCHT_DB then
 		if XCHT_DB.enableChatTextFade then
@@ -876,12 +875,20 @@ local function doValueUpdate(checkBool, groupType)
 	SaveSettings(FCF_GetCurrentChatFrame() or nil)
 end
 
---hook origFCF_SavePositionAndDimensions
 local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
 FCF_SavePositionAndDimensions = function(chatFrame)
-    SaveLayout(chatFrame)
+	--do the old stuff first then save OUR settings
+	origFCF_SavePositionAndDimensions(chatFrame)
     SaveSettings(chatFrame)
-    origFCF_SavePositionAndDimensions(chatFrame)
+	SaveLayout(chatFrame)
+end
+
+local origFCF_RestorePositionAndDimensions = FCF_RestorePositionAndDimensions
+FCF_RestorePositionAndDimensions = function(chatFrame)
+	--do the old stuff first then restore OUR settings
+	origFCF_RestorePositionAndDimensions(chatFrame)
+    RestoreSettings(chatFrame)
+	RestoreLayout(chatFrame)
 end
 
 --hook old toggle
@@ -1147,7 +1154,6 @@ local function enableChatFrameFading()
 		old_FCF_FadeOutScrollbar(chatframe)
 	end
 
-	local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
 	FCF_SetWindowAlpha = function(frame, alpha, doNotSave)
 		if frame:GetName() and string.find(frame:GetName(), "ChatFrame", 1, true) then
 			frame.oldAlpha = DEFAULT_CHATFRAME_ALPHA
@@ -1168,12 +1174,6 @@ for i = 1, NUM_CHAT_WINDOWS do
 	if f then
 		--have to do this before player login otherwise issues occur
 		f:SetMaxLines(500)
-		
-		--restore any settings
-		RestoreSettings(f)
-		
-		--restore saved layout
-		RestoreLayout(f)
 	end
 end
 
@@ -1297,30 +1297,21 @@ function addon:PLAYER_LOGIN()
 			end
 
 			--check for chat box fading
+			f.oldAlpha = 0
+			f.hasBeenFaded = false
 			if not XCHT_DB.enableChatFrameFade then
 				enableChatFrameFading()
-				
 				if f.isDocked or fTab:IsVisible() then
 					FCF_FadeInChatFrame(f)
 					FCF_FadeInScrollbar(f)
 				end
-				
-				SetChatWindowAlpha(i, DEFAULT_CHATFRAME_ALPHA)
-			else
-				--fade it just in case if we just switched chat box fading
-				if f.isDocked or fTab:IsVisible() then
-					f.oldAlpha = 0
-					f.hasBeenFaded = false
-					FCF_FadeOutChatFrame(f)
-					FCF_FadeOutScrollbar(f)
-				end
 			end
-	
+
 			--few changes
 			f:EnableMouseWheel(true)
 			f:SetScript('OnMouseWheel', scrollChat)
 			f:SetClampRectInsets(0,0,0,0)
-			
+
 			local editBox = _G[n.."EditBox"]
 			
 			if editBox then
@@ -1566,15 +1557,11 @@ function addon:UI_SCALE_CHANGED()
 	for i = 1, NUM_CHAT_WINDOWS do
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
-		
 		if f then
-		
 			--restore any settings
 			RestoreSettings(f)
-			
 			--restore saved layout
 			RestoreLayout(f)
-			
 			--always lock the frames regardless (using both calls just in case)
 			SetChatWindowLocked(i, true)
 			FCF_SetLocked(f, true)
