@@ -182,16 +182,74 @@ local function ToHex(r, g, b, a)
 	return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
 end
 
+--this is used as a super last resort
+function slowPlayerLinkStrip(msg)
+	if not msg then return end
+	
+	local newMsg = msg
+	local playerLink, player
+	local p1_Start, p1_End
+	local p2_Start, p2_End
+	local p3_Start, p3_End
+	
+	--lets grab the first part
+	p1_Start, p1_End = string.find(newMsg, "|Hplayer:", 1, true)
+
+	--do we have anything to work with on first part
+	if p1_Start and p1_End then
+		--lets edit the message and move the pointer forward
+		newMsg = newMsg:sub(p1_End + 1)
+		
+		--lets grab the second part
+		if newMsg then
+			p2_Start, p2_End = string.find(newMsg, "|h[", 1, true)
+		end
+
+		--do we have anything to work with on second part
+		if p2_Start and p2_End then
+			
+			--first grab the playerLink
+			playerLink = newMsg:sub(1, p2_Start - 1)
+			--now move the pointer forward
+			newMsg = newMsg:sub(p2_End + 1)
+
+			--finally check for our third part
+			if newMsg then
+				p3_Start, p3_End = string.find(newMsg, "]|h", 1, true)
+			end
+			
+			--do we have anything to work with?
+			if p3_Start and p3_End then
+				player = newMsg:sub(1, p3_Start - 1)
+				
+				--if we have playerlink and player then return it, otherwise nil
+				if playerLink and player then
+					return playerLink, player
+				end
+			end
+
+		end
+
+	end
+	
+end
+  
 function parsePlayerInfo(frame, text, ...)
 	--local red, green, blue, messageId, holdTime = ...
 	text = text or "" --fix string just in case, avoid nulls
-	local playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
-	--check if our actual player has a hyphen server
-	local chkPlayer, chkServer = player:match("([^%-]+)%-?(.*)")
+	local playerLink, player, pmsg
+	
+	playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
+	
+	if not playerLink or not player then
+		--only use this if top fails
+		playerLink, player = slowPlayerLinkStrip(text)
+	end
 	
 	--gsub(message, '|HBNplayer:(.-)|h%[(.-)%]|h', FormatBNPlayer)
-	
-	if playerLink then
+	if playerLink and player then
+		--check if our actual player has a hyphen server
+		local chkPlayer, chkServer = player:match("([^%-]+)%-?(.*)")
 		local linkName, linkMessageID, linkChannel = strsplit(":", playerLink)
 		local playerName, playerServer
 		
@@ -498,7 +556,7 @@ local AddMessage = function(frame, text, ...)
 	
 	--https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
 	--ChatFrame_MessageEventHandler
-	if lastMsgEvent and lastMsgEvent.event and strsub(lastMsgEvent.event, 1, 8) == "CHAT_MSG" then
+	if type(text) == "string" and lastMsgEvent and lastMsgEvent.event and strsub(lastMsgEvent.event, 1, 8) == "CHAT_MSG" then
 	
 		local msgType = strsub(lastMsgEvent.event, 10)
 		local info = ChatTypeInfo[msgType]
@@ -719,6 +777,9 @@ local function SaveSettings(chatFrame)
 	db.windowChannels = windowChannels
 	db.windowChannelColors = windowChannelColors
 	db.windowMessageColors = windowMessageColors
+	db.fadingDuration = chatFrame:GetTimeVisible() or 120
+	db.defaultFrameAlpha = DEFAULT_CHATFRAME_ALPHA
+	
 end
 
 local function RestoreSettings(chatFrame)
@@ -799,6 +860,16 @@ local function RestoreSettings(chatFrame)
 		chatFrame:SetHeight(db.height) --just in case
 	end
 
+	--handling chat frame fading
+	if XCHT_DB then
+		if XCHT_DB.enableChatTextFade then
+			chatFrame:SetFading(true)
+			chatFrame:SetTimeVisible(db.fadingDuration or 120)
+		else
+			chatFrame:SetFading(false)
+		end
+	end
+	
 end
 
 local function doValueUpdate(checkBool, groupType)
@@ -956,20 +1027,20 @@ local function CreateCopyChatButtons(i)
 		end
 	end)
 
-	_G['ChatFrame'..i]:SetScript("OnEnter", function(self)
+	_G['ChatFrame'..i]:HookScript("OnEnter", function(self)
 		if (XCHT_DB.enableCopyButton) then
 			obj:Show()
 		end
 	end)
-	_G['ChatFrame'..i]:SetScript("OnLeave", function(self)
+	_G['ChatFrame'..i]:HookScript("OnLeave", function(self)
 		obj:Hide()
 	end)
-	_G['ChatFrame'..i].ScrollToBottomButton:SetScript("OnEnter", function(self)
+	_G['ChatFrame'..i].ScrollToBottomButton:HookScript("OnEnter", function(self)
 		if (XCHT_DB.enableCopyButton) then
 			obj:Show()
 		end
 	end)
-	_G['ChatFrame'..i].ScrollToBottomButton:SetScript("OnLeave", function(self)
+	_G['ChatFrame'..i].ScrollToBottomButton:HookScript("OnLeave", function(self)
 		obj:Hide()
 	end)
 	
@@ -1053,6 +1124,41 @@ local function ClearEditBoxHistory(editBox)
 end
 
 --[[------------------------
+	Chat Frame Fading
+--------------------------]]
+
+local old_FCF_FadeOutChatFrame = FCF_FadeOutChatFrame
+local old_FCF_FadeOutScrollbar = FCF_FadeOutScrollbar
+local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
+
+local function enableChatFrameFading()
+
+	FCF_FadeOutChatFrame = function(chatframe)
+		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+			return
+		end
+		old_FCF_FadeOutChatFrame(chatframe)
+	end
+
+	FCF_FadeOutScrollbar = function(chatframe)
+		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+			return
+		end
+		old_FCF_FadeOutScrollbar(chatframe)
+	end
+
+	local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
+	FCF_SetWindowAlpha = function(frame, alpha, doNotSave)
+		if frame:GetName() and string.find(frame:GetName(), "ChatFrame", 1, true) then
+			frame.oldAlpha = DEFAULT_CHATFRAME_ALPHA
+			return
+		end
+		old_FCF_SetWindowAlpha(frame, alpha, doNotSave)
+	end
+	
+end		
+	
+--[[------------------------
 	PLAYER_LOGIN
 --------------------------]]
 
@@ -1089,6 +1195,8 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
 	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
 	if XCHT_DB.enablePlayerChatStyle == nil then XCHT_DB.enablePlayerChatStyle = true end
+	if XCHT_DB.enableChatTextFade == nil then XCHT_DB.enableChatTextFade = true end
+	if XCHT_DB.enableChatFrameFade == nil then XCHT_DB.enableChatFrameFade = true end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1127,6 +1235,7 @@ function addon:PLAYER_LOGIN()
 		local fTab = _G[n.."Tab"]
 		
 		if f then
+			
 			--create the copy chat buttons
 			CreateCopyChatButtons(i)
 		
@@ -1187,6 +1296,26 @@ function addon:PLAYER_LOGIN()
 				f:SetShadowColor(0, 0, 0, 0)
 			end
 
+			--check for chat box fading
+			if not XCHT_DB.enableChatFrameFade then
+				enableChatFrameFading()
+				
+				if f.isDocked or fTab:IsVisible() then
+					FCF_FadeInChatFrame(f)
+					FCF_FadeInScrollbar(f)
+				end
+				
+				SetChatWindowAlpha(i, DEFAULT_CHATFRAME_ALPHA)
+			else
+				--fade it just in case if we just switched chat box fading
+				if f.isDocked or fTab:IsVisible() then
+					f.oldAlpha = 0
+					f.hasBeenFaded = false
+					FCF_FadeOutChatFrame(f)
+					FCF_FadeOutScrollbar(f)
+				end
+			end
+	
 			--few changes
 			f:EnableMouseWheel(true)
 			f:SetScript('OnMouseWheel', scrollChat)
@@ -1398,6 +1527,9 @@ function addon:PLAYER_LOGIN()
 			elseif c and c:lower() == L.SlashPlayerChatStyle then
 				addon.aboutPanel.btnPlayerChatStyle.func(true)
 				return true
+			elseif c and c:lower() == L.SlashChatFrameFade then
+				addon.aboutPanel.btnChatFrameFade.func(true)
+				return true
 			end
 		end
 
@@ -1415,6 +1547,8 @@ function addon:PLAYER_LOGIN()
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSimpleEditBox.." - "..L.SlashSimpleEditBoxInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashCopyPaste.." - "..L.SlashCopyPasteInfo)
 		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashPlayerChatStyle.." - "..L.SlashPlayerChatStyleInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashChatTextFade.." - "..L.SlashChatTextFadeInfo)
+		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashChatFrameFade.." - "..L.SlashChatFrameFadeInfo)
 	end
 	
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'

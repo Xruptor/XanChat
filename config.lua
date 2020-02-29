@@ -400,6 +400,52 @@ function configEvent:PLAYER_LOGIN()
 	addConfigEntry(btnPlayerChatStyle, 0, -20)
 	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
 	
+	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.SlashChatTextFadeInfo)
+	btnChatTextFade:SetScript("OnShow", function() btnChatTextFade:SetChecked(XCHT_DB.enableChatTextFade) end)
+	btnChatTextFade.func = function(slashSwitch)
+		local value = XCHT_DB.enableChatTextFade
+		if not slashSwitch then value = btnChatTextFade:GetChecked() end
+
+		if value then
+			XCHT_DB.enableChatTextFade = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatTextFadeOff)
+		else
+			XCHT_DB.enableChatTextFade = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatTextFadeOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnChatTextFade:SetScript("OnClick", btnChatTextFade.func)
+	
+	addConfigEntry(btnChatTextFade, 0, -20)
+	addon.aboutPanel.btnChatTextFade = btnChatTextFade
+	
+	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
+	btnChatFrameFade:SetScript("OnShow", function() btnChatFrameFade:SetChecked(XCHT_DB.enableChatFrameFade) end)
+	btnChatFrameFade.func = function(slashSwitch)
+		local value = XCHT_DB.enableChatFrameFade
+		if not slashSwitch then value = btnChatFrameFade:GetChecked() end
+
+		if value then
+			XCHT_DB.enableChatFrameFade = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatFrameFadeOff)
+		else
+			XCHT_DB.enableChatFrameFade = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatFrameFadeOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnChatFrameFade:SetScript("OnClick", btnChatFrameFade.func)
+	
+	addConfigEntry(btnChatFrameFade, 0, -20)
+	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
+	
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
 

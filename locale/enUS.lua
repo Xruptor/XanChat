@@ -98,3 +98,13 @@ L.SlashPlayerChatStyle = "playerchatstyle"
 L.SlashPlayerChatStyleOn = "xanChat: Player Chat Style [Level+Color] is [|cFF99CC33ON|r]"
 L.SlashPlayerChatStyleOff = "xanChat: Player Chat Style [Level+Color] is [|cFF99CC33OFF|r]"
 L.SlashPlayerChatStyleInfo = "Show stylized player level and class color in chat."
+
+L.SlashChatTextFade = "textfade"
+L.SlashChatTextFadeOn = "xanChat: Chat Text Fade is [|cFF99CC33ON|r]"
+L.SlashChatTextFadeOff = "xanChat: Chat Text Fade is [|cFF99CC33OFF|r]"
+L.SlashChatTextFadeInfo = "Enable text fade on chat frames."
+
+L.SlashChatFrameFade = "chatfade"
+L.SlashChatFrameFadeOn = "xanChat: Chat Frame Fade is [|cFF99CC33ON|r]"
+L.SlashChatFrameFadeOff = "xanChat: Chat Frame Fade is [|cFF99CC33OFF|r]"
+L.SlashChatFrameFadeInfo = "Enable background fade on chat frames."
