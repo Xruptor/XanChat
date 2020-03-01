@@ -68,12 +68,12 @@ end
 
 local SetItemRef_orig = SetItemRef
 
-function doColor(url)
+local function doColor(url)
 	url = " |cff99FF33|Hurl:"..url.."|h["..url.."]|h|r "
 	return url
 end
 
-function urlFilter(self, event, msg, author, ...)
+local function urlFilter(self, event, msg, author, ...)
 	if strfind(msg, "(%a+)://(%S+)%s?") then
 		return false, gsub(msg, "(%a+)://(%S+)%s?", doColor("%1://%2")), author, ...
 	end
@@ -154,7 +154,42 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", urlFilt
 local messageIndex = 0
 local lastMsgEvent = {}
 
-function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
+local lookChatGroup = {
+	["SYSTEM"] = true,
+	["EMOTE"] = true,
+}
+
+local lookMsgType = {
+	["SYSTEM"] = true,
+	["SKILL"] = true,
+	["CURRENCY"] = true,
+	["MONEY"] = true,
+	["OPENING"] = true,
+	["TRADESKILLS"] = true,
+	["PET_INFO"] = true,
+	["LOOT"] = true,
+	["NOTICE"] = true,
+	["EMOTE"] = true,
+}
+
+local lookFindType = {
+	["_NOTICE"] = true,
+	["_EMOTE"] = true,
+	["ROLE_"] = true,
+	["VOTE_KICK"] = true,
+	["READY_CHECK"] = true,
+	["PARTY_LEADER_CHANGED"] = true,
+	["PLAYER_ROLES_ASSIGNED"] = true,
+}
+
+local function lookForFindTypes(text)
+	for k, v in pairs(lookFindType) do
+		if string.find(text, k, 1, true) then return true end
+	end
+	return false
+end
+
+local function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
 	--Debug('filter', self, event, msg, author)
 	--capture the events for AddMessage since they aren't forwarded.  Filters always go first before AddMessage
 	--use a messageIndex to keep track when messages are filtered or not, otherwise AddMessage can have something sent that didn't go through these filters.
@@ -183,7 +218,7 @@ local function ToHex(r, g, b, a)
 end
 
 --this is used as a super last resort
-function slowPlayerLinkStrip(msg)
+local function slowPlayerLinkStrip(msg)
 	if not msg then return end
 	
 	local newMsg = msg
@@ -233,8 +268,37 @@ function slowPlayerLinkStrip(msg)
 	end
 	
 end
-  
-function parsePlayerInfo(frame, text, ...)
+
+--string.gsub has issues with special characters when doing replaces. So use this instead
+local function plainTextReplace(text, old, new)
+	local b, e = text:find(old, 1, true)
+	if b == nil then
+		return text, false
+	else
+		return text:sub(1,b-1)..new..text:sub(e+1), true
+	end
+end
+
+local function stripAndLowercase(text)
+	text = string.lower(text)
+	text = text:gsub("%s+", "") --remove empty spaces
+	return text
+end
+
+local function ContainsWholeWord(input, word)
+	--return string.find(input, "%f[%a]" .. word .. "%f[%A]")
+	return string.find(input, "%f[^%z%s]"..word.."%f[%z%s]")
+end
+
+local function replaceText(source, findStr, replaceStr, wholeword)
+	if wholeword then
+		--findStr = '%f[%a]'..findStr..'%f[%A]'  --does not properly escape certain characters like : and /
+		findStr = "%f[^%z%s]"..findStr.."%f[%z%s]"
+	end
+	return (source:gsub(findStr, replaceStr))
+end
+
+local function parsePlayerInfo(frame, text, ...)
 	--local red, green, blue, messageId, holdTime = ...
 	text = text or "" --fix string just in case, avoid nulls
 	local playerLink, player, pmsg
@@ -315,23 +379,7 @@ function parsePlayerInfo(frame, text, ...)
 	end
 end
 
---string.gsub has issues with special characters when doing replaces. So use this instead
-function plainTextReplace(text, old, new)
-	local b, e = text:find(old, 1, true)
-	if b == nil then
-		return text
-	else
-		return text:sub(1,b-1)..new..text:sub(e+1)
-	end
-end
-
-function stripAndLowercase(text)
-	text = string.lower(text)
-	text = text:gsub("%s+", "") --remove empty spaces
-	return text
-end
-
-function addToPlayerList(name, realm, level, class, BNname)
+local function addToPlayerList(name, realm, level, class, BNname)
 	if not name or not level or not class then return end
 	if not addon.playerList then addon.playerList = {} end
 	if level <= 0 then return end --don't store anything with no actual level
@@ -364,7 +412,7 @@ function addToPlayerList(name, realm, level, class, BNname)
 	addon.playerList[name.."@"..stripAndLowercase(realm)] = {name=name, realm=realm, stripRealm=stripAndLowercase(realm), level=level, class=class, BNname=BNname}
 end
 
-function initUpdateCurrentPlayer()
+local function initUpdateCurrentPlayer()
 	local class = select(2, UnitClass("player"))
 	local name, realm = UnitName("player")
 	local level = UnitLevel("player")
@@ -386,6 +434,7 @@ local function doRaidUpdate()
 		end
 	end
 end
+
 local function doPartyUpdate()
 	--GetNumPartyMembers was replaced so lets check for that
 	local GetNumPartyMembers = GetNumSubgroupMembers or GetNumPartyMembers
@@ -470,7 +519,7 @@ function addon:PLAYER_LEVEL_UP()
 	initUpdateCurrentPlayer()
 end
 
-function initPlayerInfo()
+local function initPlayerInfo()
 	if not XCHT_DB.enablePlayerChatStyle then return end
 	
     addon:RegisterEvent("FRIENDLIST_UPDATE")
@@ -518,19 +567,6 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 	hideOnEscape = true,
 }
 
-local function ContainsWholeWord(input, word)
-	--return string.find(input, "%f[%a]" .. word .. "%f[%A]")
-	return string.find(input, "%f[^%z%s]"..word.."%f[%z%s]")
-end
-
-function replaceText(source, findStr, replaceStr, wholeword)
-	if wholeword then
-		--findStr = '%f[%a]'..findStr..'%f[%A]'  --does not properly escape certain characters like : and /
-		findStr = "%f[^%z%s]"..findStr.."%f[%z%s]"
-	end
-	return (source:gsub(findStr, replaceStr))
-end
-
 local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
 	--Debug('message', frame, text, string.join(", ", tostringall(...)))
@@ -555,6 +591,8 @@ local AddMessage = function(frame, text, ...)
 	end
 	
 	--https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
+	--https://github.com/Gethe/wow-ui-source/blob/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/AddOns/Blizzard_APIDocumentation/PartyInfoDocumentation.lua
+	
 	--ChatFrame_MessageEventHandler
 	if type(text) == "string" and lastMsgEvent and lastMsgEvent.event and strsub(lastMsgEvent.event, 1, 8) == "CHAT_MSG" then
 	
@@ -570,54 +608,44 @@ local AddMessage = function(frame, text, ...)
 			--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 			
 			if XCHT_DB.enablePlayerChatStyle and chatGroup and msgType then
-				if chatGroup == "SYSTEM" or msgType == "SYSTEM" or msgType == "SKILL" or msgType == "CURRENCY" or msgType == "MONEY" or msgType == "OPENING" or msgType == "TRADESKILLS" or 
-					msgType == "PET_INFO" or msgType == "LOOT" or string.find(lastMsgEvent.event, "_NOTICE", 1, true) or string.find(msgType, "_NOTICE", 1, true) then
+				if lookChatGroup[chatGroup] or lookMsgType[msgType] or lookForFindTypes(lastMsgEvent.event) or lookForFindTypes(msgType) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
+					local origText = text
 					
 					--check for names
 					for k, v in pairs(addon.playerList) do
 						--just in case
 						if k and v then
 							local pN, pR = strsplit("@", k)
-							local origText = text
+							local passChk = false
+							--make sure we even have a player in the string before editing it
 							if pN and pR and string.find(text, pN, 1, true) and v.class then
-								--Debug('found', pN, pR, string.find(text, pN, 1, true), v.class)
+
 								--do the replace here
 								local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class] or RAID_CLASS_COLORS[v.class]
 								if color then
-									--Debug('found-color', pN, pR, v.class)
+
 									local colorCode = ToHex(color.r, color.g, color.b, 1)
 									--replace if we have the name and hyphen server
 									local hasReplaced = false
 									
-									--only do this for CHAT_MSG_SYSTEM, like leave and join group
-									if msgType == "SYSTEM" and v.realm and string.find(text, pN.."-"..v.realm, 1, true) then
-										--we don't want to do whole word replacements on everything
-										--have to escape the hyphen for matching using %
-										--make sure that whole word searching is off
-										text = replaceText(text, pN.."%-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r", false)
-										hasReplaced = true
-										--Debug('replacing-1', origText, pN, pR, pN.."%-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r", text)
-									end
-									--only do this for CHAT_MSG_SYSTEM, like leave and join group
-									if msgType == "SYSTEM" and v.stripRealm and string.find(text, pN.."-"..v.stripRealm, 1, true) then
-										--we don't want to do whole word replacements on everything
-										--have to escape the hyphen for matching using %
-										--make sure that whole word searching is off
-										text = replaceText(text, pN.."%-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r", false)
-										hasReplaced = true
-										--Debug('replacing-2', origText, pN, pR, pN.."%-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r", text)
+									--only do this for system messages that don't have a player link in it, otherwise it will ruin the player link
+									if not string.find(text, "|Hplayer:", 1, true) and v.realm and v.stripRealm then
+										text, passChk = plainTextReplace(text, pN.."-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r")
+										if not passChk then
+											text, passChk = plainTextReplace(text, pN.."-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r")
+										end
+										if passChk then
+											hasReplaced = true
+										end
 									end
 									if not hasReplaced then
 										--replace only whole words
 										text = replaceText(text, pN, "|c"..colorCode..pN.."|r", true)
-										hasReplaced = true
-										--Debug('replacing-3', origText, pN, pR, "|c"..colorCode..pN.."|r", text)
 									end
-									--break if we replaced, otherwise continue searching the users
-									if hasReplaced then
-										break
-									end
+									
+									--exit out of loop
+									break
 								else
 									--something went wrong, exit the loop
 									break
@@ -1481,65 +1509,9 @@ function addon:PLAYER_LOGIN()
 
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
-	SlashCmdList["XANCHAT"] = function(msg)
-		local a,b,c=strfind(msg, "(%S+)")
-		
-		if a and XCHT_DB then
-			if c and c:lower() == L.SlashSocial then
-				addon.aboutPanel.btnSocial.func(true)
-				return true
-			elseif c and c:lower() == L.SlashScroll then
-				addon.aboutPanel.btnScroll.func(true)
-				return true
-			elseif c and c:lower() == L.SlashShortNames then
-				addon.aboutPanel.btnShortNames.func(true)
-				return true
-			elseif c and c:lower() == L.SlashEditBox then
-				addon.aboutPanel.btnEditBox.func(true)
-				return true
-			elseif c and c:lower() == L.SlashTabs then
-				addon.aboutPanel.btnTabs.func(true)
-				return true
-			elseif c and c:lower() == L.SlashShadow then
-				addon.aboutPanel.btnShadow.func(true)
-				return true
-			elseif c and c:lower() == L.SlashVoice then
-				addon.aboutPanel.btnVoice.func(true)
-				return true
-			elseif c and c:lower() == L.SlashEditBoxBorder then
-				addon.aboutPanel.btnEditBoxBorder.func(true)
-				return true
-			elseif c and c:lower() == L.SlashSimpleEditBox then
-				addon.aboutPanel.btnSimpleEditBox.func(true)
-				return true
-			elseif c and c:lower() == L.SlashCopyPaste then
-				addon.aboutPanel.btnCopyPaste.func(true)
-				return true
-			elseif c and c:lower() == L.SlashPlayerChatStyle then
-				addon.aboutPanel.btnPlayerChatStyle.func(true)
-				return true
-			elseif c and c:lower() == L.SlashChatFrameFade then
-				addon.aboutPanel.btnChatFrameFade.func(true)
-				return true
-			end
-		end
-
-		DEFAULT_CHAT_FRAME:AddMessage(ADDON_NAME, 64/255, 224/255, 208/255)
-		
-		local preText = "/xanchat "
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSocial.." - "..L.SlashSocialInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashScroll.." - "..L.SlashScrollInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashShortNames.." - "..L.SlashShortNamesInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashEditBox.." - "..L.SlashEditBoxInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashTabs.." - "..L.SlashTabsInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashShadow.." - "..L.SlashShadowInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashVoice.." - "..L.SlashVoiceInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashEditBoxBorder.." - "..L.SlashEditBoxBorderInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashSimpleEditBox.." - "..L.SlashSimpleEditBoxInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashCopyPaste.." - "..L.SlashCopyPasteInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashPlayerChatStyle.." - "..L.SlashPlayerChatStyleInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashChatTextFade.." - "..L.SlashChatTextFadeInfo)
-		DEFAULT_CHAT_FRAME:AddMessage(preText..L.SlashChatFrameFade.." - "..L.SlashChatFrameFadeInfo)
+	SlashCmdList["XANCHAT"] = function()
+		InterfaceOptionsFrame:Show() --has to be here to load the about frame onLoad
+		InterfaceOptionsFrame_OpenToCategory(addon.aboutPanel) --force the panel to show
 	end
 	
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
