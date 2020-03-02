@@ -647,12 +647,19 @@ end
 local function SaveLayout(chatFrame)
 	if not addonLoaded then return end
 	if not chatFrame then return end
+	if XCHT_DB.lockChatSettings then return end
 	
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
-	if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
 	
-	if chatFrame.isMoving or chatFrame.isDragging then return end
+	--first check to see if we even store this chatFrame
+	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
+		if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
+	else
+		--don't store it
+		if XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = nil end
+		return
+	end
 
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 
@@ -675,6 +682,7 @@ local function SaveLayout(chatFrame)
 	db.height = chatFrame:GetHeight()
 	
 	--SetChatWindowSavedPosition(chatFrame:GetID(), vertPoint..horizPoint, xOffset, yOffset);
+	
 end
 
 local function RestoreLayout(chatFrame)
@@ -728,11 +736,20 @@ end
 local function SaveSettings(chatFrame)
 	if not addonLoaded then return end
 	if not chatFrame then return end
+	if XCHT_DB.lockChatSettings then return end
 	
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then return end
-	if not XCHT_DB.frames[chatFrame:GetID()] then return end
-
+	
+	--first check to see if we even store this chatFrame
+	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
+		if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
+	else
+		--don't store it
+		if XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = nil end
+		return
+	end
+	
 	if chatFrame.isMoving or chatFrame.isDragging then return end
 
 	local db = XCHT_DB.frames[chatFrame:GetID()]
@@ -776,7 +793,7 @@ local function SaveSettings(chatFrame)
 	db.windowMessageColors = windowMessageColors
 	db.fadingDuration = chatFrame:GetTimeVisible() or 120
 	db.defaultFrameAlpha = DEFAULT_CHATFRAME_ALPHA
-	
+
 end
 
 local function RestoreSettings(chatFrame)
@@ -883,7 +900,14 @@ FCF_RestorePositionAndDimensions = function(chatFrame)
 	RestoreLayout(chatFrame)
 end
 
---hook old toggle
+local origFCF_Close = FCF_Close
+FCF_Close = function(chatFrame)
+	--do the old stuff first then save OUR settings
+	origFCF_Close(chatFrame)
+    SaveSettings(chatFrame)
+	SaveLayout(chatFrame)
+end
+
 local origFCF_ToggleLock = FCF_ToggleLock
 FCF_ToggleLock = function()
     local chatFrame = FCF_GetCurrentChatFrame()
@@ -902,6 +926,10 @@ hooksecurefunc("ToggleMessageType", doValueUpdate)
 hooksecurefunc("ToggleChatChannel", doValueUpdate)
 hooksecurefunc("ToggleChatColorNamesByClassGroup", doValueUpdate)
 
+local function updateChatSettings(f)
+	SaveLayout(f)
+	SaveSettings(f)
+end
 
 --[[------------------------
 	CHAT COPY
@@ -1006,12 +1034,12 @@ end
 local function CreateCopyChatButtons(i)
 
 	local copyFrame = CreateCopyFrame()
+	local chatFrame = _G['ChatFrame'..i]
 	
-	local obj = CreateFrame("Button", "xanCopyChatButton"..i, _G['ChatFrame'..i])
+	local obj = CreateFrame("Button", "xanCopyChatButton"..i, chatFrame)
 	obj.bg = obj:CreateTexture(nil,	"ARTWORK")
 	obj.bg:SetTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj.bg:SetAllPoints(obj)
-	obj:SetPoint("BOTTOMRIGHT", -2, -3)
 	obj.texture = obj.bg
 	obj:SetFrameLevel(7)
 	obj:SetWidth(18)
@@ -1019,40 +1047,59 @@ local function CreateCopyChatButtons(i)
 	obj:Hide()
 	obj:SetScript("OnClick", function(self, arg)
 		if (copyFrame:IsVisible()) then
-    		copyFrame:Hide()
-    	else
+			copyFrame:Hide()
+		else
 			--this allows it to refresh if we hide the window
 			GetChatText(i)
 		end
 	end)
-
-	_G['ChatFrame'..i]:HookScript("OnEnter", function(self)
-		if (XCHT_DB.enableCopyButton) then
-			obj:Show()
-		end
-	end)
-	_G['ChatFrame'..i]:HookScript("OnLeave", function(self)
-		obj:Hide()
-	end)
-	_G['ChatFrame'..i].ScrollToBottomButton:HookScript("OnEnter", function(self)
-		if (XCHT_DB.enableCopyButton) then
-			obj:Show()
-		end
-	end)
-	_G['ChatFrame'..i].ScrollToBottomButton:HookScript("OnLeave", function(self)
-		obj:Hide()
-	end)
 	
-	--prevent object blinking because chat continues to scroll
-	function obj.show()
+	if not XCHT_DB.enableCopyButtonLeft then
+		
+		obj:SetPoint("BOTTOMRIGHT", -2, -3)
+		
+		chatFrame:HookScript("OnEnter", function(self)
+			if (XCHT_DB.enableCopyButton) then
+				obj:Show()
+			end
+		end)
+		chatFrame:HookScript("OnLeave", function(self)
+			obj:Hide()
+		end)
+		chatFrame.ScrollToBottomButton:HookScript("OnEnter", function(self)
+			if (XCHT_DB.enableCopyButton) then
+				obj:Show()
+			end
+		end)
+		chatFrame.ScrollToBottomButton:HookScript("OnLeave", function(self)
+			obj:Hide()
+		end)
+		
+		--prevent object blinking because chat continues to scroll
+		function obj.show()
+			obj:Show()
+		end
+		function obj.hide()
+			obj:Hide()
+		end
+		
+		obj:SetScript("OnEnter", obj.show)
+		obj:SetScript("OnLeave", obj.hide)
+		
+	else
+		if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked then
+			if not IsCombatLog(chatFrame) then
+				obj:SetPoint("TOPLEFT", -30, -35)
+			else
+				obj:SetPoint("TOPLEFT", -30, -11)
+			end
+		else
+			obj:SetPoint("TOPLEFT", -30, 0)
+		end
+		
 		obj:Show()
 	end
-	function obj.hide()
-		obj:Hide()
-	end
 	
-	obj:SetScript("OnEnter", obj.show)
-	obj:SetScript("OnLeave", obj.hide)
 end
 
 --[[------------------------
@@ -1190,6 +1237,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.enableChatTextFade == nil then XCHT_DB.enableChatTextFade = true end
 	if XCHT_DB.enableChatFrameFade == nil then XCHT_DB.enableChatFrameFade = true end
 	if XCHT_DB.enableCopyButtonLeft == nil then XCHT_DB.enableCopyButtonLeft = false end
+	if XCHT_DB.lockChatSettings == nil then XCHT_DB.lockChatSettings = false end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1485,11 +1533,26 @@ function addon:PLAYER_LOGIN()
 	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
 	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] loaded:   /xanchat", ADDON_NAME, ver or "1.0"))
 	
+	if XCHT_DB.lockChatSettings then
+		DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+	end
+	
 	addon:RegisterEvent("UI_SCALE_CHANGED")
-	
 	addon:UnregisterEvent("PLAYER_LOGIN")
-	
 	addonLoaded = true
+	
+	--once everything is loaded updated the settings for the chat, only do this once per version updateChatSettings
+	if XCHT_DB.dbVer == nil or XCHT_DB.dbVer ~= ver then
+		for i = 1, NUM_CHAT_WINDOWS do
+			local n = ("ChatFrame%d"):format(i)
+			local f = _G[n]
+			
+			if f then
+				updateChatSettings(f)
+			end
+		end
+		XCHT_DB.dbVer = ver 
+	end
 end
 
 --this is the fix for alt-tabbing resizing our chatboxes

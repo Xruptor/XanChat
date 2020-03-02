@@ -156,6 +156,25 @@ function configEvent:PLAYER_LOGIN()
 	addConfigEntry(btnFilterList, 430, -30, true)
 	addon.aboutPanel.btnFilterList = btnFilterList
 	
+	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.SlashLockChatSettingsInfo.."|r")
+	btnLockChatSettings:SetScript("OnShow", function() btnLockChatSettings:SetChecked(XCHT_DB.lockChatSettings) end)
+	btnLockChatSettings.func = function(slashSwitch)
+		local value = XCHT_DB.lockChatSettings
+		if not slashSwitch then value = btnLockChatSettings:GetChecked() end
+		
+		if value then
+			XCHT_DB.lockChatSettings = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOff)
+		else
+			XCHT_DB.lockChatSettings = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOn)
+		end
+	end
+	btnLockChatSettings:SetScript("OnClick", btnLockChatSettings.func)
+	
+	addConfigEntry(btnLockChatSettings, 20, -110, true)
+	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
+	
 	local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
 	btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
 	btnSocial.func = function(slashSwitch)
@@ -389,6 +408,29 @@ function configEvent:PLAYER_LOGIN()
 	
 	addConfigEntry(btnCopyPaste, 0, -15)
 	addon.aboutPanel.btnCopyPaste = btnCopyPaste
+	
+	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteLeftInfo)
+	btnCopyPasteLeft:SetScript("OnShow", function() btnCopyPasteLeft:SetChecked(XCHT_DB.enableCopyButtonLeft) end)
+	btnCopyPasteLeft.func = function(slashSwitch)
+		local value = XCHT_DB.enableCopyButtonLeft
+		if not slashSwitch then value = btnCopyPasteLeft:GetChecked() end
+
+		if value then
+			XCHT_DB.enableCopyButtonLeft = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteLeftOff)
+		else
+			XCHT_DB.enableCopyButtonLeft = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteLeftOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnCopyPasteLeft:SetScript("OnClick", btnCopyPasteLeft.func)
+	
+	addConfigEntry(btnCopyPasteLeft, 0, -15)
+	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 	
 	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
 	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
