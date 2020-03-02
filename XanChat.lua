@@ -147,49 +147,15 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", urlFilter)
 ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", urlFilter)
 
 --[[------------------------
-	Extra Player Info
+	Stylized Player Names
 --------------------------]]
 --https://www.wowinterface.com/forums/showthread.php?t=39328
 
 local messageIndex = 0
 local lastMsgEvent = {}
 
-local lookChatGroup = {
-	["SYSTEM"] = true,
-	["EMOTE"] = true,
-}
-
-local lookMsgType = {
-	["SYSTEM"] = true,
-	["SKILL"] = true,
-	["CURRENCY"] = true,
-	["MONEY"] = true,
-	["OPENING"] = true,
-	["TRADESKILLS"] = true,
-	["PET_INFO"] = true,
-	["LOOT"] = true,
-	["NOTICE"] = true,
-	["EMOTE"] = true,
-}
-
-local lookFindType = {
-	["_NOTICE"] = true,
-	["_EMOTE"] = true,
-	["ROLE_"] = true,
-	["VOTE_KICK"] = true,
-	["READY_CHECK"] = true,
-	["PARTY_LEADER_CHANGED"] = true,
-	["PLAYER_ROLES_ASSIGNED"] = true,
-}
-
-local function lookForFindTypes(text)
-	for k, v in pairs(lookFindType) do
-		if string.find(text, k, 1, true) then return true end
-	end
-	return false
-end
-
 local function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
+	if not addon.isFilterListEnabled or not XCHT_DB.enablePlayerChatStyle then return false end
 	--Debug('filter', self, event, msg, author)
 	--capture the events for AddMessage since they aren't forwarded.  Filters always go first before AddMessage
 	--use a messageIndex to keep track when messages are filtered or not, otherwise AddMessage can have something sent that didn't go through these filters.
@@ -580,35 +546,31 @@ local AddMessage = function(frame, text, ...)
 		text = gsub(text, L.ChannelLookingForGroup, "["..chatNum..L.ShortLookingForGroup.."]")
 		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
 	end
-	--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
-	if XCHT_DB.enablePlayerChatStyle and type(text) == "string" and string.find(text, "|Hplayer:", 1, true) then
-		local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
-		if old and new and string.find(text, old, 1, true) then
-			--Debug('replacing', old, new, playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
-			--Debug('found', playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
-			text = plainTextReplace(text, old, new)
+	
+	--only do stylized player names if it's even enabled and we have the filter list
+	if addon.isFilterListEnabled and XCHT_DB.enablePlayerChatStyle and type(text) == "string" then
+	
+		--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
+		if string.find(text, "|Hplayer:", 1, true) then
+			local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
+			if old and new and string.find(text, old, 1, true) then
+				--Debug('replacing', old, new, playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
+				--Debug('found', playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
+				text = plainTextReplace(text, old, new)
+			end
 		end
-	end
-	
-	--https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
-	--https://github.com/Gethe/wow-ui-source/blob/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/AddOns/Blizzard_APIDocumentation/PartyInfoDocumentation.lua
-	
-	--ChatFrame_MessageEventHandler
-	if type(text) == "string" and lastMsgEvent and lastMsgEvent.event and strsub(lastMsgEvent.event, 1, 8) == "CHAT_MSG" then
-	
-		local msgType = strsub(lastMsgEvent.event, 10)
-		local info = ChatTypeInfo[msgType]
-		local chatGroup = Chat_GetChatCategory(msgType)
-		
-		--Debug(lastMsgEvent, lastMsgEvent.event, lastMsgEvent.messageIndex, text)
-		
-		--lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
-		if lastMsgEvent and lastMsgEvent.messageIndex and lastMsgEvent.messageIndex ~= lastMsgIndex then
-			lastMsgIndex = lastMsgEvent.messageIndex
-			--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
+
+		--ChatFrame_MessageEventHandler
+		if lastMsgEvent and lastMsgEvent.event then
+			--Debug(lastMsgEvent, lastMsgEvent.event, lastMsgEvent.messageIndex, text)
 			
-			if XCHT_DB.enablePlayerChatStyle and chatGroup and msgType then
-				if lookChatGroup[chatGroup] or lookMsgType[msgType] or lookForFindTypes(lastMsgEvent.event) or lookForFindTypes(msgType) then
+			--lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
+			if lastMsgEvent and lastMsgEvent.messageIndex and lastMsgEvent.messageIndex ~= lastMsgIndex then
+				lastMsgIndex = lastMsgEvent.messageIndex
+				--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
+				
+				--don't do this on strings with player links and we have a positive filter
+				if not string.find(text, "|Hplayer:", 1, true) and addon:searchFilterList(lastMsgEvent.event, text) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 					local origText = text
 					
@@ -630,7 +592,7 @@ local AddMessage = function(frame, text, ...)
 									local hasReplaced = false
 									
 									--only do this for system messages that don't have a player link in it, otherwise it will ruin the player link
-									if not string.find(text, "|Hplayer:", 1, true) and v.realm and v.stripRealm then
+									if v.realm and v.stripRealm then
 										text, passChk = plainTextReplace(text, pN.."-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r")
 										if not passChk then
 											text, passChk = plainTextReplace(text, pN.."-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r")
@@ -655,9 +617,11 @@ local AddMessage = function(frame, text, ...)
 					end
 					
 				end
-			end
 			
+			end
+		
 		end
+		
 	end
 
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
@@ -943,7 +907,7 @@ hooksecurefunc("ToggleChatColorNamesByClassGroup", doValueUpdate)
 	CHAT COPY
 --------------------------]]
 
-local function CreatCopyFrame()
+local function CreateCopyFrame()
 	--check to see if we have the frame already, if we do then return it
 	if addon.copyFrame then return addon.copyFrame end
 
@@ -1004,7 +968,7 @@ end
 
 local function GetChatText(id)
 
-	local copyFrame = CreatCopyFrame()
+	local copyFrame = CreateCopyFrame()
 	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
 	
 	local msgCount = _G["ChatFrame" .. id]:GetNumMessages()
@@ -1041,7 +1005,7 @@ end
 
 local function CreateCopyChatButtons(i)
 
-	local copyFrame = CreatCopyFrame()
+	local copyFrame = CreateCopyFrame()
 	
 	local obj = CreateFrame("Button", "xanCopyChatButton"..i, _G['ChatFrame'..i])
 	obj.bg = obj:CreateTexture(nil,	"ARTWORK")
@@ -1225,12 +1189,16 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.enablePlayerChatStyle == nil then XCHT_DB.enablePlayerChatStyle = true end
 	if XCHT_DB.enableChatTextFade == nil then XCHT_DB.enableChatTextFade = true end
 	if XCHT_DB.enableChatFrameFade == nil then XCHT_DB.enableChatFrameFade = true end
+	if XCHT_DB.enableCopyButtonLeft == nil then XCHT_DB.enableCopyButtonLeft = false end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
 	XCHT_HISTORY[currentRealm] = XCHT_HISTORY[currentRealm] or {}
 	XCHT_HISTORY[currentRealm][currentPlayer] = XCHT_HISTORY[currentRealm][currentPlayer] or {}
 	HistoryDB = XCHT_HISTORY[currentRealm][currentPlayer]
+
+	--do the filter list
+	addon:EnableFilterList()
 	
 	--iniate playerInfo events
 	initPlayerInfo()

@@ -44,6 +44,8 @@ L.CHAT_RAID_GET         			= "|Hchannel:raid|h[R]|h %s: "
 L.CHAT_RAID_LEADER_GET  			= [[|Hchannel:raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
 L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:raidwarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
 
+L.EditFilterListHeader = "Stylized Filter List"
+
 L.SlashSocial = "social"
 L.SlashSocialOn = "xanChat: Social buttons are now [|cFF99CC33ON|r]"
 L.SlashSocialOff = "xanChat: Social buttons are now [|cFF99CC33OFF|r]"
@@ -95,9 +97,9 @@ L.SlashCopyPasteOff = "xanChat: Copy and Paste button is [|cFF99CC33OFF|r]"
 L.SlashCopyPasteInfo = "Show a copy and paste button in the chat window."
 
 L.SlashPlayerChatStyle = "playerchatstyle"
-L.SlashPlayerChatStyleOn = "xanChat: Player Chat Style [Level+Color] is [|cFF99CC33ON|r]"
-L.SlashPlayerChatStyleOff = "xanChat: Player Chat Style [Level+Color] is [|cFF99CC33OFF|r]"
-L.SlashPlayerChatStyleInfo = "Show stylized player level and class color in chat."
+L.SlashPlayerChatStyleOn = "xanChat: Stylized Player Names [Level+Color] is [|cFF99CC33ON|r]"
+L.SlashPlayerChatStyleOff = "xanChat: Stylized Player Names [Level+Color] is [|cFF99CC33OFF|r]"
+L.SlashPlayerChatStyleInfo = "Show stylized player names and level in chat. |cFF99CC33(Uses Stylized Filter List Above)|r"
 
 L.SlashChatTextFade = "textfade"
 L.SlashChatTextFadeOn = "xanChat: Chat Text Fade is [|cFF99CC33ON|r]"
