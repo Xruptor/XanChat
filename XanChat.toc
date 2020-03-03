@@ -2,14 +2,16 @@
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Author: Xruptor
-## Version: 7.0
+## Version: 7.1
 ## X-Curse-Project-ID: 28603
 ## X-WoWI-ID: 18787
 ## OptionalDeps: tekDebug
 ## SavedVariables: XCHT_DB, XCHT_HISTORY
 
 libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
 libs\AceLocale-3.0\AceLocale-3.0.xml
+libs\AceEvent-3.0\AceEvent-3.0.xml
 
 locale\enUS.lua
 

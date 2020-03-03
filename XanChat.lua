@@ -7,14 +7,13 @@ if not _G[ADDON_NAME] then
 end
 addon = _G[ADDON_NAME]
 
-addon:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
-
 local debugf = tekDebug and tekDebug:GetFrame(ADDON_NAME)
 local function Debug(...)
     if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
+LibStub("AceEvent-3.0"):Embed(addon)
 
 local IsRetail = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 
@@ -392,35 +391,12 @@ local function initUpdateCurrentPlayer()
 	addToPlayerList(name, realm, level, class)
 end
 
-local function doGroupUpdate()
+local function doRosterUpdate()
 
 	local chkRaid = IsInRaid()
 	local IsInGroup = chkRaid or IsInGroup()
 	--local GetNumPartyMembers = GetNumSubgroupMembers or GetNumPartyMembers
 	--local GetNumRaidMembers = GetNumGroupMembers or GetNumRaidMembers
-	
-	-- if UnitInRaid("player") or IsInRaid() then
-		-- for i = 1, MAX_RAID_MEMBERS do
-			-- local unit = "raid"..i
-			-- if UnitExists(unit) then
-				-- local playerName, playerServer = UnitName(unit)
-				-- local _, class = UnitClass(unit)
-				-- local level = UnitLevel(unit)
-			-- else
-				-- break
-			-- end
-		-- end
-	-- else
-		-- for i = 1, MAX_PARTY_MEMBERS do
-			-- local unit = "party"..i
-			-- if UnitExists(unit) then
-				-- local playerName, playerServer = UnitName(unit)
-				-- local _, class = UnitClass(unit)
-				-- local level = UnitLevel(unit)
-			-- end
-		-- end
-	-- end
-
 
 	if IsInGroup then
 		local playerNum, unit = (chkRaid and GetNumGroupMembers()) or MAX_PARTY_MEMBERS, (chkRaid and "raid") or "party"
@@ -461,38 +437,7 @@ local function doFriendUpdate()
 	end
 end
 
-function addon:PLAYER_LEVEL_UP()
-	initUpdateCurrentPlayer()
-end
-
-function addon:FRIENDLIST_UPDATE()
-	doFriendUpdate()
-end
-
-function addon:BN_FRIEND_ACCOUNT_ONLINE()
-	doFriendUpdate()
-end
-
-function addon:RAID_ROSTER_UPDATE()
-	doGroupUpdate()
-end
-
-function addon:GROUP_ROSTER_UPDATE()
-	doGroupUpdate()
-end
-
-function addon:PARTY_MEMBERS_CHANGED()
-	doGroupUpdate()
-end
-
-function addon:PLAYER_ENTERING_WORLD()
-	doGroupUpdate()
-end
-function addon:UPDATE_INSTANCE_INFO()
-	doGroupUpdate()
-end
-
-function addon:GUILD_ROSTER_UPDATE()
+function doGuildUpdate()
 	if IsInGuild()  then
 		C_GuildInfo.GuildRoster()
 		for i = 1, GetNumGuildMembers(true) do
@@ -513,22 +458,25 @@ end
 local function initPlayerInfo()
 	if not XCHT_DB.enablePlayerChatStyle then return end
 	
-    addon:RegisterEvent("FRIENDLIST_UPDATE")
-	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE")
-    addon:RegisterEvent("GUILD_ROSTER_UPDATE")
-    addon:RegisterEvent("RAID_ROSTER_UPDATE")
-	addon:RegisterEvent("PLAYER_ENTERING_WORLD")
-	addon:RegisterEvent("UPDATE_INSTANCE_INFO")
+	addon:RegisterEvent("GUILD_ROSTER_UPDATE", function() doGuildUpdate() end)
+    addon:RegisterEvent("FRIENDLIST_UPDATE", function() doFriendUpdate() end)
+	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() doFriendUpdate() end)
+    addon:RegisterEvent("RAID_ROSTER_UPDATE", function() doRosterUpdate() end)
+	addon:RegisterEvent("PLAYER_ENTERING_WORLD", function() doRosterUpdate() end)
+	addon:RegisterEvent("UPDATE_INSTANCE_INFO", function() doRosterUpdate() end)
+	addon:RegisterEvent("ZONE_CHANGED_NEW_AREA", function() doRosterUpdate() end)
+	addon:RegisterEvent("UNIT_NAME_UPDATE", function() doRosterUpdate() end)
+	addon:RegisterEvent("UNIT_PORTRAIT_UPDATE", function() doRosterUpdate() end)
 	
 	--added in 5.0.4 to replace PARTY_MEMBERS_CHANGED and RAID_ROSTER_UPDATE
     if select(4, GetBuildInfo()) >= 50000 then
-		addon:RegisterEvent("GROUP_ROSTER_UPDATE")
+		addon:RegisterEvent("GROUP_ROSTER_UPDATE", function() doRosterUpdate() end)
     end
 	--this was removed in patch 8.0.1 so lets check for it
     if select(4, GetBuildInfo()) < 80000 and select(4, GetBuildInfo()) >= 20000 then
-		addon:RegisterEvent("PARTY_MEMBERS_CHANGED")
+		addon:RegisterEvent("PARTY_MEMBERS_CHANGED", function() doRosterUpdate() end)
     end
-    addon:RegisterEvent("PLAYER_LEVEL_UP")
+    addon:RegisterEvent("PLAYER_LEVEL_UP", function() initUpdateCurrentPlayer() end)
 end
 
 --[[------------------------
