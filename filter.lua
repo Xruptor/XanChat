@@ -54,6 +54,8 @@ local storedBarCount = 0
 --https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
 --https://github.com/Gethe/wow-ui-source/blob/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/AddOns/Blizzard_APIDocumentation/PartyInfoDocumentation.lua
 
+--https://wowwiki.fandom.com/wiki/Events_A-Z_(full_list)
+
 local coreList = {
 	["CHAT_MSG_SYSTEM"] = true,
 	["TIME_PLAYED_MSG"] = true,
@@ -193,10 +195,8 @@ function addon:DoFilterList()
 		_G["xanChat_BarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
         
 		bar_chk:SetScript("OnClick", function(self)
-			local checked = (self:GetChecked() and true or false)
-			self:SetChecked(checked or true and false)
-			checked = self:GetChecked() and true or false
-			
+			local checked = self:GetChecked()
+
 			--update the DB
 			if self.xData and self.xData.name then
 				--core list
@@ -233,6 +233,6 @@ function addon:searchFilterList(event, text)
 			return true
 		end
 	end
-	
+
 	return false
 end

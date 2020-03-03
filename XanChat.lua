@@ -156,7 +156,6 @@ local lastMsgEvent = {}
 
 local function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
 	if not addon.isFilterListEnabled or not XCHT_DB.enablePlayerChatStyle then return false end
-	--Debug('filter', self, event, msg, author)
 	--capture the events for AddMessage since they aren't forwarded.  Filters always go first before AddMessage
 	--use a messageIndex to keep track when messages are filtered or not, otherwise AddMessage can have something sent that didn't go through these filters.
 	messageIndex = messageIndex + 1
@@ -292,7 +291,7 @@ local function parsePlayerInfo(frame, text, ...)
 					playerServer = chkServer
 				else
 					--last case scenario, using a really crappy method
-					local findFirst = string.find(linkName, "-")
+					local findFirst = string.find(linkName, "-", 1, true)
 					if findFirst then
 						playerName = string.sub(linkName, 1, findFirst - 1)
 						playerServer = string.sub(linkName, findFirst + 1)
@@ -367,6 +366,14 @@ local function addToPlayerList(name, realm, level, class, BNname)
 	if playerServer and string.len(playerServer) > 0 then
 		realm = playerServer
 	end
+	--one last try
+	-- if not realm and string.find(name, "-", 1 true) then
+		-- playerName = string.sub(linkName, 1, findFirst - 1)
+		-- playerServer = string.sub(linkName, findFirst + 1)
+		-- if playerServer and string.len(playerServer) > 0 then
+			-- realm = playerServer
+		-- end
+	-- end
 	if not realm or string.len(realm) <= 0 then
 		realm = GetRealmName()
 	end
@@ -382,36 +389,51 @@ local function initUpdateCurrentPlayer()
 	local class = select(2, UnitClass("player"))
 	local name, realm = UnitName("player")
 	local level = UnitLevel("player")
-	--Debug('player', name, realm, level, class)
 	addToPlayerList(name, realm, level, class)
 end
 
-local function doRaidUpdate()
-	local GetNumRaidMembers = GetNumGroupMembers or GetNumRaidMembers
-	for i = 1, GetNumRaidMembers() do
-		local name, rank, subgroup, level, class, fileName, zone, online, isDead, role, isML = GetRaidRosterInfo(i)
-		local playerName, playerServer = UnitName("raid"..i)
-		if playerName and playerServer then
-			--Debug('raid1', playerName, playerServer, level, class)
-			addToPlayerList(playerName, playerServer, level, class)
-		else
-			--Debug('raid2', name, GetRealmName(), level, class)
-			addToPlayerList(name, GetRealmName(), level, class)
+local function doGroupUpdate()
+
+	local chkRaid = IsInRaid()
+	local IsInGroup = chkRaid or IsInGroup()
+	--local GetNumPartyMembers = GetNumSubgroupMembers or GetNumPartyMembers
+	--local GetNumRaidMembers = GetNumGroupMembers or GetNumRaidMembers
+	
+	-- if UnitInRaid("player") or IsInRaid() then
+		-- for i = 1, MAX_RAID_MEMBERS do
+			-- local unit = "raid"..i
+			-- if UnitExists(unit) then
+				-- local playerName, playerServer = UnitName(unit)
+				-- local _, class = UnitClass(unit)
+				-- local level = UnitLevel(unit)
+			-- else
+				-- break
+			-- end
+		-- end
+	-- else
+		-- for i = 1, MAX_PARTY_MEMBERS do
+			-- local unit = "party"..i
+			-- if UnitExists(unit) then
+				-- local playerName, playerServer = UnitName(unit)
+				-- local _, class = UnitClass(unit)
+				-- local level = UnitLevel(unit)
+			-- end
+		-- end
+	-- end
+
+
+	if IsInGroup then
+		local playerNum, unit = (chkRaid and GetNumGroupMembers()) or MAX_PARTY_MEMBERS, (chkRaid and "raid") or "party"
+		for i = 1, playerNum do
+			if UnitExists(unit..i) then
+				local playerName, playerServer = UnitName(unit..i)
+				local _, class = UnitClass(unit..i)
+				local level = UnitLevel(unit..i)
+				addToPlayerList(playerName, playerServer, level, class)
+			end
 		end
 	end
-end
 
-local function doPartyUpdate()
-	--GetNumPartyMembers was replaced so lets check for that
-	local GetNumPartyMembers = GetNumSubgroupMembers or GetNumPartyMembers
-	for i = 1, GetNumPartyMembers() do
-		local unit = "party" .. i
-		local _, class = UnitClass(unit)
-		local name, server = UnitName(unit)
-		local level = UnitLevel(unit)
-		--Debug('party', name, server or GetRealmName(), level, class)
-		addToPlayerList(name, server, level, class)
-	end
 end
 
 local function doFriendUpdate()
@@ -419,7 +441,6 @@ local function doFriendUpdate()
 		local info = C_FriendList.GetFriendInfoByIndex(i)
 		--make sure they are online
 		if info and info.connected then
-			--Debug('friend', info.name, GetRealmName(), info.level, info.className)
 			addToPlayerList(info.name, GetRealmName(), info.level, info.className)
 		end
 	end
@@ -440,12 +461,35 @@ local function doFriendUpdate()
 	end
 end
 
+function addon:PLAYER_LEVEL_UP()
+	initUpdateCurrentPlayer()
+end
+
 function addon:FRIENDLIST_UPDATE()
 	doFriendUpdate()
 end
 
 function addon:BN_FRIEND_ACCOUNT_ONLINE()
 	doFriendUpdate()
+end
+
+function addon:RAID_ROSTER_UPDATE()
+	doGroupUpdate()
+end
+
+function addon:GROUP_ROSTER_UPDATE()
+	doGroupUpdate()
+end
+
+function addon:PARTY_MEMBERS_CHANGED()
+	doGroupUpdate()
+end
+
+function addon:PLAYER_ENTERING_WORLD()
+	doGroupUpdate()
+end
+function addon:UPDATE_INSTANCE_INFO()
+	doGroupUpdate()
 end
 
 function addon:GUILD_ROSTER_UPDATE()
@@ -457,32 +501,13 @@ function addon:GUILD_ROSTER_UPDATE()
 				--only do online players
 				local playerName, playerServer = name:match("([^%-]+)%-?(.*)")
 				if playerName and playerServer then
-					--Debug('guild1', playerName, playerServer, level, class)
 					addToPlayerList(playerName, playerServer, level, class)
 				else
-					--Debug('guild2', name, GetRealmName(), level, class)
 					addToPlayerList(name, GetRealmName(), level, class)
 				end
 			end
 		end
 	end
-end
-
-function addon:RAID_ROSTER_UPDATE()
-	doRaidUpdate()
-end
-
-function addon:GROUP_ROSTER_UPDATE()
-	doRaidUpdate()
-	doPartyUpdate()
-end
-
-function addon:PARTY_MEMBERS_CHANGED()
-	doPartyUpdate()
-end
-
-function addon:PLAYER_LEVEL_UP()
-	initUpdateCurrentPlayer()
 end
 
 local function initPlayerInfo()
@@ -492,6 +517,8 @@ local function initPlayerInfo()
 	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE")
     addon:RegisterEvent("GUILD_ROSTER_UPDATE")
     addon:RegisterEvent("RAID_ROSTER_UPDATE")
+	addon:RegisterEvent("PLAYER_ENTERING_WORLD")
+	addon:RegisterEvent("UPDATE_INSTANCE_INFO")
 	
 	--added in 5.0.4 to replace PARTY_MEMBERS_CHANGED and RAID_ROSTER_UPDATE
     if select(4, GetBuildInfo()) >= 50000 then
@@ -533,9 +560,11 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 	hideOnEscape = true,
 }
 
+debugTable = {}
+
 local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
-	--Debug('message', frame, text, string.join(", ", tostringall(...)))
+
 	if XCHT_DB.shortNames and type(text) == "string" then
 		local chatNum = string.match(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
@@ -554,8 +583,6 @@ local AddMessage = function(frame, text, ...)
 		if string.find(text, "|Hplayer:", 1, true) then
 			local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
 			if old and new and string.find(text, old, 1, true) then
-				--Debug('replacing', old, new, playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
-				--Debug('found', playerLink, string.find(text, playerLink), gsub(text, "|", "!"))
 				text = plainTextReplace(text, old, new)
 			end
 		end
@@ -580,6 +607,8 @@ local AddMessage = function(frame, text, ...)
 						if k and v then
 							local pN, pR = strsplit("@", k)
 							local passChk = false
+							--playerName, playerServer = linkName:match("([^%-]+)%-?(.*)")
+							
 							--make sure we even have a player in the string before editing it
 							if pN and pR and string.find(text, pN, 1, true) and v.class then
 
@@ -623,7 +652,24 @@ local AddMessage = function(frame, text, ...)
 		end
 		
 	end
+	
+	-- local tblIndex
+	-- if (... ~= nil) then
+		-- --https://wow.gamepedia.com/API_ScrollingMessageFrame_AddMessage
+		-- --there is a sixth parameter that is currently unknown, the number is random it seems
+		-- table.insert(debugTable, {text = text, opts = {...} })
+		-- tblIndex = #debugTable
+	-- else
+		-- table.insert(debugTable, {text = text})
+		-- tblIndex = #debugTable
+	-- end
 
+	-- if debugTable[tblIndex].opts then
+		-- msgHooks[frame:GetName()].AddMessage(frame, debugTable[tblIndex].text, unpack(debugTable[tblIndex].opts))
+	-- else
+		-- msgHooks[frame:GetName()].AddMessage(frame, debugTable[tblIndex].text)
+	-- end
+	
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
@@ -880,42 +926,25 @@ local function RestoreSettings(chatFrame)
 	
 end
 
-local function doValueUpdate(checkBool, groupType)
-	SaveSettings(FCF_GetCurrentChatFrame() or nil)
+local function saveChatSettings(f)
+	SaveLayout(f)
+	SaveSettings(f)
 end
 
-local origFCF_SavePositionAndDimensions = FCF_SavePositionAndDimensions
-FCF_SavePositionAndDimensions = function(chatFrame)
-	--do the old stuff first then save OUR settings
-	origFCF_SavePositionAndDimensions(chatFrame)
-    SaveSettings(chatFrame)
-	SaveLayout(chatFrame)
+local function restoreChatSettings(f)
+	RestoreSettings(f)
+	RestoreLayout(f)
 end
 
-local origFCF_RestorePositionAndDimensions = FCF_RestorePositionAndDimensions
-FCF_RestorePositionAndDimensions = function(chatFrame)
-	--do the old stuff first then restore OUR settings
-	origFCF_RestorePositionAndDimensions(chatFrame)
-    RestoreSettings(chatFrame)
-	RestoreLayout(chatFrame)
-end
-
-local origFCF_Close = FCF_Close
-FCF_Close = function(chatFrame)
-	--do the old stuff first then save OUR settings
-	origFCF_Close(chatFrame)
-    SaveSettings(chatFrame)
-	SaveLayout(chatFrame)
-end
-
-local origFCF_ToggleLock = FCF_ToggleLock
-FCF_ToggleLock = function()
+local function doSaveCurrentChatFrame()
     local chatFrame = FCF_GetCurrentChatFrame()
     if chatFrame then
-        SaveLayout(chatFrame)
-        SaveSettings(chatFrame)
+        saveChatSettings(chatFrame)
     end
-    origFCF_ToggleLock()
+end
+
+local function doValueUpdate(checkBool, groupType)
+	saveChatSettings(FCF_GetCurrentChatFrame() or nil)
 end
 
 hooksecurefunc("ToggleChatMessageGroup", doValueUpdate)
@@ -926,10 +955,21 @@ hooksecurefunc("ToggleMessageType", doValueUpdate)
 hooksecurefunc("ToggleChatChannel", doValueUpdate)
 hooksecurefunc("ToggleChatColorNamesByClassGroup", doValueUpdate)
 
-local function updateChatSettings(f)
-	SaveLayout(f)
-	SaveSettings(f)
-end
+hooksecurefunc("FCF_SavePositionAndDimensions", function(chatFrame) saveChatSettings(chatFrame) end)
+hooksecurefunc("FCF_RestorePositionAndDimensions", function(chatFrame) saveChatSettings(chatFrame) end)
+hooksecurefunc("FCF_Close", function(chatFrame) saveChatSettings(chatFrame) end)
+hooksecurefunc("FCF_ToggleLock", function() doSaveCurrentChatFrame() end)
+hooksecurefunc("FCF_ToggleLockOnDockedFrame", function() doSaveCurrentChatFrame() end)
+hooksecurefunc("FCF_ToggleUninteractable", function() doSaveCurrentChatFrame() end)
+hooksecurefunc("FCF_DockFrame", function(chatFrame, index, selected) saveChatSettings(chatFrame) end)
+hooksecurefunc("FCF_Close", function(chatFrame, fallback) saveChatSettings(chatFrame) end)
+hooksecurefunc("FCF_StopDragging", function(chatFrame) saveChatSettings(chatFrame) end)
+hooksecurefunc("FCF_Tab_OnClick", function(self, button)
+	local chatFrame = _G["ChatFrame"..self:GetID()]
+	if chatFrame then
+		saveChatSettings(chatFrame)
+	end
+end)
 
 --[[------------------------
 	CHAT COPY
@@ -1286,12 +1326,9 @@ function addon:PLAYER_LOGIN()
 			XANCHAT_Frame = XANCHAT_Frame or {}
 			XANCHAT_Frame[i] = f
 
-			--restore any settings
-			RestoreSettings(f)
-			
-			--restore saved layout
-			RestoreLayout(f)
-			
+			--restore any settings and layout
+			restoreChatSettings(f)
+
 			--ChatFrame
 			f:HookScript("OnMouseDown", function(self, button)
 				if not f.isMoving and not f.isLocked then
@@ -1320,13 +1357,11 @@ function addon:PLAYER_LOGIN()
 			
 			--ChatFrame
 			hooksecurefunc(f, "StopMovingOrSizing", function(self)
-				SaveLayout(f)
-				SaveSettings(f)
+				saveChatSettings(f)
 			end)
 			--Tab
 			hooksecurefunc(fTab, "StopMovingOrSizing", function(self)
-				SaveLayout(f)
-				SaveSettings(f)
+				saveChatSettings(f)
 			end)
 
 			--always lock the frames regardless
@@ -1541,14 +1576,14 @@ function addon:PLAYER_LOGIN()
 	addon:UnregisterEvent("PLAYER_LOGIN")
 	addonLoaded = true
 	
-	--once everything is loaded updated the settings for the chat, only do this once per version updateChatSettings
+	--once everything is loaded updated the settings for the chat, only do this once per version saveChatSettings
 	if XCHT_DB.dbVer == nil or XCHT_DB.dbVer ~= ver then
 		for i = 1, NUM_CHAT_WINDOWS do
 			local n = ("ChatFrame%d"):format(i)
 			local f = _G[n]
 			
 			if f then
-				updateChatSettings(f)
+				saveChatSettings(f)
 			end
 		end
 		XCHT_DB.dbVer = ver 
@@ -1561,10 +1596,9 @@ function addon:UI_SCALE_CHANGED()
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
 		if f then
-			--restore any settings
-			RestoreSettings(f)
-			--restore saved layout
-			RestoreLayout(f)
+			--restore any settings and layout
+			restoreChatSettings(f)
+
 			--always lock the frames regardless (using both calls just in case)
 			SetChatWindowLocked(i, true)
 			FCF_SetLocked(f, true)
