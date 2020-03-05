@@ -437,7 +437,7 @@ local function doFriendUpdate()
 	end
 end
 
-function doGuildUpdate()
+local function doGuildUpdate()
 	if IsInGuild()  then
 		C_GuildInfo.GuildRoster()
 		for i = 1, GetNumGuildMembers(true) do
