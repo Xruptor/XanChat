@@ -19,7 +19,8 @@ local function addConfigEntry(objEntry, adjustX, adjustY, isCustom)
 		if not lastObject then
 			objEntry:SetPoint("TOPLEFT", 20, -150)
 		else
-			objEntry:SetPoint("LEFT", lastObject, "BOTTOMLEFT", adjustX or 0, adjustY or -30)
+			local point, relativeTo, relativePoint, xOfs, yOfs = lastObject:GetPoint()
+			objEntry:SetPoint("TOPLEFT", adjustX or 0, (yOfs + adjustY) or -30)
 		end
 		
 		lastObject = objEntry
@@ -91,6 +92,17 @@ local function createSlider(parentFrame, displayText, minVal, maxVal)
 	slider.currVal = currVal
 	
 	return slider
+end
+
+local function setEnabled(objType, obj, switch)
+	if objType == "checkbox" then
+		obj:SetEnabled(switch)
+		if switch then
+			obj.Text:SetTextColor(1, 1, 1) --white
+		else
+			obj.Text:SetTextColor(128/255, 128/255, 128/255) --gray
+		end
+	end
 end
 
 local function LoadAboutFrame()
@@ -195,7 +207,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSocial:SetScript("OnClick", btnSocial.func)
 	
-	addConfigEntry(btnSocial, 0, -15)
+	addConfigEntry(btnSocial, 20, -21)
 	addon.aboutPanel.btnSocial = btnSocial
 
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
@@ -218,7 +230,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnScroll:SetScript("OnClick", btnScroll.func)
 	
-	addConfigEntry(btnScroll, 0, -15)
+	addConfigEntry(btnScroll, 20, -21)
 	addon.aboutPanel.btnScroll = btnScroll
 
 	local btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
@@ -241,7 +253,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnShortNames:SetScript("OnClick", btnShortNames.func)
 	
-	addConfigEntry(btnShortNames, 0, -15)
+	addConfigEntry(btnShortNames, 20, -21)
 	addon.aboutPanel.btnShortNames = btnShortNames
 
 	local btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
@@ -264,7 +276,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnEditBox:SetScript("OnClick", btnEditBox.func)
 	
-	addConfigEntry(btnEditBox, 0, -15)
+	addConfigEntry(btnEditBox, 20, -21)
 	addon.aboutPanel.btnEditBox = btnEditBox
 
 	local btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
@@ -287,7 +299,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnTabs:SetScript("OnClick", btnTabs.func)
 	
-	addConfigEntry(btnTabs, 0, -15)
+	addConfigEntry(btnTabs, 20, -21)
 	addon.aboutPanel.btnTabs = btnTabs
 
 	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
@@ -310,7 +322,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnShadow:SetScript("OnClick", btnShadow.func)
 	
-	addConfigEntry(btnShadow, 0, -15)
+	addConfigEntry(btnShadow, 20, -21)
 	addon.aboutPanel.btnShadow = btnShadow
 
 	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
@@ -333,7 +345,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnVoice:SetScript("OnClick", btnVoice.func)
 	
-	addConfigEntry(btnVoice, 0, -15)
+	addConfigEntry(btnVoice, 20, -21)
 	addon.aboutPanel.btnVoice = btnVoice
 	
 	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
@@ -358,11 +370,14 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnEditBoxBorder:SetScript("OnClick", btnEditBoxBorder.func)
 	
-	addConfigEntry(btnEditBoxBorder, 0, -15)
+	addConfigEntry(btnEditBoxBorder, 20, -21)
 	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
 	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SlashSimpleEditBoxInfo)
-	btnSimpleEditBox:SetScript("OnShow", function() btnSimpleEditBox:SetChecked(XCHT_DB.enableSimpleEditbox) end)
+	btnSimpleEditBox:SetScript("OnShow", function() 
+		btnSimpleEditBox:SetChecked(XCHT_DB.enableSimpleEditbox)
+		setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
+	end)
 	btnSimpleEditBox.func = function(slashSwitch)
 		local value = XCHT_DB.enableSimpleEditbox
 		if not slashSwitch then value = btnSimpleEditBox:GetChecked() end
@@ -370,10 +385,12 @@ function configEvent:PLAYER_LOGIN()
 		if value then
 			XCHT_DB.enableSimpleEditbox = false
 			XCHT_DB.hideEditboxBorder = false --turn this off
+			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOff)
 		else
 			XCHT_DB.enableSimpleEditbox = true
 			XCHT_DB.hideEditboxBorder = false --turn this off
+			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOn)
 		end
 		
@@ -383,20 +400,48 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSimpleEditBox:SetScript("OnClick", btnSimpleEditBox.func)
 	
-	addConfigEntry(btnSimpleEditBox, 0, -15)
+	addConfigEntry(btnSimpleEditBox, 20, -21)
 	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
 	
+	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SlashSEBDesignInfo)
+	btnSEBDesign:SetScript("OnShow", function() btnSEBDesign:SetChecked(XCHT_DB.enableSEBDesign) end)
+	btnSEBDesign.func = function(slashSwitch)
+		local value = XCHT_DB.enableSEBDesign
+		if not slashSwitch then value = btnSEBDesign:GetChecked() end
+
+		if value then
+			XCHT_DB.enableSEBDesign = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSEBDesignOff)
+		else
+			XCHT_DB.enableSEBDesign = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSEBDesignOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnSEBDesign:SetScript("OnClick", btnSEBDesign.func)
+	
+	addConfigEntry(btnSEBDesign, 45, -21)
+	addon.aboutPanel.btnSEBDesign = btnSEBDesign
+	
 	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteInfo)
-	btnCopyPaste:SetScript("OnShow", function() btnCopyPaste:SetChecked(XCHT_DB.enableCopyButton) end)
+	btnCopyPaste:SetScript("OnShow", function() 
+		btnCopyPaste:SetChecked(XCHT_DB.enableCopyButton)
+		setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
+	end)
 	btnCopyPaste.func = function(slashSwitch)
 		local value = XCHT_DB.enableCopyButton
 		if not slashSwitch then value = btnCopyPaste:GetChecked() end
 
 		if value then
 			XCHT_DB.enableCopyButton = false
+			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteOff)
 		else
 			XCHT_DB.enableCopyButton = true
+			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteOn)
 		end
 		
@@ -406,7 +451,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnCopyPaste:SetScript("OnClick", btnCopyPaste.func)
 	
-	addConfigEntry(btnCopyPaste, 0, -15)
+	addConfigEntry(btnCopyPaste, 20, -21)
 	addon.aboutPanel.btnCopyPaste = btnCopyPaste
 	
 	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteLeftInfo)
@@ -429,7 +474,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnCopyPasteLeft:SetScript("OnClick", btnCopyPasteLeft.func)
 	
-	addConfigEntry(btnCopyPasteLeft, 0, -15)
+	addConfigEntry(btnCopyPasteLeft, 45, -21)
 	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 	
 	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
@@ -449,7 +494,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
 	
-	addConfigEntry(btnPlayerChatStyle, 0, -15)
+	addConfigEntry(btnPlayerChatStyle, 20, -21)
 	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
 	
 	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.SlashChatTextFadeInfo)
@@ -472,7 +517,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnChatTextFade:SetScript("OnClick", btnChatTextFade.func)
 	
-	addConfigEntry(btnChatTextFade, 0, -15)
+	addConfigEntry(btnChatTextFade, 20, -21)
 	addon.aboutPanel.btnChatTextFade = btnChatTextFade
 	
 	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
@@ -495,8 +540,33 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnChatFrameFade:SetScript("OnClick", btnChatFrameFade.func)
 	
-	addConfigEntry(btnChatFrameFade, 0, -15)
+	addConfigEntry(btnChatFrameFade, 20, -21)
 	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
+	
+	--slider chat alpha
+	local sliderChatAlpha = createSlider(addon.aboutPanel, L.SlashChatAlphaText, 0, 100)
+	sliderChatAlpha:SetScript("OnShow", function()
+		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
+		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
+	end)
+	sliderChatAlpha.func = function(value)
+		XCHT_DB.userChatAlpha = tonumber(value) / 100
+		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
+		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
+		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.SlashChatAlphaSet, floor(value)))
+		addon:setChatAlpha()
+	end
+	sliderChatAlpha.sliderMouseUp = function(self, button)
+		sliderChatAlpha.func(sliderChatAlpha:GetValue())
+	end
+	sliderChatAlpha.sliderFunc = function(self, value)
+		sliderChatAlpha.currVal:SetText("("..floor(value)..")")
+	end
+	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
+	sliderChatAlpha:SetScript("OnMouseUp", sliderChatAlpha.sliderMouseUp)
+	
+	addConfigEntry(sliderChatAlpha, 20, -50)
+	addon.aboutPanel.sliderChatAlpha = sliderChatAlpha
 	
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end

@@ -751,40 +751,14 @@ local function SaveSettings(chatFrame)
 	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
 	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
-	local windowMessageColors = {}
-	local windowChannelColors = {}
+
+	--GetMessageTypeColor(channelType or id) "CHANNEL1" or number
+	--ChangeChatColor(channelType or id, r, g, b) "CHANNEL1" or number
 	
-	--CHAT_CONFIG_CHANNEL_LIST
-	--ChatConfigFrame
-	
-	--OTHER CATEGORY under Chat Settings
-	--ChatFrame_RemoveAllMessageGroups
-	--ChatFrame_AddMessageGroup
-	
-	--to get more information about colors and how to change it, check on CHAT_CONFIG_CURRENT_COLOR_SWATCH
-	--lets save the message colors
-	for k=1, #windowMessages do
-		if ChatTypeGroup[windowMessages[k]] then
-			local colorR, colorG, colorB, messageType = GetMessageTypeColor(windowMessages[k])
-			if colorR and colorG and colorB then
-				windowMessageColors[k] = {colorR, colorG, colorB, windowMessages[k]}
-			end
-		end
-	end
-	
-	--lets save the channel colors
-	for k=1, #windowChannels do
-		if Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k]) then
-			windowChannelColors[k] = {Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k])}
-		end
-	end
-		
 	db.chatParent = chatFrame:GetParent():GetName()
 	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
 	db.windowMessages = windowMessages
 	db.windowChannels = windowChannels
-	db.windowChannelColors = windowChannelColors
-	db.windowMessageColors = windowMessageColors
 	db.fadingDuration = chatFrame:GetTimeVisible() or 120
 	db.defaultFrameAlpha = DEFAULT_CHATFRAME_ALPHA
 
@@ -811,18 +785,7 @@ local function RestoreSettings(chatFrame)
 			AddChatWindowMessages(chatFrame:GetID(), newWindowMessages[k])
 		end
 	end
-	
-	--lets set the windowMessageColors
-	if db.windowMessageColors then
-		--add the stored ones
-		local newWindowMessageColors = db.windowMessageColors
-		for k=1, #newWindowMessageColors do
-			if newWindowMessageColors[k] and newWindowMessageColors[k][4] then
-				ChangeChatColor(newWindowMessageColors[k][4], newWindowMessageColors[k][1], newWindowMessageColors[k][2], newWindowMessageColors[k][3])
-			end
-		end
-	end
-	
+
 	if db.windowChannels then
 		--remove current window channels
 		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
@@ -833,17 +796,6 @@ local function RestoreSettings(chatFrame)
 		local newWindowChannels = db.windowChannels
 		for k=1, #newWindowChannels do
 			AddChatWindowChannel(chatFrame:GetID(), newWindowChannels[k])
-		end
-	end
-	
-	--lets set the windowChannelColors
-	if db.windowChannelColors then
-		--add the stored ones
-		local newWindowChannelColors = db.windowChannelColors
-		for k=1, #newWindowChannelColors do
-			if newWindowChannelColors[k] and newWindowChannelColors[k][1] then
-				ChangeChatColor("CHANNEL"..k, newWindowChannelColors[k][1], newWindowChannelColors[k][2], newWindowChannelColors[k][3])
-			end
 		end
 	end
 
@@ -1020,7 +972,8 @@ local function GetChatText(id)
 end
 
 local function CreateCopyChatButtons(i)
-
+	if not XCHT_DB.enableCopyButton then return end
+	
 	local copyFrame = CreateCopyFrame()
 	local chatFrame = _G['ChatFrame'..i]
 	
@@ -1047,17 +1000,13 @@ local function CreateCopyChatButtons(i)
 		obj:SetPoint("BOTTOMRIGHT", -2, -3)
 		
 		chatFrame:HookScript("OnEnter", function(self)
-			if (XCHT_DB.enableCopyButton) then
-				obj:Show()
-			end
+			obj:Show()
 		end)
 		chatFrame:HookScript("OnLeave", function(self)
 			obj:Hide()
 		end)
 		chatFrame.ScrollToBottomButton:HookScript("OnEnter", function(self)
-			if (XCHT_DB.enableCopyButton) then
-				obj:Show()
-			end
+			obj:Show()
 		end)
 		chatFrame.ScrollToBottomButton:HookScript("OnLeave", function(self)
 			obj:Hide()
@@ -1161,14 +1110,57 @@ end
 	Chat Frame Fading
 --------------------------]]
 
+local old_FCF_FadeInChatFrame = FCF_FadeInChatFrame
 local old_FCF_FadeOutChatFrame = FCF_FadeOutChatFrame
 local old_FCF_FadeOutScrollbar = FCF_FadeOutScrollbar
 local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
 
+function addon:setChatAlpha()
+	DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
+	
+	for i = 1, NUM_CHAT_WINDOWS do
+		local n = ("ChatFrame%d"):format(i)
+		local f = _G[n]
+		local fTab = _G[n.."Tab"]
+
+		if f then
+			--these two settings are very important, do not remove
+			f.oldAlpha = 0
+			f.hasBeenFaded = false
+			--only force fade in if we have it disabled
+			if not XCHT_DB.enableChatFrameFade then
+				if f.isDocked or fTab:IsVisible() then
+					FCF_FadeInChatFrame(f)
+					FCF_FadeInScrollbar(f)
+				end
+			end
+		end
+	end
+end
+
+local function doAlphaCheck(chatframe)
+	local frameName = chatframe:GetName()
+	chatframe.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
+	chatframe.hasBeenFaded = true
+	for index, value in pairs(CHAT_FRAME_TEXTURES) do
+		local object = _G[frameName..value]
+		object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
+	end
+end
+
 local function enableChatFrameFading()
 
+	FCF_FadeInChatFrame = function(chatframe)
+		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+			doAlphaCheck(chatframe)
+			return
+		end
+		old_FCF_FadeInChatFrame(chatframe)
+	end
+	
 	FCF_FadeOutChatFrame = function(chatframe)
 		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+			doAlphaCheck(chatframe)
 			return
 		end
 		old_FCF_FadeOutChatFrame(chatframe)
@@ -1183,14 +1175,14 @@ local function enableChatFrameFading()
 
 	FCF_SetWindowAlpha = function(frame, alpha, doNotSave)
 		if frame:GetName() and string.find(frame:GetName(), "ChatFrame", 1, true) then
-			frame.oldAlpha = DEFAULT_CHATFRAME_ALPHA
+			frame.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
 			return
 		end
 		old_FCF_SetWindowAlpha(frame, alpha, doNotSave)
 	end
 	
-end		
-	
+end
+
 --[[------------------------
 	PLAYER_LOGIN
 --------------------------]]
@@ -1220,12 +1212,14 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.hideVoice == nil then XCHT_DB.hideVoice = false end
 	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
 	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
+	if XCHT_DB.enableSEBDesign == nil then XCHT_DB.enableSEBDesign = false end
 	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
 	if XCHT_DB.enablePlayerChatStyle == nil then XCHT_DB.enablePlayerChatStyle = true end
 	if XCHT_DB.enableChatTextFade == nil then XCHT_DB.enableChatTextFade = true end
 	if XCHT_DB.enableChatFrameFade == nil then XCHT_DB.enableChatFrameFade = true end
 	if XCHT_DB.enableCopyButtonLeft == nil then XCHT_DB.enableCopyButtonLeft = false end
 	if XCHT_DB.lockChatSettings == nil then XCHT_DB.lockChatSettings = false end
+	if XCHT_DB.userChatAlpha == nil then XCHT_DB.userChatAlpha = 0.25 end  --uses blizzard default value from DEFAULT_CHATFRAME_ALPHA
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1261,6 +1255,14 @@ function addon:PLAYER_LOGIN()
 		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
 	end
 
+	--check for chat box fading
+	if not XCHT_DB.enableChatFrameFade then
+		enableChatFrameFading()
+	end
+	
+	--set the alpha levels
+	addon:setChatAlpha()
+			
 	for i = 1, NUM_CHAT_WINDOWS do
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
@@ -1322,18 +1324,7 @@ function addon:PLAYER_LOGIN()
 				f:SetFont(font, size, "THINOUTLINE")
 				f:SetShadowColor(0, 0, 0, 0)
 			end
-
-			--check for chat box fading
-			f.oldAlpha = 0
-			f.hasBeenFaded = false
-			if not XCHT_DB.enableChatFrameFade then
-				enableChatFrameFading()
-				if f.isDocked or fTab:IsVisible() then
-					FCF_FadeInChatFrame(f)
-					FCF_FadeInScrollbar(f)
-				end
-			end
-
+			
 			--few changes
 			f:EnableMouseWheel(true)
 			f:SetScript('OnMouseWheel', scrollChat)
@@ -1387,12 +1378,25 @@ function addon:PLAYER_LOGIN()
 				editBox.right:SetAlpha(0)
 				editBox.mid:SetAlpha(0)
 				
-				local editBoxBackdrop = {
-					bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
-					edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]], edgeSize = 16,
-					insets = { left = 3, right = 3, top = 3, bottom = 3 }
-				}
-
+				local editBoxBackdrop
+				
+				if XCHT_DB.enableSEBDesign then
+					editBoxBackdrop = {
+						bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+						edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]],
+						tile = true,
+						tileSize = 16,
+						edgeSize = 12,
+						insets = { left = 3, right = 3, top = 3, bottom = 3 }
+					}
+				else
+					editBoxBackdrop = {
+						bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+						edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]], edgeSize = 16,
+						insets = { left = 3, right = 3, top = 3, bottom = 3 }
+					}
+				end
+				
 				if XCHT_DB.enableSimpleEditbox then
 					editBox.focusLeft:SetTexture(nil)
 					editBox.focusRight:SetTexture(nil)
