@@ -68,7 +68,7 @@ function addon:EnableStickyChannelsList()
 	--update the list in case anything was added in future updates
 	for k, v in pairs(StickyTypeChannels) do
 		if k and XCHT_DB.stickyChannelsList[k] == nil then
-			XCHT_DB.stickyChannelsList[k] = 1 --enable it by default, so all will be sticky
+			XCHT_DB.stickyChannelsList[k] = v --set defaults
 		end
 	end
 	
