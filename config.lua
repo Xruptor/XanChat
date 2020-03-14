@@ -159,13 +159,22 @@ function configEvent:PLAYER_LOGIN()
 	
 	addon.aboutPanel = LoadAboutFrame()
 	
+	local btnStickyChannelsList = createButton(addon.aboutPanel, L.EditStickyChannelsListHeader)
+	btnStickyChannelsList.func = function()
+		if addon.stickyChannelsList then addon.stickyChannelsList:Show() end
+	end
+	btnStickyChannelsList:SetScript("OnClick", btnStickyChannelsList.func)
+	
+	addConfigEntry(btnStickyChannelsList, 403, -20, true)
+	addon.aboutPanel.btnStickyChannelsList = btnStickyChannelsList
+	
 	local btnFilterList = createButton(addon.aboutPanel, L.EditFilterListHeader)
 	btnFilterList.func = function()
 		if addon.filterList then addon.filterList:Show() end
 	end
 	btnFilterList:SetScript("OnClick", btnFilterList.func)
 	
-	addConfigEntry(btnFilterList, 430, -30, true)
+	addConfigEntry(btnFilterList, 410, -55, true)
 	addon.aboutPanel.btnFilterList = btnFilterList
 	
 	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.SlashLockChatSettingsInfo.."|r")
@@ -207,7 +216,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSocial:SetScript("OnClick", btnSocial.func)
 	
-	addConfigEntry(btnSocial, 20, -21)
+	addConfigEntry(btnSocial, 20, -22)
 	addon.aboutPanel.btnSocial = btnSocial
 
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
@@ -230,7 +239,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnScroll:SetScript("OnClick", btnScroll.func)
 	
-	addConfigEntry(btnScroll, 20, -21)
+	addConfigEntry(btnScroll, 20, -22)
 	addon.aboutPanel.btnScroll = btnScroll
 
 	local btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
@@ -253,7 +262,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnShortNames:SetScript("OnClick", btnShortNames.func)
 	
-	addConfigEntry(btnShortNames, 20, -21)
+	addConfigEntry(btnShortNames, 20, -22)
 	addon.aboutPanel.btnShortNames = btnShortNames
 
 	local btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
@@ -276,7 +285,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnEditBox:SetScript("OnClick", btnEditBox.func)
 	
-	addConfigEntry(btnEditBox, 20, -21)
+	addConfigEntry(btnEditBox, 20, -22)
 	addon.aboutPanel.btnEditBox = btnEditBox
 
 	local btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
@@ -299,7 +308,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnTabs:SetScript("OnClick", btnTabs.func)
 	
-	addConfigEntry(btnTabs, 20, -21)
+	addConfigEntry(btnTabs, 20, -22)
 	addon.aboutPanel.btnTabs = btnTabs
 
 	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
@@ -322,7 +331,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnShadow:SetScript("OnClick", btnShadow.func)
 	
-	addConfigEntry(btnShadow, 20, -21)
+	addConfigEntry(btnShadow, 20, -22)
 	addon.aboutPanel.btnShadow = btnShadow
 
 	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
@@ -345,7 +354,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnVoice:SetScript("OnClick", btnVoice.func)
 	
-	addConfigEntry(btnVoice, 20, -21)
+	addConfigEntry(btnVoice, 20, -22)
 	addon.aboutPanel.btnVoice = btnVoice
 	
 	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
@@ -370,7 +379,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnEditBoxBorder:SetScript("OnClick", btnEditBoxBorder.func)
 	
-	addConfigEntry(btnEditBoxBorder, 20, -21)
+	addConfigEntry(btnEditBoxBorder, 20, -22)
 	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
 	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SlashSimpleEditBoxInfo)
@@ -400,7 +409,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSimpleEditBox:SetScript("OnClick", btnSimpleEditBox.func)
 	
-	addConfigEntry(btnSimpleEditBox, 20, -21)
+	addConfigEntry(btnSimpleEditBox, 20, -22)
 	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
 	
 	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SlashSEBDesignInfo)
@@ -423,7 +432,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSEBDesign:SetScript("OnClick", btnSEBDesign.func)
 	
-	addConfigEntry(btnSEBDesign, 45, -21)
+	addConfigEntry(btnSEBDesign, 45, -22)
 	addon.aboutPanel.btnSEBDesign = btnSEBDesign
 	
 	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteInfo)
@@ -451,7 +460,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnCopyPaste:SetScript("OnClick", btnCopyPaste.func)
 	
-	addConfigEntry(btnCopyPaste, 20, -21)
+	addConfigEntry(btnCopyPaste, 20, -22)
 	addon.aboutPanel.btnCopyPaste = btnCopyPaste
 	
 	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteLeftInfo)
@@ -474,7 +483,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnCopyPasteLeft:SetScript("OnClick", btnCopyPasteLeft.func)
 	
-	addConfigEntry(btnCopyPasteLeft, 45, -21)
+	addConfigEntry(btnCopyPasteLeft, 45, -22)
 	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 	
 	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
@@ -494,7 +503,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
 	
-	addConfigEntry(btnPlayerChatStyle, 20, -21)
+	addConfigEntry(btnPlayerChatStyle, 20, -22)
 	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
 	
 	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.SlashChatTextFadeInfo)
@@ -517,7 +526,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnChatTextFade:SetScript("OnClick", btnChatTextFade.func)
 	
-	addConfigEntry(btnChatTextFade, 20, -21)
+	addConfigEntry(btnChatTextFade, 20, -22)
 	addon.aboutPanel.btnChatTextFade = btnChatTextFade
 	
 	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
@@ -540,7 +549,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnChatFrameFade:SetScript("OnClick", btnChatFrameFade.func)
 	
-	addConfigEntry(btnChatFrameFade, 20, -21)
+	addConfigEntry(btnChatFrameFade, 20, -22)
 	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
 	
 	--slider chat alpha
@@ -565,9 +574,16 @@ function configEvent:PLAYER_LOGIN()
 	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
 	sliderChatAlpha:SetScript("OnMouseUp", sliderChatAlpha.sliderMouseUp)
 	
-	addConfigEntry(sliderChatAlpha, 20, -50)
+	addConfigEntry(sliderChatAlpha, 20, -53)
 	addon.aboutPanel.sliderChatAlpha = sliderChatAlpha
 	
+	--show locked settings warning
+	addon.aboutPanel:HookScript("OnShow", function()
+		if XCHT_DB and XCHT_DB.lockChatSettings then
+			DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+		end
+	end)
+
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
 

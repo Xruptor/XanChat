@@ -44,7 +44,8 @@ L.CHAT_RAID_GET         			= "|Hchannel:raid|h[R]|h %s: "
 L.CHAT_RAID_LEADER_GET  			= [[|Hchannel:raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
 L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:raidwarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
 
-L.EditFilterListHeader = "Stylized Filter List"
+L.EditFilterListHeader = "Edit Stylized Filter List"
+L.EditStickyChannelsListHeader = "Edit Sticky Channels List"
 
 L.SlashSocial = "social"
 L.SlashSocialOn = "xanChat: Social buttons are now [|cFF99CC33ON|r]"

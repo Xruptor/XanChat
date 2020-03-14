@@ -9,7 +9,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 addon.filterList = CreateFrame("frame", ADDON_NAME.."_filterList", UIParent)
 
 local filterList = addon.filterList
-filterList:SetFrameStrata("HIGH")
+filterList:SetFrameStrata("DIALOG")
 filterList:SetToplevel(true)
 filterList:EnableMouse(true)
 filterList:SetMovable(true)
@@ -48,8 +48,6 @@ scrollFrame:SetScrollChild(scrollFrame_Child)
 --hide both frames
 scrollFrame:Hide()
 filterList:Hide()
-
-local storedBarCount = 0
 
 --https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
 --https://github.com/Gethe/wow-ui-source/blob/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/AddOns/Blizzard_APIDocumentation/PartyInfoDocumentation.lua
@@ -105,9 +103,14 @@ function addon:EnableFilterList()
 		end
 	end
 	
-	--populate scroll list
-	addon:DoFilterList()
-
+	addon.filterList:HookScript("OnShow", function(self)
+		if not addon.filterList.ListLoaded then
+			--populate scroll list
+			addon:DoFilterList()
+			addon.filterList.ListLoaded = true
+		end
+	end)
+	
 	--allow the stylized routines to work
 	addon.isFilterListEnabled = true
 end
@@ -140,10 +143,7 @@ function addon:DoFilterList()
 	
 	for barCount=1, table.getn(buildList) do
 		
-		--store the bar counts for future use
-		if barCount > storedBarCount then storedBarCount = barCount end
-		
-		local barSlot = _G["xanChat_Bar"..barCount] or CreateFrame("button", "xanChat_Bar"..barCount, scrollFrame_Child)
+		local barSlot = _G["xanChat_FilterListBar"..barCount] or CreateFrame("button", "xanChat_FilterListBar"..barCount, scrollFrame_Child)
 		
 		if barCount==1 then
 			barSlot:SetPoint("TOPLEFT",scrollFrame_Child, "TOPLEFT", 10, -10)
@@ -166,14 +166,14 @@ function addon:DoFilterList()
 		barSlot.xData = buildList[barCount]
 		
 		--check button stuff
-		local bar_chk = _G["xanChat_BarChk"..barCount] or CreateFrame("CheckButton", "xanChat_BarChk"..barCount, barSlot, "OptionsCheckButtonTemplate")
+		local bar_chk = _G["xanChat_FilterListBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_FilterListBarChk"..barCount, barSlot, "OptionsCheckButtonTemplate")
 		bar_chk.xData = buildList[barCount]
         bar_chk:SetPoint("LEFT", 4, 0)
 		
 		--change text color depending on where the entry came from
 		if buildList[barCount].val == 1 then
 			--core list
-			_G["xanChat_BarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..buildList[barCount].name.."|r")
+			_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..buildList[barCount].name.."|r")
 			
 			--set if checked or not
 			if XCHT_DB.filterList.core[buildList[barCount].name] then
@@ -183,7 +183,7 @@ function addon:DoFilterList()
 			end
 		else
 			--custom list
-			_G["xanChat_BarChk"..barCount.."Text"]:SetText("|cFF61F200"..buildList[barCount].name.."|r")
+			_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText("|cFF61F200"..buildList[barCount].name.."|r")
 			
 			--set if checked or not
 			if XCHT_DB.filterList.custom[buildList[barCount].name] then
@@ -192,7 +192,7 @@ function addon:DoFilterList()
 				bar_chk:SetChecked(false)
 			end
 		end
-		_G["xanChat_BarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
+		_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
         
 		bar_chk:SetScript("OnClick", function(self)
 			local checked = self:GetChecked()

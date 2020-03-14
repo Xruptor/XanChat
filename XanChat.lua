@@ -21,18 +21,6 @@ local IsRetail = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 	Scrolling and Chat Links
 --------------------------]]
 
-local StickyTypeChannels = {
-  SAY = 1,
-  YELL = 0,
-  EMOTE = 0,
-  PARTY = 1, 
-  RAID = 1,
-  GUILD = 1,
-  OFFICER = 1,
-  WHISPER = 1,
-  CHANNEL = 1,
-};
-
 local addonLoaded = false
 
 local function scrollChat(frame, delta)
@@ -545,7 +533,7 @@ local AddMessage = function(frame, text, ...)
 				--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 				
 				--don't do this on strings with player links and we have a positive filter
-				if not string.find(text, "|Hplayer:", 1, true) and addon:searchFilterList(lastMsgEvent.event, text) then
+				if not string.find(text, "|Hplayer:", 1, true) and not string.find(text, "|HBNplayer:", 1, true) and addon:searchFilterList(lastMsgEvent.event, text) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 					local origText = text
 					
@@ -751,14 +739,32 @@ local function SaveSettings(chatFrame)
 	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
 	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
-
-	--GetMessageTypeColor(channelType or id) "CHANNEL1" or number
-	--ChangeChatColor(channelType or id, r, g, b) "CHANNEL1" or number
+	local windowMessageColors = {}
+	local windowChannelColors = {}
 	
+	--lets save all the message type colors
+	for k=1, #windowMessages do
+		if ChatTypeGroup[windowMessages[k]] then
+			local colorR, colorG, colorB, messageType = GetMessageTypeColor(windowMessages[k])
+			if colorR and colorG and colorB then
+				windowMessageColors[k] = {colorR, colorG, colorB, windowMessages[k]}
+			end
+		end
+	end
+	
+	--lets save the channel colors
+	for k=1, #windowChannels do
+		if Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k]) then
+			windowChannelColors[k] = {Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k])}
+		end
+	end
+		
 	db.chatParent = chatFrame:GetParent():GetName()
 	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
 	db.windowMessages = windowMessages
 	db.windowChannels = windowChannels
+	db.windowMessageColors = windowMessageColors
+	db.windowChannelColors = windowChannelColors
 	db.fadingDuration = chatFrame:GetTimeVisible() or 120
 	db.defaultFrameAlpha = DEFAULT_CHATFRAME_ALPHA
 
@@ -785,7 +791,18 @@ local function RestoreSettings(chatFrame)
 			AddChatWindowMessages(chatFrame:GetID(), newWindowMessages[k])
 		end
 	end
-
+	
+	--lets set the windowMessageColors
+	if db.windowMessageColors then
+		--add the stored ones
+		local newWindowMessageColors = db.windowMessageColors
+		for k=1, #newWindowMessageColors do
+			if newWindowMessageColors[k] and newWindowMessageColors[k][4] then
+				ChangeChatColor(newWindowMessageColors[k][4], newWindowMessageColors[k][1], newWindowMessageColors[k][2], newWindowMessageColors[k][3])
+			end
+		end
+	end
+	
 	if db.windowChannels then
 		--remove current window channels
 		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
@@ -799,6 +816,17 @@ local function RestoreSettings(chatFrame)
 		end
 	end
 
+	--lets set the windowChannelColors
+	if db.windowChannelColors then
+		--add the stored ones
+		local newWindowChannelColors = db.windowChannelColors
+		for k=1, #newWindowChannelColors do
+			if newWindowChannelColors[k] and newWindowChannelColors[k][1] then
+				ChangeChatColor("CHANNEL"..k, newWindowChannelColors[k][1], newWindowChannelColors[k][2], newWindowChannelColors[k][3])
+			end
+		end
+	end
+	
 	if db.windowInfo then
 		SetChatWindowName(chatFrame:GetID(), db.windowInfo[1])
 		SetChatWindowSize(chatFrame:GetID(), db.windowInfo[2])
@@ -971,13 +999,12 @@ local function GetChatText(id)
 	copyFrame:Show()
 end
 
-local function CreateCopyChatButtons(i)
+local function CreateCopyChatButtons(chatIndex, chatFrame)
 	if not XCHT_DB.enableCopyButton then return end
 	
 	local copyFrame = CreateCopyFrame()
-	local chatFrame = _G['ChatFrame'..i]
-	
-	local obj = CreateFrame("Button", "xanCopyChatButton"..i, chatFrame)
+
+	local obj = CreateFrame("Button", "xanCopyChatButton"..chatIndex, chatFrame)
 	obj.bg = obj:CreateTexture(nil,	"ARTWORK")
 	obj.bg:SetTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj.bg:SetAllPoints(obj)
@@ -991,7 +1018,7 @@ local function CreateCopyChatButtons(i)
 			copyFrame:Hide()
 		else
 			--this allows it to refresh if we hide the window
-			GetChatText(i)
+			GetChatText(chatIndex)
 		end
 	end)
 	
@@ -1240,10 +1267,8 @@ function addon:PLAYER_LOGIN()
 	--turn off profanity filter
 	SetCVar("profanityFilter", 0)
 	
-	--sticky channels
-	for k, v in pairs(StickyTypeChannels) do
-	  ChatTypeInfo[k].sticky = v;
-	end
+	--do the sticky channels list
+	addon:EnableStickyChannelsList()
 	
 	--toggle class colors
 	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
@@ -1271,7 +1296,7 @@ function addon:PLAYER_LOGIN()
 		if f then
 			
 			--create the copy chat buttons
-			CreateCopyChatButtons(i)
+			CreateCopyChatButtons(i, f)
 		
 			XANCHAT_Frame = XANCHAT_Frame or {}
 			XANCHAT_Frame[i] = f
@@ -1528,7 +1553,7 @@ function addon:PLAYER_LOGIN()
 	addon:UnregisterEvent("PLAYER_LOGIN")
 	addonLoaded = true
 	
-	--once everything is loaded updated the settings for the chat, only do this once per version saveChatSettings
+	--once everything is loaded updated the settings for the chat, only do this once per updated version
 	if XCHT_DB.dbVer == nil or XCHT_DB.dbVer ~= ver then
 		for i = 1, NUM_CHAT_WINDOWS do
 			local n = ("ChatFrame%d"):format(i)
