@@ -9,9 +9,14 @@ local configEvent = addon.configEvent
 configEvent:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
+local configObjList = {}
 
 local lastObject
-local function addConfigEntry(objEntry, adjustX, adjustY, isCustom)
+local function addConfigEntry(objEntry, adjustX, adjustY, isCustom, ignoreLock)
+	
+	if not ignoreLock then
+		table.insert(configObjList, objEntry)
+	end
 	
 	objEntry:ClearAllPoints()
 	
@@ -179,10 +184,9 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.SlashLockChatSettingsInfo.."|r")
 	btnLockChatSettings:SetScript("OnShow", function() btnLockChatSettings:SetChecked(XCHT_DB.lockChatSettings) end)
-	btnLockChatSettings.func = function(slashSwitch)
+	btnLockChatSettings.func = function()
 		local value = XCHT_DB.lockChatSettings
-		if not slashSwitch then value = btnLockChatSettings:GetChecked() end
-		
+
 		if value then
 			XCHT_DB.lockChatSettings = false
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOff)
@@ -190,18 +194,18 @@ function configEvent:PLAYER_LOGIN()
 			XCHT_DB.lockChatSettings = true
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOn)
 		end
+		configEvent:DoLock()
 	end
 	btnLockChatSettings:SetScript("OnClick", btnLockChatSettings.func)
 	
-	addConfigEntry(btnLockChatSettings, 20, -110, true)
+	addConfigEntry(btnLockChatSettings, 20, -110, true, true)
 	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
 	
 	local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
 	btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
-	btnSocial.func = function(slashSwitch)
+	btnSocial.func = function()
 		local value = XCHT_DB.hideSocial
-		if not slashSwitch then value = btnSocial:GetChecked() end
-		
+
 		if value then
 			XCHT_DB.hideSocial = false
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
@@ -221,9 +225,8 @@ function configEvent:PLAYER_LOGIN()
 
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
 	btnScroll:SetScript("OnShow", function() btnScroll:SetChecked(XCHT_DB.hideScroll) end)
-	btnScroll.func = function(slashSwitch)
+	btnScroll.func = function()
 		local value = XCHT_DB.hideScroll
-		if not slashSwitch then value = btnScroll:GetChecked() end
 
 		if value then
 			XCHT_DB.hideScroll = false
@@ -244,9 +247,8 @@ function configEvent:PLAYER_LOGIN()
 
 	local btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
 	btnShortNames:SetScript("OnShow", function() btnShortNames:SetChecked(XCHT_DB.shortNames) end)
-	btnShortNames.func = function(slashSwitch)
+	btnShortNames.func = function()
 		local value = XCHT_DB.shortNames
-		if not slashSwitch then value = btnShortNames:GetChecked() end
 
 		if value then
 			XCHT_DB.shortNames = false
@@ -267,9 +269,8 @@ function configEvent:PLAYER_LOGIN()
 
 	local btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
 	btnEditBox:SetScript("OnShow", function() btnEditBox:SetChecked(XCHT_DB.editBoxTop) end)
-	btnEditBox.func = function(slashSwitch)
+	btnEditBox.func = function()
 		local value = XCHT_DB.editBoxTop
-		if not slashSwitch then value = btnEditBox:GetChecked() end
 
 		if value then
 			XCHT_DB.editBoxTop = false
@@ -290,9 +291,8 @@ function configEvent:PLAYER_LOGIN()
 
 	local btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
 	btnTabs:SetScript("OnShow", function() btnTabs:SetChecked(XCHT_DB.hideTabs) end)
-	btnTabs.func = function(slashSwitch)
+	btnTabs.func = function()
 		local value = XCHT_DB.hideTabs
-		if not slashSwitch then value = btnTabs:GetChecked() end
 
 		if value then
 			XCHT_DB.hideTabs = false
@@ -313,9 +313,8 @@ function configEvent:PLAYER_LOGIN()
 
 	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
 	btnShadow:SetScript("OnShow", function() btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
-	btnShadow.func = function(slashSwitch)
+	btnShadow.func = function()
 		local value = XCHT_DB.addFontShadow
-		if not slashSwitch then value = btnShadow:GetChecked() end
 
 		if value then
 			XCHT_DB.addFontShadow = false
@@ -336,9 +335,8 @@ function configEvent:PLAYER_LOGIN()
 
 	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
 	btnVoice:SetScript("OnShow", function() btnVoice:SetChecked(XCHT_DB.hideVoice) end)
-	btnVoice.func = function(slashSwitch)
+	btnVoice.func = function()
 		local value = XCHT_DB.hideVoice
-		if not slashSwitch then value = btnVoice:GetChecked() end
 
 		if value then
 			XCHT_DB.hideVoice = false
@@ -359,9 +357,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
 	btnEditBoxBorder:SetScript("OnShow", function() btnEditBoxBorder:SetChecked(XCHT_DB.hideEditboxBorder) end)
-	btnEditBoxBorder.func = function(slashSwitch)
+	btnEditBoxBorder.func = function()
 		local value = XCHT_DB.hideEditboxBorder
-		if not slashSwitch then value = btnEditBoxBorder:GetChecked() end
 
 		if value then
 			XCHT_DB.hideEditboxBorder = false
@@ -387,9 +384,8 @@ function configEvent:PLAYER_LOGIN()
 		btnSimpleEditBox:SetChecked(XCHT_DB.enableSimpleEditbox)
 		setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
 	end)
-	btnSimpleEditBox.func = function(slashSwitch)
+	btnSimpleEditBox.func = function()
 		local value = XCHT_DB.enableSimpleEditbox
-		if not slashSwitch then value = btnSimpleEditBox:GetChecked() end
 
 		if value then
 			XCHT_DB.enableSimpleEditbox = false
@@ -414,9 +410,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SlashSEBDesignInfo)
 	btnSEBDesign:SetScript("OnShow", function() btnSEBDesign:SetChecked(XCHT_DB.enableSEBDesign) end)
-	btnSEBDesign.func = function(slashSwitch)
+	btnSEBDesign.func = function()
 		local value = XCHT_DB.enableSEBDesign
-		if not slashSwitch then value = btnSEBDesign:GetChecked() end
 
 		if value then
 			XCHT_DB.enableSEBDesign = false
@@ -435,14 +430,37 @@ function configEvent:PLAYER_LOGIN()
 	addConfigEntry(btnSEBDesign, 45, -22)
 	addon.aboutPanel.btnSEBDesign = btnSEBDesign
 	
+	local btnAdjustedEditbox = createCheckbutton(addon.aboutPanel, L.SlashAdjustedEditboxInfo)
+	btnAdjustedEditbox:SetScript("OnShow", function() 
+		btnAdjustedEditbox:SetChecked(XCHT_DB.enableEditboxAdjusted)
+	end)
+	btnAdjustedEditbox.func = function()
+		local value = XCHT_DB.enableEditboxAdjusted
+
+		if value then
+			XCHT_DB.enableEditboxAdjusted = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashAdjustedEditboxOff)
+		else
+			XCHT_DB.enableEditboxAdjusted = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashAdjustedEditboxOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnAdjustedEditbox:SetScript("OnClick", btnAdjustedEditbox.func)
+	
+	addConfigEntry(btnAdjustedEditbox, 20, -22)
+	addon.aboutPanel.btnAdjustedEditbox = btnAdjustedEditbox
+	
 	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteInfo)
 	btnCopyPaste:SetScript("OnShow", function() 
 		btnCopyPaste:SetChecked(XCHT_DB.enableCopyButton)
 		setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
 	end)
-	btnCopyPaste.func = function(slashSwitch)
+	btnCopyPaste.func = function()
 		local value = XCHT_DB.enableCopyButton
-		if not slashSwitch then value = btnCopyPaste:GetChecked() end
 
 		if value then
 			XCHT_DB.enableCopyButton = false
@@ -465,9 +483,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteLeftInfo)
 	btnCopyPasteLeft:SetScript("OnShow", function() btnCopyPasteLeft:SetChecked(XCHT_DB.enableCopyButtonLeft) end)
-	btnCopyPasteLeft.func = function(slashSwitch)
+	btnCopyPasteLeft.func = function()
 		local value = XCHT_DB.enableCopyButtonLeft
-		if not slashSwitch then value = btnCopyPasteLeft:GetChecked() end
 
 		if value then
 			XCHT_DB.enableCopyButtonLeft = false
@@ -488,9 +505,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
 	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
-	btnPlayerChatStyle.func = function(slashSwitch)
+	btnPlayerChatStyle.func = function()
 		local value = XCHT_DB.enablePlayerChatStyle
-		if not slashSwitch then value = btnPlayerChatStyle:GetChecked() end
 
 		if value then
 			XCHT_DB.enablePlayerChatStyle = false
@@ -508,9 +524,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.SlashChatTextFadeInfo)
 	btnChatTextFade:SetScript("OnShow", function() btnChatTextFade:SetChecked(XCHT_DB.enableChatTextFade) end)
-	btnChatTextFade.func = function(slashSwitch)
+	btnChatTextFade.func = function()
 		local value = XCHT_DB.enableChatTextFade
-		if not slashSwitch then value = btnChatTextFade:GetChecked() end
 
 		if value then
 			XCHT_DB.enableChatTextFade = false
@@ -531,9 +546,8 @@ function configEvent:PLAYER_LOGIN()
 	
 	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
 	btnChatFrameFade:SetScript("OnShow", function() btnChatFrameFade:SetChecked(XCHT_DB.enableChatFrameFade) end)
-	btnChatFrameFade.func = function(slashSwitch)
+	btnChatFrameFade.func = function()
 		local value = XCHT_DB.enableChatFrameFade
-		if not slashSwitch then value = btnChatFrameFade:GetChecked() end
 
 		if value then
 			XCHT_DB.enableChatFrameFade = false
@@ -581,10 +595,23 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
 			DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+			configEvent:DoLock()
 		end
 	end)
 
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
+end
+
+function configEvent:DoLock()
+	if XCHT_DB and XCHT_DB.lockChatSettings then
+		for i=1, #configObjList do
+			configObjList[i]:SetEnabled(false)
+		end
+	else
+		for i=1, #configObjList do
+			configObjList[i]:SetEnabled(true)
+		end
+	end
 end
 
 if IsLoggedIn() then configEvent:PLAYER_LOGIN() else configEvent:RegisterEvent("PLAYER_LOGIN") end

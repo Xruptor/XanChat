@@ -612,15 +612,22 @@ end
 local function setEditBox(sSwitch)
 	for i = 1, NUM_CHAT_WINDOWS do
 		local eb = _G[("ChatFrame%dEditBox"):format(i)]
+		local spaceAdjusted = 0
 		
 		if sSwitch then
+			if XCHT_DB.enableEditboxAdjusted then
+				spaceAdjusted = 6
+			end
 			eb:ClearAllPoints()
-			eb:SetPoint("BOTTOMLEFT",  ("ChatFrame%d"):format(i), "TOPLEFT",  -5, 0)
-			eb:SetPoint("BOTTOMRIGHT", ("ChatFrame%d"):format(i), "TOPRIGHT", 5, 0)
+			eb:SetPoint("BOTTOMLEFT",  ("ChatFrame%d"):format(i), "TOPLEFT",  -5, spaceAdjusted)
+			eb:SetPoint("BOTTOMRIGHT", ("ChatFrame%d"):format(i), "TOPRIGHT", 5, spaceAdjusted)
 		else
+			if XCHT_DB.enableEditboxAdjusted then
+				spaceAdjusted = -9
+			end
 			eb:ClearAllPoints()
-			eb:SetPoint("TOPLEFT",  ("ChatFrame%d"):format(i), "BOTTOMLEFT",  -5, 0)
-			eb:SetPoint("TOPRIGHT", ("ChatFrame%d"):format(i), "BOTTOMRIGHT", 5, 0)
+			eb:SetPoint("TOPLEFT",  ("ChatFrame%d"):format(i), "BOTTOMLEFT",  -5, spaceAdjusted)
+			eb:SetPoint("TOPRIGHT", ("ChatFrame%d"):format(i), "BOTTOMRIGHT", 5, spaceAdjusted)
 		end
 	end
 end
@@ -1247,6 +1254,7 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.enableCopyButtonLeft == nil then XCHT_DB.enableCopyButtonLeft = false end
 	if XCHT_DB.lockChatSettings == nil then XCHT_DB.lockChatSettings = false end
 	if XCHT_DB.userChatAlpha == nil then XCHT_DB.userChatAlpha = 0.25 end  --uses blizzard default value from DEFAULT_CHATFRAME_ALPHA
+	if XCHT_DB.enableEditboxAdjusted == nil then XCHT_DB.enableEditboxAdjusted = false end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end

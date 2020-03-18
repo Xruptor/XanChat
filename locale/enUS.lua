@@ -65,7 +65,7 @@ L.SlashShortNamesInfo = "Use channel short names."
 L.SlashEditBox = "editbox"
 L.SlashEditBoxBottom = "xanChat: The edit box is now at the [|cFF99CC33BOTTOM|r]"
 L.SlashEditBoxTop = "xanChat: The edit box is now at the [|cFF99CC33TOP|r]"
-L.SlashEditBoxInfo = "Show editbox on the top of the chat window."
+L.SlashEditBoxInfo = "Show Editbox on the top of the chat window."
 
 L.SlashTabs = "tabs"
 L.SlashTabsOn = "xanChat: The chat tabs are now [|cFF99CC33ON|r]"
@@ -133,3 +133,8 @@ L.SlashChatAlphaSet = "xanChat: Chat alpha transparency has been set to [|cFF20f
 L.SlashChatAlphaSetInvalid = "xanChat: Alpha invalid or number cannot be greater than 2"
 L.SlashChatAlphaInfo = "Set the alpha transparency level of the chat frame. (0-100)"
 L.SlashChatAlphaText = "Chat Frame Alpha Transparency"
+
+L.SlashAdjustedEditbox = "adjusteditbox"
+L.SlashAdjustedEditboxOn = "xanChat: Space adjusted Editbox is [|cFF99CC33ON|r]"
+L.SlashAdjustedEditboxOff = "xanChat: Space adjusted Editbox is [|cFF99CC33OFF|r]"
+L.SlashAdjustedEditboxInfo = "Enable additional space between the chat frame and Editbox."
