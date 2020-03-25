@@ -10,6 +10,7 @@ L.URLCopy = "URL COPY"
 L.ApplyChanges = "xanChat: UI --MUST-- be reloaded to apply changes!"
 L.Yes = "Yes"
 L.No = "No"
+L.Page = "Page"
 
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 L.ChannelGeneral = "%[%d+%. General.-%]"

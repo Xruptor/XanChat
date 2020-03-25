@@ -1,6 +1,3 @@
---Some stupid custom Chat modifications for made for myself.
---Sharing it with the world in case anybody wants to actually use this.
-
 local ADDON_NAME, addon = ...
 if not _G[ADDON_NAME] then
 	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent)
@@ -910,6 +907,92 @@ end)
 	CHAT COPY
 --------------------------]]
 
+local function GetChatText(copyFrame, chatIndex, pageNum)
+
+	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
+	copyFrame.currChatIndex = chatIndex
+	
+	local msgCount = _G["ChatFrame"..chatIndex]:GetNumMessages()
+	local motdString = COMMUNITIES_MESSAGE_OF_THE_DAY_FORMAT:gsub("\"%%s\"", "")
+	
+	local pages = {}
+	local iCounter = 0
+	local startPos = 0
+	local endPos = 0
+	local MAXLINES = 480
+	
+	--add the first page
+	table.insert(pages, 1)
+	
+	for i = 1, msgCount do
+		local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..chatIndex]:GetMessageInfo(i)
+		
+		--there is a hard limit of text that can be highlighted in an editbox to 500 lines.
+		--just to be safe lets just do only the last 450 line each page
+		--don't add an overlapping page if we reach the end of the msgCount
+		iCounter = iCounter + 1
+		if iCounter == MAXLINES and i ~= msgCount  then
+			table.insert(pages, i)
+			iCounter = 0
+		end
+	
+		if not pageNum and startPos < 1 then
+			if msgCount > MAXLINES then
+				startPos = msgCount - MAXLINES
+				endPos = startPos + MAXLINES
+			else
+				startPos = 1
+				endPos = msgCount
+			end
+		elseif pageNum and #pages == pageNum then
+			if pages[pageNum] == 1 then
+				--first page
+				startPos = 1
+				endPos = MAXLINES
+			else
+				startPos = pages[pageNum]
+				endPos = pages[pageNum] + MAXLINES
+			end
+		end
+		
+		if i >= startPos and i <= endPos then
+		
+			--fix situations where links end the color prematurely
+			if (r and g and b and chatTypeID) then
+				local colorCode = RGBToColorCode(r, g, b)
+				chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
+				chatMsg = colorCode..chatMsg
+			end
+			
+			--sometimes the guild motd doesn't color, so fix it
+			if IsInGuild() then
+				--check for our MOTD
+				if string.find(chatMsg, GUILD.." "..motdString)then
+					chatMsg = RGBTableToColorCode(ChatTypeInfo.GUILD)..chatMsg
+				end
+			end
+		
+			if (i == 1) then
+				copyFrame.editBox:Insert(chatMsg.."|r")
+			else
+				copyFrame.editBox:Insert("\n"..chatMsg.."|r")
+			end	
+		end
+		
+	end
+	
+	if pageNum then
+		copyFrame.currentPage = pageNum
+	else
+		copyFrame.currentPage = #pages
+	end
+
+	copyFrame.pages = pages
+	copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
+
+	copyFrame:Show()
+end
+
 local function CreateCopyFrame()
 	--check to see if we have the frame already, if we do then return it
 	if addon.copyFrame then return addon.copyFrame end
@@ -955,11 +1038,42 @@ local function CreateCopyFrame()
 	scrollArea.EditBox:SetText("")
 	scrollArea.EditBox:SetWidth(scrollArea:GetWidth() - 15)
 	scrollArea.EditBox:SetBackdrop(nil)
+	scrollArea.EditBox:SetMultiLine(true)
 	frame.editBox = scrollArea.EditBox
 	
-	local close = CreateFrame("Button", "iCopyCloseButton", frame, "UIPanelCloseButton")
+	local close = CreateFrame("Button", "xanChatCopyClose", frame, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", frame, "TOPRIGHT")
 	frame.close = close
+	
+	local buttonBack = CreateFrame("Button", ADDON_NAME.."_PageBack", frame, "UIPanelButtonTemplate")
+	buttonBack:SetText("<")
+	buttonBack:SetHeight(25)
+	buttonBack:SetWidth(25)
+	buttonBack:SetPoint("TOPLEFT", 5, -3)
+	buttonBack:SetScript("OnClick", function()
+		if (frame.currentPage - 1) > 0 then
+			GetChatText(frame, frame.currChatIndex, frame.currentPage - 1)
+		end
+	end)
+	frame.buttonBack = buttonBack
+	
+	local buttonForward = CreateFrame("Button", ADDON_NAME.."_PageForward", frame, "UIPanelButtonTemplate")
+	buttonForward:SetText(">")
+	buttonForward:SetHeight(25)
+	buttonForward:SetWidth(25)
+	buttonForward:SetPoint("TOPLEFT", 40, -3)
+	buttonForward:SetScript("OnClick", function()
+		if (frame.currentPage + 1) <= #frame.pages then
+			GetChatText(frame, frame.currChatIndex, frame.currentPage + 1)
+		end
+	end)
+	frame.buttonForward = buttonForward
+	
+	local pageNumText = frame:CreateFontString(nil, 'BACKGROUND', 'GameFontNormal')
+	pageNumText:SetPoint("TOPLEFT", 80, -10)
+	pageNumText:SetShadowOffset(1, -1)
+	pageNumText:SetText(L.Page.." 1")
+	frame.pageNumText = pageNumText
 	
 	frame:Show()
 	
@@ -967,43 +1081,6 @@ local function CreateCopyFrame()
 	addon.copyFrame = frame
 	
 	return frame
-end
-
-local function GetChatText(id)
-
-	local copyFrame = CreateCopyFrame()
-	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
-	
-	local msgCount = _G["ChatFrame" .. id]:GetNumMessages()
-	local motdString = COMMUNITIES_MESSAGE_OF_THE_DAY_FORMAT:gsub("\"%%s\"", "")
-	
-	for i = 1, msgCount do
-		local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..id]:GetMessageInfo(i)
-		
-		--fix situations where links end the color prematurely
-		if (r and g and b and chatTypeID) then
-			local colorCode = RGBToColorCode(r, g, b)
-			chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
-			chatMsg = colorCode..chatMsg
-		end
-		
-		--sometimes the guild motd doesn't color, so fix it
-		if IsInGuild() then
-			--check for our MOTD
-			if string.find(chatMsg, GUILD.." "..motdString)then
-				chatMsg = RGBTableToColorCode(ChatTypeInfo.GUILD)..chatMsg
-			end
-		end
-		
-		--if it's the first line don't start with newline
-		if (i == 1) then
-			copyFrame.editBox:Insert(chatMsg.."|r")
-		else
-			copyFrame.editBox:Insert("\n"..chatMsg.."|r")
-		end	
-	end
-	
-	copyFrame:Show()
 end
 
 local function CreateCopyChatButtons(chatIndex, chatFrame)
@@ -1025,7 +1102,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 			copyFrame:Hide()
 		else
 			--this allows it to refresh if we hide the window
-			GetChatText(chatIndex)
+			GetChatText(copyFrame, chatIndex)
 		end
 	end)
 	
