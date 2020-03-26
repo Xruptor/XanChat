@@ -1018,7 +1018,7 @@ local function CreateCopyFrame()
 	scrollArea:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -32)
 	scrollArea:SetBackdrop(nil)
 	scrollArea.CharCount:Hide()
-	scrollArea:SetHeight(frame:GetHeight() - 41)
+	scrollArea:SetHeight(frame:GetHeight() - 40)
 	scrollArea:SetWidth(frame:GetWidth() - 16)
 
 	--remove the stupid textures
