@@ -907,6 +907,26 @@ end)
 	CHAT COPY
 --------------------------]]
 
+--local escapes = {
+    --["|c%x%x%x%x%x%x%x%x"], "", -- color start
+    --["|r"], "", -- color end
+    --["|H.-|h(.-)|h"], "%1", -- links
+    --["|T.-|t"], "", -- textures
+	--["{.-}"],  "", -- raid target icons
+--}
+
+--this will remove UI escaped textures from strings.  It causes an issue with highlighted text as it offsets it little by little
+--https://wowwiki.fandom.com/wiki/UI_escape_sequences#Textures
+local function unescape(str)
+    --for i = 1, #escapes - 1, 2 do
+    --    str = gsub(str, escapes[i], escapes[i + 1])
+    --end
+    --return str
+	
+    str = gsub(str, "|T.-|t", "")
+    return str
+end
+
 local function GetChatText(copyFrame, chatIndex, pageNum)
 
 	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
@@ -919,7 +939,7 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	local iCounter = 0
 	local startPos = 0
 	local endPos = 0
-	local MAXLINES = 480
+	local MAXLINES = 600
 	
 	--add the first page
 	table.insert(pages, 1)
@@ -973,9 +993,9 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 			end
 		
 			if (i == 1) then
-				copyFrame.editBox:Insert(chatMsg.."|r")
+				copyFrame.editBox:SetText(unescape(chatMsg).."|r")
 			else
-				copyFrame.editBox:Insert("\n"..chatMsg.."|r")
+				copyFrame.editBox:SetText(copyFrame.editBox:GetText().."\n"..unescape(chatMsg).."|r")
 			end	
 		end
 		
@@ -988,7 +1008,11 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	end
 
 	copyFrame.pages = pages
-	copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
+	--copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
+	
+	--adjust the cursor to be at the bottom of the page
+	copyFrame.editBox:SetFocus()
+	copyFrame.editBox:SetCursorPosition(string.len(copyFrame.editBox:GetText()))
 
 	copyFrame:Show()
 end
@@ -997,88 +1021,54 @@ local function CreateCopyFrame()
 	--check to see if we have the frame already, if we do then return it
 	if addon.copyFrame then return addon.copyFrame end
 
-	local frame = CreateFrame("Frame", "xanChatCopyFrame", UIParent)
+	local AceGUI = LibStub("AceGUI-3.0")
+	
+	frame = CreateFrame("FRAME", nil, UIParent)
 	frame:SetBackdrop({
-		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", 
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",    
-		edgeSize = 10, 
-		insets = {top = -1, left = -1, bottom = -1, right = -1}
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+		tile = true,
+		tileSize = 32,
+		edgeSize = 32,
+		insets = { left = 8, right = 8, top = 8, bottom = 8 }
 	})
-	
-	frame:SetBackdropColor(0, 0, 0, .5)
-	frame:SetWidth(600)
-	frame:SetHeight(400)
-	frame:SetPoint("CENTER", UIParent, "CENTER")
+	frame:SetBackdropColor(0, 0, 0, 1)
+	frame:EnableMouse(true)
 	frame:SetFrameStrata("DIALOG")
-	frame:SetToplevel(true)
-	tinsert(UISpecialFrames, "xanChatCopyFrame")
-	frame:Hide()
+	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+	frame:SetWidth(830)
+	frame:SetHeight(665)
 
-	local scrollArea = CreateFrame("ScrollFrame", "xanChatCopyScroll", frame, "InputScrollFrameTemplate")
-	scrollArea:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -32)
-	scrollArea:SetBackdrop(nil)
-	scrollArea.CharCount:Hide()
-	scrollArea:SetHeight(frame:GetHeight() - 40)
-	scrollArea:SetWidth(frame:GetWidth() - 16)
-
-	--remove the stupid textures
-	scrollArea.BottomLeftTex:SetTexture(nil)
-	scrollArea.BottomRightTex:SetTexture(nil)
-	scrollArea.BottomTex:SetTexture(nil)
-	scrollArea.LeftTex:SetTexture(nil)
-	scrollArea.RightTex:SetTexture(nil)
-	scrollArea.MiddleTex:SetTexture(nil)
-	scrollArea.TopLeftTex:SetTexture(nil)
-	scrollArea.TopRightTex:SetTexture(nil)
-	scrollArea.TopTex:SetTexture(nil)
-	frame.copyScrollArea = scrollArea
-	scrollArea:Show()
+	local group = AceGUI:Create("InlineGroup")
+	group.frame:SetParent(frame)
+	group.frame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -17, 12)
+	group.frame:SetPoint("TOPLEFT", frame, "TOPLEFT", 17, -10)
+	group.frame:Hide()
+	group:SetLayout("fill")
+	group.frame:Show() --show the group so everything in it displays in the frame
 	
-	scrollArea.EditBox:SetFont("Fonts\\ARIALN.ttf", 15)
-	scrollArea.EditBox:SetText("")
-	scrollArea.EditBox:SetWidth(scrollArea:GetWidth() - 15)
-	scrollArea.EditBox:SetBackdrop(nil)
-	scrollArea.EditBox:SetMultiLine(true)
-	frame.editBox = scrollArea.EditBox
+	local editBox = AceGUI:Create("MultiLineEditBox")
+	editBox:SetWidth(400)
+	editBox.button:Hide()
+	editBox.frame:SetClipsChildren(true)
+	editBox:SetLabel(L.CopyChat)
+    editBox:ClearFocus()
+	editBox:SetText("")
+	group:AddChild(editBox)
+	frame.editBox = editBox
 	
-	local close = CreateFrame("Button", "xanChatCopyClose", frame, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", frame, "TOPRIGHT")
-	frame.close = close
-	
-	local buttonBack = CreateFrame("Button", ADDON_NAME.."_PageBack", frame, "UIPanelButtonTemplate")
-	buttonBack:SetText("<")
-	buttonBack:SetHeight(25)
-	buttonBack:SetWidth(25)
-	buttonBack:SetPoint("TOPLEFT", 5, -3)
-	buttonBack:SetScript("OnClick", function()
-		if (frame.currentPage - 1) > 0 then
-			GetChatText(frame, frame.currChatIndex, frame.currentPage - 1)
-		end
-	end)
-	frame.buttonBack = buttonBack
-	
-	local buttonForward = CreateFrame("Button", ADDON_NAME.."_PageForward", frame, "UIPanelButtonTemplate")
-	buttonForward:SetText(">")
-	buttonForward:SetHeight(25)
-	buttonForward:SetWidth(25)
-	buttonForward:SetPoint("TOPLEFT", 40, -3)
-	buttonForward:SetScript("OnClick", function()
-		if (frame.currentPage + 1) <= #frame.pages then
-			GetChatText(frame, frame.currChatIndex, frame.currentPage + 1)
-		end
-	end)
-	frame.buttonForward = buttonForward
-	
-	local pageNumText = frame:CreateFontString(nil, 'BACKGROUND', 'GameFontNormal')
-	pageNumText:SetPoint("TOPLEFT", 80, -10)
-	pageNumText:SetShadowOffset(1, -1)
-	pageNumText:SetText(L.Page.." 1")
-	frame.pageNumText = pageNumText
-	
-	frame:Show()
+	local close = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
+	close:SetScript("OnClick", function() frame:Hide() end)
+	close:SetPoint("BOTTOMRIGHT", -27, 13)
+	close:SetFrameLevel(close:GetFrameLevel() + 1)
+	close:SetHeight(20)
+	close:SetWidth(100)
+	close:SetText(L.Done)
 	
 	--store it for the future
 	addon.copyFrame = frame
+	
+	frame:Hide()
 	
 	return frame
 end
