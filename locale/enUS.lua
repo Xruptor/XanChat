@@ -13,6 +13,7 @@ L.No = "No"
 L.Page = "Page"
 L.CopyChat = "Copy Chat"
 L.Done = "Done"
+L.Page = "Page"
 
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 L.ChannelGeneral = "%[%d+%. General.-%]"

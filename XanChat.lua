@@ -927,6 +927,27 @@ local function unescape(str)
     return str
 end
 
+local function scrollToBottom()
+	if not addon.copyFrame.editBox then return end
+	local editBox = addon.copyFrame.editBox
+	--adjust the cursor to be at the bottom of the page, has to be after the frame is shown or it won't update properly
+	C_Timer.After(0.1, function()
+	
+		editBox:SetFocus()
+		editBox:SetCursorPosition(string.len(editBox:GetText()) + 200) --adding additional 200 just in case
+		editBox:ClearFocus()
+		
+		--this sometimes hides the size because it scrolled too far down
+		-- local height = editBox.scrollFrame:GetHeight()
+		-- local range = editBox.scrollFrame:GetVerticalScrollRange()
+		-- local scroll = editBox.scrollFrame:GetVerticalScroll()
+		-- local size = height + range
+		-- --scroll top bottom using maximum size
+		-- editBox.scrollFrame:SetVerticalScroll(size)
+
+	end)
+end
+
 local function GetChatText(copyFrame, chatIndex, pageNum)
 
 	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
@@ -939,7 +960,7 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	local iCounter = 0
 	local startPos = 0
 	local endPos = 0
-	local MAXLINES = 600
+	local MAXLINES = 480 --less than 500 just in case we reach highlight limit
 	
 	--add the first page
 	table.insert(pages, 1)
@@ -984,14 +1005,6 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 				chatMsg = colorCode..chatMsg
 			end
 			
-			--sometimes the guild motd doesn't color, so fix it
-			if IsInGuild() then
-				--check for our MOTD
-				if string.find(chatMsg, GUILD.." "..motdString)then
-					chatMsg = RGBTableToColorCode(ChatTypeInfo.GUILD)..chatMsg
-				end
-			end
-		
 			if (i == 1) then
 				copyFrame.editBox:SetText(unescape(chatMsg).."|r")
 			else
@@ -1008,13 +1021,13 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	end
 
 	copyFrame.pages = pages
-	--copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
+	copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
 	
-	--adjust the cursor to be at the bottom of the page
-	copyFrame.editBox:SetFocus()
-	copyFrame.editBox:SetCursorPosition(string.len(copyFrame.editBox:GetText()))
-
-	copyFrame:Show()
+	if not copyFrame:IsVisible() then
+		copyFrame:Show()
+	else
+		scrollToBottom()
+	end
 end
 
 local function CreateCopyFrame()
@@ -1046,7 +1059,7 @@ local function CreateCopyFrame()
 	group.frame:Hide()
 	group:SetLayout("fill")
 	group.frame:Show() --show the group so everything in it displays in the frame
-	
+
 	local editBox = AceGUI:Create("MultiLineEditBox")
 	editBox:SetWidth(400)
 	editBox.button:Hide()
@@ -1065,10 +1078,55 @@ local function CreateCopyFrame()
 	close:SetWidth(100)
 	close:SetText(L.Done)
 	
+    local buttonBack = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
+    buttonBack:SetText("<")
+    buttonBack:SetHeight(25)
+    buttonBack:SetWidth(25)
+    buttonBack:SetPoint("BOTTOMLEFT", 10, 13)
+	buttonBack:SetFrameLevel(buttonBack:GetFrameLevel() + 1)
+    buttonBack:SetScript("OnClick", function()
+		if frame.currChatIndex and frame.currentPage then
+			if (frame.currentPage - 1) > 0 then
+				GetChatText(frame, frame.currChatIndex, frame.currentPage - 1)
+			end
+		end
+    end)
+    frame.buttonBack = buttonBack
+    
+    local buttonForward = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
+    buttonForward:SetText(">")
+    buttonForward:SetHeight(25)
+    buttonForward:SetWidth(25)
+    buttonForward:SetPoint("BOTTOMLEFT", 40, 13)
+	buttonForward:SetFrameLevel(buttonForward:GetFrameLevel() + 1)
+    buttonForward:SetScript("OnClick", function()
+		if frame.currChatIndex and frame.currentPage and frame.pages then
+			if (frame.currentPage + 1) <= #frame.pages then
+				GetChatText(frame, frame.currChatIndex, frame.currentPage + 1)
+			end
+		end
+    end)
+    frame.buttonForward = buttonForward
+    
+	--this is to place it above the group layer
+	local textFrame = CreateFrame("FRAME", nil, group.frame)
+	textFrame:SetFrameLevel(textFrame:GetFrameLevel() + 1)
+	textFrame:SetPoint("BOTTOMLEFT", 80, 18)
+	textFrame:Show()
+	
+    local pageNumText = textFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    pageNumText:SetPoint("LEFT", textFrame)
+    pageNumText:SetShadowOffset(1, -1)
+    pageNumText:SetText(L.Page.." 1")
+	textFrame:SetHeight(pageNumText:GetHeight() + 2)
+	textFrame:SetWidth(pageNumText:GetWidth() + 2)
+    frame.pageNumText = pageNumText
+	
+	frame:HookScript("OnShow", function() scrollToBottom() end)
+	frame:Hide()
+	
 	--store it for the future
 	addon.copyFrame = frame
-	
-	frame:Hide()
 	
 	return frame
 end
