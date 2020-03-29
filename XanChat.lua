@@ -933,7 +933,7 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	local iCounter = 0
 	local startPos = 0
 	local endPos = 0
-	local MAXLINES = 250 --less than 500 just in case we reach highlight limit, MORE LINES IN EDITBOX CAUSE LAG!!!!!
+	local MAXLINES = 150 --150 don't use large numbers or it will cause LAG when frame opens.  EditBox was not made for large amounts of text
 	
 	--add the first page
 	table.insert(pages, 1)
