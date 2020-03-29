@@ -907,50 +907,23 @@ end)
 	CHAT COPY
 --------------------------]]
 
---local escapes = {
-    --["|c%x%x%x%x%x%x%x%x"], "", -- color start
-    --["|r"], "", -- color end
-    --["|H.-|h(.-)|h"], "%1", -- links
-    --["|T.-|t"], "", -- textures
-	--["{.-}"],  "", -- raid target icons
---}
-
 --this will remove UI escaped textures from strings.  It causes an issue with highlighted text as it offsets it little by little
 --https://wowwiki.fandom.com/wiki/UI_escape_sequences#Textures
+--https://wow.gamepedia.com/UI_escape_sequences
 local function unescape(str)
-    --for i = 1, #escapes - 1, 2 do
-    --    str = gsub(str, escapes[i], escapes[i + 1])
-    --end
-    --return str
 	
-    str = gsub(str, "|T.-|t", "")
+	--str = gsub(str, "|c%x%x%x%x%x%x%x%x", "") --color tag 1
+	--str = gsub(str, "|r", "") --color tag 2
+	
+    str = gsub(str, "|T.-|t", "") --textures in chat like currency coins and such
+	str = gsub(str, "|H.-|h(.-)|h", "%1") --links, just put the item description and chat color
+	str = gsub(str, "{.-}", "") --remove raid icons from chat
     return str
-end
-
-local function scrollToBottom()
-	if not addon.copyFrame.editBox then return end
-	local editBox = addon.copyFrame.editBox
-	--adjust the cursor to be at the bottom of the page, has to be after the frame is shown or it won't update properly
-	C_Timer.After(0.1, function()
-	
-		editBox:SetFocus()
-		editBox:SetCursorPosition(string.len(editBox:GetText()) + 200) --adding additional 200 just in case
-		editBox:ClearFocus()
-		
-		--this sometimes hides the size because it scrolled too far down
-		-- local height = editBox.scrollFrame:GetHeight()
-		-- local range = editBox.scrollFrame:GetVerticalScrollRange()
-		-- local scroll = editBox.scrollFrame:GetVerticalScroll()
-		-- local size = height + range
-		-- --scroll top bottom using maximum size
-		-- editBox.scrollFrame:SetVerticalScroll(size)
-
-	end)
 end
 
 local function GetChatText(copyFrame, chatIndex, pageNum)
 
-	copyFrame.editBox:SetText("") --clear it first in case there were previous messages
+	copyFrame.MLEditBox:SetText("") --clear it first in case there were previous messages
 	copyFrame.currChatIndex = chatIndex
 	
 	local msgCount = _G["ChatFrame"..chatIndex]:GetNumMessages()
@@ -960,10 +933,13 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	local iCounter = 0
 	local startPos = 0
 	local endPos = 0
-	local MAXLINES = 480 --less than 500 just in case we reach highlight limit
+	local MAXLINES = 250 --less than 500 just in case we reach highlight limit, MORE LINES IN EDITBOX CAUSE LAG!!!!!
 	
 	--add the first page
 	table.insert(pages, 1)
+	
+	--the editbox of the multiline editbox (The parent of the multiline object)
+	local parentEditBox = copyFrame.MLEditBox.editBox
 	
 	for i = 1, msgCount do
 		local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..chatIndex]:GetMessageInfo(i)
@@ -1006,13 +982,15 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 			end
 			
 			if (i == 1) then
-				copyFrame.editBox:SetText(unescape(chatMsg).."|r")
+				parentEditBox:Insert(unescape(chatMsg).."|r")
 			else
-				copyFrame.editBox:SetText(copyFrame.editBox:GetText().."\n"..unescape(chatMsg).."|r")
+				parentEditBox:Insert("\n"..unescape(chatMsg).."|r")
 			end	
 		end
 		
 	end
+	
+	--Debug("Chat", chatIndex, 'msgcount', msgCount, 'pages', #pages, 'counter', iCounter, 'start', startPos, 'end', endPos)
 	
 	if pageNum then
 		copyFrame.currentPage = pageNum
@@ -1023,11 +1001,8 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	copyFrame.pages = pages
 	copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
 	
-	if not copyFrame:IsVisible() then
-		copyFrame:Show()
-	else
-		scrollToBottom()
-	end
+	copyFrame.handleCursorChange = true -- just in case
+	copyFrame:Show()
 end
 
 local function CreateCopyFrame()
@@ -1050,7 +1025,7 @@ local function CreateCopyFrame()
 	frame:SetFrameStrata("DIALOG")
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetWidth(830)
-	frame:SetHeight(665)
+	frame:SetHeight(490)
 
 	local group = AceGUI:Create("InlineGroup")
 	group.frame:SetParent(frame)
@@ -1060,16 +1035,39 @@ local function CreateCopyFrame()
 	group:SetLayout("fill")
 	group.frame:Show() --show the group so everything in it displays in the frame
 
-	local editBox = AceGUI:Create("MultiLineEditBox")
-	editBox:SetWidth(400)
-	editBox.button:Hide()
-	editBox.frame:SetClipsChildren(true)
-	editBox:SetLabel(L.CopyChat)
-    editBox:ClearFocus()
-	editBox:SetText("")
-	group:AddChild(editBox)
-	frame.editBox = editBox
-	
+	local MLEditBox = AceGUI:Create("MultiLineEditBox")
+	MLEditBox:SetWidth(400)
+	MLEditBox.button:Hide()
+	MLEditBox.frame:SetClipsChildren(true)
+	MLEditBox:SetLabel(L.CopyChat)
+    MLEditBox:ClearFocus()
+	MLEditBox:SetText("")
+	group:AddChild(MLEditBox)
+	frame.MLEditBox = MLEditBox
+
+	MLEditBox.handleCursorChange = false --setting this to true will update the scrollbar to the cursor position
+	MLEditBox.scrollFrame:HookScript("OnUpdate", function(self, elapsed)
+		if not MLEditBox.scrollFrame:IsVisible() then return end
+		
+		self.OnUpdateCounter = (self.OnUpdateCounter or 0) + elapsed
+		if self.OnUpdateCounter < 0.1 then return end
+		self.OnUpdateCounter = 0
+		
+		local pos = math.max(string.len(MLEditBox:GetText()), MLEditBox.editBox:GetNumLetters())
+		
+		if ( MLEditBox.handleCursorChange ) then
+			MLEditBox:SetFocus()
+			MLEditBox:SetCursorPosition(pos)
+			MLEditBox:ClearFocus()
+			--put the scrollbar button at the max it can go
+			local statusMin, statusMax = MLEditBox.scrollBar:GetMinMaxValues()
+			MLEditBox.scrollBar:SetValue(statusMax + 100) --extra 100 just in case (sometimes the offset is slightly off)
+			MLEditBox.handleCursorChange = false
+		end
+
+	end)
+	frame:HookScript("OnShow", function() MLEditBox.handleCursorChange = true end)
+
 	local close = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
 	close:SetScript("OnClick", function() frame:Hide() end)
 	close:SetPoint("BOTTOMRIGHT", -27, 13)
@@ -1122,7 +1120,6 @@ local function CreateCopyFrame()
 	textFrame:SetWidth(pageNumText:GetWidth() + 2)
     frame.pageNumText = pageNumText
 	
-	frame:HookScript("OnShow", function() scrollToBottom() end)
 	frame:Hide()
 	
 	--store it for the future
