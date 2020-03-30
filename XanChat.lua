@@ -989,7 +989,6 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 		end
 		
 	end
-	
 	--Debug("Chat", chatIndex, 'msgcount', msgCount, 'pages', #pages, 'counter', iCounter, 'start', startPos, 'end', endPos)
 	
 	if pageNum then
