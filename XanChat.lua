@@ -1143,12 +1143,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	obj:SetHeight(18)
 	obj:Hide()
 	obj:SetScript("OnClick", function(self, arg)
-		if (copyFrame:IsVisible()) then
-			copyFrame:Hide()
-		else
-			--this allows it to refresh if we hide the window
-			GetChatText(copyFrame, chatIndex)
-		end
+		GetChatText(copyFrame, chatIndex)
 	end)
 	
 	if not XCHT_DB.enableCopyButtonLeft then
