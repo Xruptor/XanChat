@@ -14,6 +14,7 @@ L.Page = "Page"
 L.CopyChat = "Copy Chat"
 L.Done = "Done"
 L.Page = "Page"
+L.CopyChatError = "There was an error in Copy Chat function."
 
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 L.ChannelGeneral = "%[%d+%. General.-%]"

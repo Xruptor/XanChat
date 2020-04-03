@@ -922,82 +922,111 @@ local function unescape(str)
 end
 
 local function GetChatText(copyFrame, chatIndex, pageNum)
-
+	if not copyFrame or not chatIndex then return end
+	
 	copyFrame.MLEditBox:SetText("") --clear it first in case there were previous messages
 	copyFrame.currChatIndex = chatIndex
 	
-	local msgCount = _G["ChatFrame"..chatIndex]:GetNumMessages()
-	local motdString = COMMUNITIES_MESSAGE_OF_THE_DAY_FORMAT:gsub("\"%%s\"", "")
-	
-	local pages = {}
-	local iCounter = 0
-	local startPos = 0
-	local endPos = 0
-	local MAXLINES = 150 --150 don't use large numbers or it will cause LAG when frame opens.  EditBox was not made for large amounts of text
-	
-	--add the first page
-	table.insert(pages, 1)
-	
 	--the editbox of the multiline editbox (The parent of the multiline object)
 	local parentEditBox = copyFrame.MLEditBox.editBox
+	local lineText
 	
-	for i = 1, msgCount do
-		local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..chatIndex]:GetMessageInfo(i)
-		
-		--there is a hard limit of text that can be highlighted in an editbox to 500 lines.
-		--just to be safe lets just do only the last 450 line each page
-		--don't add an overlapping page if we reach the end of the msgCount
-		iCounter = iCounter + 1
-		if iCounter == MAXLINES and i ~= msgCount  then
-			table.insert(pages, i)
-			iCounter = 0
-		end
+	if not copyFrame.history or not pageNum then
 	
-		if not pageNum and startPos < 1 then
-			if msgCount > MAXLINES then
-				startPos = msgCount - MAXLINES
-				endPos = startPos + MAXLINES
-			else
-				startPos = 1
-				endPos = msgCount
-			end
-		elseif pageNum and #pages == pageNum then
-			if pages[pageNum] == 1 then
-				--first page
-				startPos = 1
-				endPos = MAXLINES
-			else
-				startPos = pages[pageNum]
-				endPos = pages[pageNum] + MAXLINES
-			end
+		--lets build our history for easy page flipping
+		
+		local msgCount = _G["ChatFrame"..chatIndex]:GetNumMessages()
+		local motdString = COMMUNITIES_MESSAGE_OF_THE_DAY_FORMAT:gsub("\"%%s\"", "")
+		
+		local pages = {}
+		local iCounter = 0
+		local startPos = 0
+		local endPos = 0
+		local MAXLINES = 150 --150 don't use large numbers or it will cause LAG when frame opens.  EditBox was not made for large amounts of text
+	
+		--set the first page accordingly based on the current amount of lines.
+		if msgCount > MAXLINES then
+			startPos = msgCount - MAXLINES
+			endPos = startPos + MAXLINES
+		else
+			startPos = 1
+			endPos = msgCount
 		end
+				
+		--add the first page
+		table.insert(pages, 1)
 		
-		if i >= startPos and i <= endPos then
+		--add the history lines to process them faster when going through pages
+		if not copyFrame.history then copyFrame.history = {} end
 		
+		for i = 1, msgCount do
+			local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..chatIndex]:GetMessageInfo(i)
+			
+			--there is a hard limit of text that can be highlighted in an editbox to 500 lines.
+			--just to be safe lets just do only the last 450 line each page
+			--don't add an overlapping page if we reach the end of the msgCount
+			iCounter = iCounter + 1
+			if iCounter == MAXLINES and i ~= msgCount  then
+				table.insert(pages, i)
+				iCounter = 0
+			end
+			
+			--make a new page set if it's not found
+			if not copyFrame.history[#pages] then copyFrame.history[#pages] = {} end
+
 			--fix situations where links end the color prematurely
 			if (r and g and b and chatTypeID) then
 				local colorCode = RGBToColorCode(r, g, b)
 				chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
 				chatMsg = colorCode..chatMsg
 			end
+				
+			if i >= startPos and i <= endPos then
+
+				if (i == 1) then
+					lineText = unescape(chatMsg).."|r"
+				else
+					lineText = "\n"..unescape(chatMsg).."|r"
+				end	
+				
+				parentEditBox:Insert(lineText)
+			end
 			
-			if (i == 1) then
-				parentEditBox:Insert(unescape(chatMsg).."|r")
-			else
-				parentEditBox:Insert("\n"..unescape(chatMsg).."|r")
-			end	
+			table.insert(copyFrame.history[#pages], chatMsg)
 		end
 		
-	end
-	--Debug("Chat", chatIndex, 'msgcount', msgCount, 'pages', #pages, 'counter', iCounter, 'start', startPos, 'end', endPos)
-	
-	if pageNum then
-		copyFrame.currentPage = pageNum
-	else
+		--set the page counts for future reference
+		copyFrame.pages = pages
 		copyFrame.currentPage = #pages
+		
+		--Debug("Chat", chatIndex, 'msgcount', msgCount, 'pages', #pages, 'counter', iCounter, 'start', startPos, 'end', endPos)
+		
+	elseif copyFrame.history and pageNum then
+
+		--use the history we parsed already rather then doing it again
+		for i = 1, #copyFrame.history do
+			if i == pageNum then
+				for qX = 1, #copyFrame.history[i] do
+					if copyFrame.history[i][qX] then
+						lineText = copyFrame.history[i][qX]
+						if (qX == 1) then
+							lineText = unescape(lineText).."|r"
+						else
+							lineText = "\n"..unescape(lineText).."|r"
+						end	
+						parentEditBox:Insert(lineText)
+					end
+				end
+				break
+			end
+		end
+		copyFrame.currentPage = pageNum
+		
+	else
+		print("xanChat: "..L.CopyChatError)
+		return
 	end
 
-	copyFrame.pages = pages
 	copyFrame.pageNumText:SetText(L.Page.." "..copyFrame.currentPage)
 	
 	copyFrame.handleCursorChange = true -- just in case
@@ -1010,8 +1039,8 @@ local function CreateCopyFrame()
 
 	local AceGUI = LibStub("AceGUI-3.0")
 	
-	frame = CreateFrame("FRAME", nil, UIParent)
-	frame:SetBackdrop({
+	local copyFrame = CreateFrame("FRAME", nil, UIParent)
+	copyFrame:SetBackdrop({
 		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
 		tile = true,
@@ -1019,17 +1048,17 @@ local function CreateCopyFrame()
 		edgeSize = 32,
 		insets = { left = 8, right = 8, top = 8, bottom = 8 }
 	})
-	frame:SetBackdropColor(0, 0, 0, 1)
-	frame:EnableMouse(true)
-	frame:SetFrameStrata("DIALOG")
-	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-	frame:SetWidth(830)
-	frame:SetHeight(490)
+	copyFrame:SetBackdropColor(0, 0, 0, 1)
+	copyFrame:EnableMouse(true)
+	copyFrame:SetFrameStrata("DIALOG")
+	copyFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+	copyFrame:SetWidth(830)
+	copyFrame:SetHeight(490)
 
 	local group = AceGUI:Create("InlineGroup")
-	group.frame:SetParent(frame)
-	group.frame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -17, 12)
-	group.frame:SetPoint("TOPLEFT", frame, "TOPLEFT", 17, -10)
+	group.frame:SetParent(copyFrame)
+	group.frame:SetPoint("BOTTOMRIGHT", copyFrame, "BOTTOMRIGHT", -17, 12)
+	group.frame:SetPoint("TOPLEFT", copyFrame, "TOPLEFT", 17, -10)
 	group.frame:Hide()
 	group:SetLayout("fill")
 	group.frame:Show() --show the group so everything in it displays in the frame
@@ -1042,33 +1071,34 @@ local function CreateCopyFrame()
     MLEditBox:ClearFocus()
 	MLEditBox:SetText("")
 	group:AddChild(MLEditBox)
-	frame.MLEditBox = MLEditBox
+	copyFrame.MLEditBox = MLEditBox
 
-	MLEditBox.handleCursorChange = false --setting this to true will update the scrollbar to the cursor position
+	copyFrame.handleCursorChange = false --setting this to true will update the scrollbar to the cursor position
 	MLEditBox.scrollFrame:HookScript("OnUpdate", function(self, elapsed)
 		if not MLEditBox.scrollFrame:IsVisible() then return end
 		
 		self.OnUpdateCounter = (self.OnUpdateCounter or 0) + elapsed
 		if self.OnUpdateCounter < 0.1 then return end
 		self.OnUpdateCounter = 0
-		
+
 		local pos = math.max(string.len(MLEditBox:GetText()), MLEditBox.editBox:GetNumLetters())
 		
-		if ( MLEditBox.handleCursorChange ) then
+		if ( copyFrame.handleCursorChange ) then
 			MLEditBox:SetFocus()
 			MLEditBox:SetCursorPosition(pos)
 			MLEditBox:ClearFocus()
 			--put the scrollbar button at the max it can go
 			local statusMin, statusMax = MLEditBox.scrollBar:GetMinMaxValues()
 			MLEditBox.scrollBar:SetValue(statusMax + 100) --extra 100 just in case (sometimes the offset is slightly off)
-			MLEditBox.handleCursorChange = false
+			copyFrame.handleCursorChange = false
 		end
 
 	end)
-	frame:HookScript("OnShow", function() MLEditBox.handleCursorChange = true end)
+	copyFrame:HookScript("OnShow", function() copyFrame.handleCursorChange = true end)
+	copyFrame:HookScript("OnHide", function() copyFrame.history = nil end)
 
 	local close = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
-	close:SetScript("OnClick", function() frame:Hide() end)
+	close:SetScript("OnClick", function() copyFrame:Hide() end)
 	close:SetPoint("BOTTOMRIGHT", -27, 13)
 	close:SetFrameLevel(close:GetFrameLevel() + 1)
 	close:SetHeight(20)
@@ -1082,13 +1112,13 @@ local function CreateCopyFrame()
     buttonBack:SetPoint("BOTTOMLEFT", 10, 13)
 	buttonBack:SetFrameLevel(buttonBack:GetFrameLevel() + 1)
     buttonBack:SetScript("OnClick", function()
-		if frame.currChatIndex and frame.currentPage then
-			if (frame.currentPage - 1) > 0 then
-				GetChatText(frame, frame.currChatIndex, frame.currentPage - 1)
+		if copyFrame.currChatIndex and copyFrame.currentPage then
+			if (copyFrame.currentPage - 1) > 0 then
+				GetChatText(copyFrame, copyFrame.currChatIndex, copyFrame.currentPage - 1)
 			end
 		end
     end)
-    frame.buttonBack = buttonBack
+    copyFrame.buttonBack = buttonBack
     
     local buttonForward = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
     buttonForward:SetText(">")
@@ -1097,13 +1127,13 @@ local function CreateCopyFrame()
     buttonForward:SetPoint("BOTTOMLEFT", 40, 13)
 	buttonForward:SetFrameLevel(buttonForward:GetFrameLevel() + 1)
     buttonForward:SetScript("OnClick", function()
-		if frame.currChatIndex and frame.currentPage and frame.pages then
-			if (frame.currentPage + 1) <= #frame.pages then
-				GetChatText(frame, frame.currChatIndex, frame.currentPage + 1)
+		if copyFrame.currChatIndex and copyFrame.currentPage and copyFrame.pages then
+			if (copyFrame.currentPage + 1) <= #copyFrame.pages then
+				GetChatText(copyFrame, copyFrame.currChatIndex, copyFrame.currentPage + 1)
 			end
 		end
     end)
-    frame.buttonForward = buttonForward
+    copyFrame.buttonForward = buttonForward
     
 	--this is to place it above the group layer
 	local textFrame = CreateFrame("FRAME", nil, group.frame)
@@ -1117,14 +1147,14 @@ local function CreateCopyFrame()
     pageNumText:SetText(L.Page.." 1")
 	textFrame:SetHeight(pageNumText:GetHeight() + 2)
 	textFrame:SetWidth(pageNumText:GetWidth() + 2)
-    frame.pageNumText = pageNumText
+    copyFrame.pageNumText = pageNumText
 	
-	frame:Hide()
+	copyFrame:Hide()
 	
 	--store it for the future
-	addon.copyFrame = frame
+	addon.copyFrame = copyFrame
 	
-	return frame
+	return copyFrame
 end
 
 local function CreateCopyChatButtons(chatIndex, chatFrame)
@@ -1142,6 +1172,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	obj:SetHeight(18)
 	obj:Hide()
 	obj:SetScript("OnClick", function(self, arg)
+		if copyFrame.history then copyFrame.history = nil end --reset
 		GetChatText(copyFrame, chatIndex)
 	end)
 	
