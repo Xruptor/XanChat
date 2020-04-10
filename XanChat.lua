@@ -1137,6 +1137,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	local copyFrame = CreateCopyFrame()
 
 	local obj = CreateFrame("Button", "xanCopyChatButton"..chatIndex, chatFrame)
+	obj:SetParent(chatFrame)
 	obj.bg = obj:CreateTexture(nil,	"ARTWORK")
 	obj.bg:SetTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj.bg:SetAllPoints(obj)
@@ -1178,16 +1179,12 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 		obj:SetScript("OnLeave", obj.hide)
 		
 	else
-		if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked then
-			if not IsCombatLog(chatFrame) then
-				obj:SetPoint("TOPLEFT", -30, -35)
-			else
-				obj:SetPoint("TOPLEFT", -30, -11)
-			end
+		local leftButtonFrame = "ChatFrame"..chatIndex.."ButtonFrame"
+		if _G[leftButtonFrame] then
+			obj:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, -40)
 		else
-			obj:SetPoint("TOPLEFT", -30, 0)
+			obj:SetPoint("TOPLEFT", chatFrame, "TOPLEFT", -30, -40)
 		end
-		
 		obj:Show()
 	end
 	
