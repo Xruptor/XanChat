@@ -1138,9 +1138,9 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 
 	local obj = CreateFrame("Button", "xanCopyChatButton"..chatIndex, chatFrame)
 	obj:SetParent(chatFrame)
-	obj.bg = obj:CreateTexture(nil,	"ARTWORK")
-	obj.bg:SetTexture("Interface\\AddOns\\xanChat\\media\\copy")
-	obj.bg:SetAllPoints(obj)
+	obj:SetNormalTexture("Interface\\AddOns\\xanChat\\media\\copy")
+	obj:SetHighlightTexture("Interface\\AddOns\\xanChat\\media\\copyhighlight")
+	obj:SetPushedTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj.texture = obj.bg
 	obj:SetFrameLevel(7)
 	obj:SetWidth(18)
