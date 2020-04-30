@@ -409,14 +409,16 @@ local function doFriendUpdate()
 	local numBNet, onlineBNet = BNGetNumFriends()
 	for i = 1, numBNet do
 		local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
-		local friendInfo = accountInfo.gameAccountInfo
-		--make sure they are online and playing WOW
-		if friendInfo and friendInfo.isOnline and friendInfo.clientProgram == BNET_CLIENT_WOW then
-			--Whether or not the friend is known by their BattleTag
-			local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
-			
-			if friendInfo.characterName and friendInfo.realmName and friendInfo.characterLevel and friendInfo.className then
-				addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
+		if accountInfo and accountInfo.gameAccountInfo then
+			local friendInfo = accountInfo.gameAccountInfo
+			--make sure they are online and playing WOW
+			if friendInfo and friendInfo.isOnline and friendInfo.clientProgram == BNET_CLIENT_WOW then
+				--Whether or not the friend is known by their BattleTag
+				local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
+				
+				if friendInfo.characterName and friendInfo.realmName and friendInfo.characterLevel and friendInfo.className then
+					addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
+				end
 			end
 		end
 	end
