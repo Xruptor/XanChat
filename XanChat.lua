@@ -922,7 +922,7 @@ local function unescape(str)
 	str = gsub(str, "{.-}", "") --remove raid icons from chat
 	
 	--so apparently blizzard protects certain strings and returns them as textures.
-	--this causes the insert for the multiline to break and now display the line.
+	--this causes the insert for the multiline to break and not display the line.
 	--such is the case for protected BNET Friends names and in some rare occasions names in the chat in general.
 	--These protected strings start with |K and end with |k.   Example: |K[gsf][0-9]+|k[0]+|k
 	--look under the link above for escape sequences
