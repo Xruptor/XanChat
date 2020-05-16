@@ -16,6 +16,8 @@ L.Done = "Done"
 L.Page = "Page"
 L.CopyChatError = "There was an error in Copy Chat function."
 
+L.ProtectedChannel = " |cFFDF2B2B(Channel is protected by Blizzard. Addon access is prohibited.)|r."
+
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 L.ChannelGeneral = "%[%d+%. General.-%]"
 L.ChannelTrade = "%[%d+%. Trade.-%]"

@@ -914,6 +914,11 @@ end)
 --https://wow.gamepedia.com/UI_escape_sequences
 local function unescape(str)
 	
+	--this is for testing for protected strings and only for officer chat, since even the text in officer chat is protected not just the officer name
+	local isOfficerChat = false
+	if string.find(str, "|Hchannel:officer", 1, true) then
+		isOfficerChat = true
+	end
 	--str = gsub(str, "|c%x%x%x%x%x%x%x%x", "") --color tag 1
 	--str = gsub(str, "|r", "") --color tag 2
 	
@@ -926,38 +931,52 @@ local function unescape(str)
 	--such is the case for protected BNET Friends names and in some rare occasions names in the chat in general.
 	--These protected strings start with |K and end with |k.   Example: |K[gsf][0-9]+|k[0]+|k
 	--look under the link above for escape sequences
+
+	--I want to point out that event addons like ElvUI suffer from  this problem.
+	--They get around it by not displaying protected messages at ALL.  Check MessageIsProtected(message) in ElvUI
 	
 	if string.find(str, "|K", 1, true) then
 	
 		--str = gsub(str, "|K(.-)|k", "%1")
 		local presenceID = string.match(str, "|K(.-)|k")
 		local accountName
-		
-		local numBNet, onlineBNet = BNGetNumFriends()
-		for i = 1, numBNet do
-			local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
-			--only continue if we have a account info to work with
-			if accountInfo and accountInfo.gameAccountInfo then
-				--grab the bnet name of the account, it will have |K|k in it so again it will be hidden
-				accountName = accountInfo.accountName
-				--do we even have a battle.net tag to replace it with?
-				if accountName and accountInfo.battleTag then
-					--grab the presenceID from in between the |K|k tags
-					accountName = gsub(accountName, "|K(.-)|k", "%1")
-					--if it matches the one we found earlier, then replace it with a battle.net tag instead
-					if accountName and accountName == presenceID then
-						str = gsub(str, "|K(.-)|k", accountInfo.battleTag)
-						--return out of here since we already did the replace
-						return str
+		local stripBNet
+
+		if presenceID then
+			local numBNet, onlineBNet = BNGetNumFriends()
+			for i = 1, numBNet do
+				local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+				--only continue if we have a account info to work with
+				if accountInfo and accountInfo.gameAccountInfo then
+					--grab the bnet name of the account, it will have |K|k in it so again it will be hidden
+					accountName = accountInfo.accountName
+					--do we even have a battle.net tag to replace it with?
+					if accountName and accountInfo.battleTag then
+						--grab the presenceID from in between the |K|k tags
+						accountName = gsub(accountName, "|K(.-)|k", "%1")
+						--if it matches the one we found earlier, then replace it with a battle.net tag instead
+						if accountName and accountName == presenceID then
+							--don't show entire bnet tag just the name
+							stripBNet = string.match(accountInfo.battleTag, "(.-)#")
+							str = gsub(str, "|K(.-)|k", stripBNet or accountInfo.battleTag)
+							--return out of here since we already did the replace
+							--we don't want to go to the failsafe below
+							return str
+						end
 					end
 				end
 			end
 		end
 		
 		--something went wrong with replacing the name text for |K|k
-		--so lets just remove it since it will not allow text to be inserted into the multiline box, it will be empty and or hidden since |K|k returns a hidden textures
-		--for protected strings
+		--so lets just remove it since it will not allow text to be inserted into the multiline box, since it will be empty and or hidden because |K|k returns a hidden textures
+		--for protected strings.  That's why we are just going to remove it
 		str = gsub(str, "|K(.-)|k", "%1")
+		
+		--add extra text for protected strings, to let folks know it's protected
+		if isOfficerChat then
+			str = str..L.ProtectedChannel
+		end
 	end
 
     return str
@@ -1025,26 +1044,18 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 			chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
 			chatMsg = colorCode..chatMsg
 		end
-		
+
 		if (i == startPos) then
 			lineText = unescape(chatMsg).."|r"
 		else
 			lineText = "\n"..unescape(chatMsg).."|r"
-		end	
-		
+		end
+
 		parentEditBox:Insert(lineText)
 	end
 	
 	--Debug("Chat", chatIndex, 'msgcount', msgCount, 'pages', #pages, 'start', startPos, 'end', endPos)
-	
-	--this is to debug the |K|k protected strings
-	--parentEditBox:Insert("\n--DEBUG--\n")
-	--parentEditBox:Insert("|cff00fff6To |HTest|h[Test]|h: Test1\n")
-	--parentEditBox:Insert(unescape("|cff00fff6To |HTest|h[Test]|h: Test1\n"))
-	--parentEditBox:Insert(unescape("|cff00fff6To |HBNplayer:|Kq5|k:3:271:BN_WHISPER:|Kq5|k|h[|Kq5|k]|h: testing this\n"))
-	--parentEditBox:Insert("|cff00fff6To |HBNplayer:|h[q5]|h: testing again\n")
-	--parentEditBox:Insert("|cff00fff6To |HBNplayer:TEST:3:271:BN_WHISPER:TEST|h[TEST]|h: testing last\n")
-	
+
 	if pageNum then
 		copyFrame.currentPage = pageNum
 	else
