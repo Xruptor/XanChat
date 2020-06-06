@@ -1396,6 +1396,31 @@ local function enableChatFrameFading()
 end
 
 --[[------------------------
+	Custom outgoing whisper color
+--------------------------]]
+
+function addon:setOutWhisperColor()
+	
+	local function ToRGBA(hex)
+		return tonumber('0x' .. string.sub(hex, 3, 4), 10) / 255,
+			tonumber('0x' .. string.sub(hex, 5, 6), 10) / 255,
+			tonumber('0x' .. string.sub(hex, 7, 8), 10) / 255,
+			tonumber('0x' .. string.sub(hex, 1, 2), 10) / 255
+	end
+	
+	local r, g, b = ChatTypeInfo["WHISPER"].r, ChatTypeInfo["WHISPER"].g, ChatTypeInfo["WHISPER"].b
+
+	if XCHT_DB.enableOutWhisperColor and XCHT_DB.outWhisperColor then
+		r, g, b, a = ToRGBA(XCHT_DB.outWhisperColor)
+	end
+	
+	if r and g and b then
+		ChangeChatColor("WHISPER_INFORM", r, g, b) --change whisper outgoing color
+	end
+
+end
+
+--[[------------------------
 	PLAYER_LOGIN
 --------------------------]]
 
@@ -1433,6 +1458,8 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.lockChatSettings == nil then XCHT_DB.lockChatSettings = false end
 	if XCHT_DB.userChatAlpha == nil then XCHT_DB.userChatAlpha = 0.25 end  --uses blizzard default value from DEFAULT_CHATFRAME_ALPHA
 	if XCHT_DB.enableEditboxAdjusted == nil then XCHT_DB.enableEditboxAdjusted = false end
+	if XCHT_DB.enableOutWhisperColor == nil then XCHT_DB.enableOutWhisperColor = false end
+	if XCHT_DB.outWhisperColor == nil then XCHT_DB.outWhisperColor = "FFF2307C" end
 	
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1465,6 +1492,9 @@ function addon:PLAYER_LOGIN()
 	for iCh = 1, 15 do
 		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
 	end
+	
+	--do the custom outgoing whisper color
+	addon:setOutWhisperColor()
 
 	--check for chat box fading
 	if not XCHT_DB.enableChatFrameFade then

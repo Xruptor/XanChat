@@ -15,6 +15,9 @@ L.CopyChat = "Copy Chat"
 L.Done = "Done"
 L.Page = "Page"
 L.CopyChatError = "There was an error in Copy Chat function."
+L.AdditionalSettings = "Additional Settings"
+L.ChangeOutgoingWhisperColor = "Change outgoing whisper chat color."
+L.EnableOutWhisperColor = "Enable custom outgoing whisper chat color."
 
 L.ProtectedChannel = " |cFFDF2B2B(Channel is protected by Blizzard. Addon access is prohibited.)|r."
 

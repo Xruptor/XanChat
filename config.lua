@@ -11,9 +11,10 @@ configEvent:SetScript("OnEvent", function(self, event, ...) if self[event] then 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 local configObjList = {}
 
-local lastObject
-local function addConfigEntry(objEntry, adjustX, adjustY, isCustom, ignoreLock)
-	
+local lastObject = {}
+
+local function addConfigEntry(frameParentName, objEntry, adjustX, adjustY, isCustom, ignoreLock, customStartYPoint)
+
 	if not ignoreLock then
 		table.insert(configObjList, objEntry)
 	end
@@ -21,14 +22,18 @@ local function addConfigEntry(objEntry, adjustX, adjustY, isCustom, ignoreLock)
 	objEntry:ClearAllPoints()
 	
 	if not isCustom then
-		if not lastObject then
-			objEntry:SetPoint("TOPLEFT", 20, -150)
+		if not lastObject[frameParentName] then
+			if not customStartYPoint then
+				objEntry:SetPoint("TOPLEFT", 20, -150)
+			else
+				objEntry:SetPoint("TOPLEFT", 20, customStartYPoint)
+			end
 		else
-			local point, relativeTo, relativePoint, xOfs, yOfs = lastObject:GetPoint()
+			local point, relativeTo, relativePoint, xOfs, yOfs = lastObject[frameParentName]:GetPoint()
 			objEntry:SetPoint("TOPLEFT", adjustX or 0, (yOfs + adjustY) or -30)
 		end
 		
-		lastObject = objEntry
+		lastObject[frameParentName] = objEntry
 	else
 		objEntry:SetPoint("TOPLEFT", adjustX, adjustY)
 	end
@@ -99,6 +104,72 @@ local function createSlider(parentFrame, displayText, minVal, maxVal)
 	return slider
 end
 
+local colorPickerIndex = 0
+local function createColorPicker(parentFrame, dbObj, objName, displayText)
+	colorPickerIndex = colorPickerIndex + 1
+	
+	local function ToRGBA(hex)
+		return tonumber('0x' .. string.sub(hex, 3, 4), 10) / 255,
+			tonumber('0x' .. string.sub(hex, 5, 6), 10) / 255,
+			tonumber('0x' .. string.sub(hex, 7, 8), 10) / 255,
+			tonumber('0x' .. string.sub(hex, 1, 2), 10) / 255
+	end
+	local function ToHex(r, g, b, a)
+		return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
+	end
+
+	local function Update(self, value)
+		local r, g, b, a
+		if(type(value) == 'table' and r.GetRGB) then
+			r, g, b, a = value:GetRGBA()
+		else
+			r, g, b, a = ToRGBA(value)
+		end
+
+		self.Swatch:SetVertexColor(r, g, b, a)
+	
+		--save values
+		--r, g, b, a, value
+		--value is hex
+		dbObj[objName] = value
+	end
+	
+	local Button = CreateFrame('Button', ADDON_NAME.."_config_colorpicker_" .. colorPickerIndex, parentFrame)
+	Button:SetSize(25, 25)
+	Button:SetScript('OnClick', function(self)
+		local r, g, b, a = ToRGBA(dbObj[objName])
+		ColorPickerFrame:SetColorRGB(r or 1, g or 1, b or 1)
+		ColorPickerFrame.opacity = 1
+		ColorPickerFrame.hasOpacity = false
+		ColorPickerFrame.func = function()
+			local r, g, b = ColorPickerFrame:GetColorRGB()
+			local a = 1
+			Update(self, ToHex(r, g, b, a))
+		end
+
+		ColorPickerFrame.opacityFunc = ColorPickerFrame.func
+		ColorPickerFrame.cancelFunc = function()
+			Update(self, ToHex(r, g, b, a))
+		end
+		ShowUIPanel(ColorPickerFrame)
+	end)
+
+	local Swatch = Button:CreateTexture(nil, 'OVERLAY')
+	Swatch:SetPoint('CENTER')
+	Swatch:SetSize(24, 24)
+	Swatch:SetTexture([[Interface\ChatFrame\ChatFrameColorSwatch]])
+	Button.Swatch = Swatch
+
+	local text = parentFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	text:SetPoint("LEFT", Swatch, "RIGHT", 5, 0)
+	text:SetText(displayText)
+	
+	--update to initial color stored
+	Update(Button, dbObj[objName])
+
+	return Button
+end
+
 local function setEnabled(objType, obj, switch)
 	if objType == "checkbox" then
 		obj:SetEnabled(switch)
@@ -160,9 +231,36 @@ local function LoadAboutFrame()
 	return about
 end
 
+local function LoadAdditionalSettings(childFrameName, parentFrameName)
+
+	local addSettings = CreateFrame("Frame", ADDON_NAME..childFrameName.."Panel", InterfaceOptionsFramePanelContainer)
+	addSettings.name = childFrameName
+	addSettings.parent = parentFrameName  --this is very important as it creates frame groups
+	addSettings:Hide()
+
+    local title = addSettings:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+
+	title:SetPoint("TOPLEFT", 16, -16)
+	title:SetText(ADDON_NAME)
+
+	local subtitle = addSettings:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	subtitle:SetHeight(32)
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", addSettings, -32, 0)
+	subtitle:SetNonSpaceWrap(true)
+	subtitle:SetJustifyH("LEFT")
+	subtitle:SetJustifyV("TOP")
+	subtitle:SetText(childFrameName)
+	
+	InterfaceOptions_AddCategory(addSettings)
+
+	return addSettings
+end
+
 function configEvent:PLAYER_LOGIN()
 	
 	addon.aboutPanel = LoadAboutFrame()
+	addon.additionalSettings = LoadAdditionalSettings(L.AdditionalSettings, ADDON_NAME)
 	
 	local btnStickyChannelsList = createButton(addon.aboutPanel, L.EditStickyChannelsListHeader)
 	btnStickyChannelsList.func = function()
@@ -170,7 +268,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnStickyChannelsList:SetScript("OnClick", btnStickyChannelsList.func)
 	
-	addConfigEntry(btnStickyChannelsList, 403, -20, true)
+	addConfigEntry(addon.aboutPanel.name, btnStickyChannelsList, 403, -20, true)
 	addon.aboutPanel.btnStickyChannelsList = btnStickyChannelsList
 	
 	local btnFilterList = createButton(addon.aboutPanel, L.EditFilterListHeader)
@@ -179,7 +277,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnFilterList:SetScript("OnClick", btnFilterList.func)
 	
-	addConfigEntry(btnFilterList, 410, -55, true)
+	addConfigEntry(addon.aboutPanel.name, btnFilterList, 410, -55, true)
 	addon.aboutPanel.btnFilterList = btnFilterList
 	
 	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.SlashLockChatSettingsInfo.."|r")
@@ -198,7 +296,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnLockChatSettings:SetScript("OnClick", btnLockChatSettings.func)
 	
-	addConfigEntry(btnLockChatSettings, 20, -110, true, true)
+	addConfigEntry(addon.aboutPanel.name, btnLockChatSettings, 20, -110, true, true)
 	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
 	
 	local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
@@ -220,7 +318,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSocial:SetScript("OnClick", btnSocial.func)
 	
-	addConfigEntry(btnSocial, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnSocial, 20, -22)
 	addon.aboutPanel.btnSocial = btnSocial
 
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
@@ -242,7 +340,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnScroll:SetScript("OnClick", btnScroll.func)
 	
-	addConfigEntry(btnScroll, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnScroll, 20, -22)
 	addon.aboutPanel.btnScroll = btnScroll
 
 	local btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
@@ -264,7 +362,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnShortNames:SetScript("OnClick", btnShortNames.func)
 	
-	addConfigEntry(btnShortNames, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnShortNames, 20, -22)
 	addon.aboutPanel.btnShortNames = btnShortNames
 
 	local btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
@@ -286,7 +384,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnEditBox:SetScript("OnClick", btnEditBox.func)
 	
-	addConfigEntry(btnEditBox, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnEditBox, 20, -22)
 	addon.aboutPanel.btnEditBox = btnEditBox
 
 	local btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
@@ -308,7 +406,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnTabs:SetScript("OnClick", btnTabs.func)
 	
-	addConfigEntry(btnTabs, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnTabs, 20, -22)
 	addon.aboutPanel.btnTabs = btnTabs
 
 	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
@@ -330,7 +428,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnShadow:SetScript("OnClick", btnShadow.func)
 	
-	addConfigEntry(btnShadow, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnShadow, 20, -22)
 	addon.aboutPanel.btnShadow = btnShadow
 
 	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
@@ -352,7 +450,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnVoice:SetScript("OnClick", btnVoice.func)
 	
-	addConfigEntry(btnVoice, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnVoice, 20, -22)
 	addon.aboutPanel.btnVoice = btnVoice
 	
 	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
@@ -376,7 +474,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnEditBoxBorder:SetScript("OnClick", btnEditBoxBorder.func)
 	
-	addConfigEntry(btnEditBoxBorder, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnEditBoxBorder, 20, -22)
 	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
 	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SlashSimpleEditBoxInfo)
@@ -405,7 +503,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSimpleEditBox:SetScript("OnClick", btnSimpleEditBox.func)
 	
-	addConfigEntry(btnSimpleEditBox, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnSimpleEditBox, 20, -22)
 	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
 	
 	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SlashSEBDesignInfo)
@@ -427,7 +525,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnSEBDesign:SetScript("OnClick", btnSEBDesign.func)
 	
-	addConfigEntry(btnSEBDesign, 45, -22)
+	addConfigEntry(addon.aboutPanel.name, btnSEBDesign, 45, -22)
 	addon.aboutPanel.btnSEBDesign = btnSEBDesign
 	
 	local btnAdjustedEditbox = createCheckbutton(addon.aboutPanel, L.SlashAdjustedEditboxInfo)
@@ -451,7 +549,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnAdjustedEditbox:SetScript("OnClick", btnAdjustedEditbox.func)
 	
-	addConfigEntry(btnAdjustedEditbox, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnAdjustedEditbox, 20, -22)
 	addon.aboutPanel.btnAdjustedEditbox = btnAdjustedEditbox
 	
 	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteInfo)
@@ -478,7 +576,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnCopyPaste:SetScript("OnClick", btnCopyPaste.func)
 	
-	addConfigEntry(btnCopyPaste, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnCopyPaste, 20, -22)
 	addon.aboutPanel.btnCopyPaste = btnCopyPaste
 	
 	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteLeftInfo)
@@ -500,7 +598,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnCopyPasteLeft:SetScript("OnClick", btnCopyPasteLeft.func)
 	
-	addConfigEntry(btnCopyPasteLeft, 45, -22)
+	addConfigEntry(addon.aboutPanel.name, btnCopyPasteLeft, 45, -22)
 	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 	
 	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
@@ -519,7 +617,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
 	
-	addConfigEntry(btnPlayerChatStyle, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnPlayerChatStyle, 20, -22)
 	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
 	
 	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.SlashChatTextFadeInfo)
@@ -541,7 +639,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnChatTextFade:SetScript("OnClick", btnChatTextFade.func)
 	
-	addConfigEntry(btnChatTextFade, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnChatTextFade, 20, -22)
 	addon.aboutPanel.btnChatTextFade = btnChatTextFade
 	
 	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
@@ -563,7 +661,7 @@ function configEvent:PLAYER_LOGIN()
 	end
 	btnChatFrameFade:SetScript("OnClick", btnChatFrameFade.func)
 	
-	addConfigEntry(btnChatFrameFade, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnChatFrameFade, 20, -22)
 	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
 	
 	--slider chat alpha
@@ -588,16 +686,44 @@ function configEvent:PLAYER_LOGIN()
 	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
 	sliderChatAlpha:SetScript("OnMouseUp", sliderChatAlpha.sliderMouseUp)
 	
-	addConfigEntry(sliderChatAlpha, 20, -53)
+	addConfigEntry(addon.aboutPanel.name, sliderChatAlpha, 20, -53)
 	addon.aboutPanel.sliderChatAlpha = sliderChatAlpha
 	
-	--show locked settings warning
-	addon.aboutPanel:HookScript("OnShow", function()
-		if XCHT_DB and XCHT_DB.lockChatSettings then
-			DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
-			configEvent:DoLock()
+	-- --show locked settings warning
+	-- addon.aboutPanel:HookScript("OnShow", function()
+		-- if XCHT_DB and XCHT_DB.lockChatSettings then
+			-- DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+			-- configEvent:DoLock()
+		-- end
+	-- end)
+	
+	
+	-------------------------------------------------------
+	-------------------------------------------------------
+	--ADDITIONAL SETTINGS
+
+	local btnOutWhisperColor = createCheckbutton(addon.additionalSettings, L.EnableOutWhisperColor)
+	btnOutWhisperColor:SetScript("OnShow", function() btnOutWhisperColor:SetChecked(XCHT_DB.enableOutWhisperColor) end)
+	btnOutWhisperColor.func = function()
+		local value = XCHT_DB.enableOutWhisperColor
+
+		if value then
+			XCHT_DB.enableOutWhisperColor = false
+		else
+			XCHT_DB.enableOutWhisperColor = true
 		end
-	end)
+		
+		addon:setOutWhisperColor()
+	end
+	btnOutWhisperColor:SetScript("OnClick", btnOutWhisperColor.func)
+	
+	addConfigEntry(addon.additionalSettings.name, btnOutWhisperColor, 20, -22, nil, nil, -70)
+	addon.additionalSettings.btnOutWhisperColor = btnOutWhisperColor
+	
+	--color swatch
+	local btnOutWhisperColorPicker = createColorPicker(addon.additionalSettings, XCHT_DB, "outWhisperColor", L.ChangeOutgoingWhisperColor)
+	addConfigEntry(addon.additionalSettings.name, btnOutWhisperColorPicker, 20, -25)
+	addon.additionalSettings.btnOutWhisperColorPicker = btnOutWhisperColorPicker
 
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
