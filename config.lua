@@ -725,6 +725,24 @@ function configEvent:PLAYER_LOGIN()
 	addConfigEntry(addon.additionalSettings.name, btnOutWhisperColorPicker, 20, -25)
 	addon.additionalSettings.btnOutWhisperColorPicker = btnOutWhisperColorPicker
 
+	local btnDisableChatEnterLeaveNotice = createCheckbutton(addon.additionalSettings, L.DisableChatEnterLeaveNotice)
+	btnDisableChatEnterLeaveNotice:SetScript("OnShow", function() btnDisableChatEnterLeaveNotice:SetChecked(XCHT_DB.disableChatEnterLeaveNotice) end)
+	btnDisableChatEnterLeaveNotice.func = function()
+		local value = XCHT_DB.disableChatEnterLeaveNotice
+
+		if value then
+			XCHT_DB.disableChatEnterLeaveNotice = false
+		else
+			XCHT_DB.disableChatEnterLeaveNotice = true
+		end
+		
+		addon:setDisableChatEnterLeaveNotice()
+	end
+	btnDisableChatEnterLeaveNotice:SetScript("OnClick", btnDisableChatEnterLeaveNotice.func)
+	
+	addConfigEntry(addon.additionalSettings.name, btnDisableChatEnterLeaveNotice, 20, -30)
+	addon.additionalSettings.btnDisableChatEnterLeaveNotice = btnDisableChatEnterLeaveNotice
+	
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
 

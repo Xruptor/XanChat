@@ -1420,6 +1420,26 @@ function addon:setOutWhisperColor()
 
 end
 
+
+--[[------------------------
+	Disable enter/leave/changed channel notifications
+--------------------------]]
+
+function addon:setDisableChatEnterLeaveNotice()
+
+	local function checkNotice(self, event, msg, author, ...)
+		if XCHT_DB.disableChatEnterLeaveNotice then
+			return true
+		else
+			return false, msg, author, ...
+		end
+	end
+	
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", checkNotice)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", checkNotice)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", checkNotice)
+end
+
 --[[------------------------
 	PLAYER_LOGIN
 --------------------------]]
@@ -1460,7 +1480,8 @@ function addon:PLAYER_LOGIN()
 	if XCHT_DB.enableEditboxAdjusted == nil then XCHT_DB.enableEditboxAdjusted = false end
 	if XCHT_DB.enableOutWhisperColor == nil then XCHT_DB.enableOutWhisperColor = false end
 	if XCHT_DB.outWhisperColor == nil then XCHT_DB.outWhisperColor = "FFF2307C" end
-	
+	if XCHT_DB.disableChatEnterLeaveNotice == nil then XCHT_DB.disableChatEnterLeaveNotice = false end
+
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
 	XCHT_HISTORY[currentRealm] = XCHT_HISTORY[currentRealm] or {}
@@ -1482,6 +1503,9 @@ function addon:PLAYER_LOGIN()
 	
 	--do the sticky channels list
 	addon:EnableStickyChannelsList()
+	
+	--do we disable enter/leaving/changed channel notifications?
+	addon:setDisableChatEnterLeaveNotice()
 	
 	--toggle class colors
 	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
