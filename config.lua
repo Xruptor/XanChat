@@ -689,13 +689,13 @@ function configEvent:PLAYER_LOGIN()
 	addConfigEntry(addon.aboutPanel.name, sliderChatAlpha, 20, -53)
 	addon.aboutPanel.sliderChatAlpha = sliderChatAlpha
 	
-	-- --show locked settings warning
-	-- addon.aboutPanel:HookScript("OnShow", function()
-		-- if XCHT_DB and XCHT_DB.lockChatSettings then
-			-- DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
-			-- configEvent:DoLock()
-		-- end
-	-- end)
+	--do the lock settings onShow
+	addon.aboutPanel:HookScript("OnShow", function()
+		if XCHT_DB and XCHT_DB.lockChatSettings then
+			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+			configEvent:DoLock()
+		end
+	end)
 	
 	
 	-------------------------------------------------------
@@ -742,6 +742,14 @@ function configEvent:PLAYER_LOGIN()
 	
 	addConfigEntry(addon.additionalSettings.name, btnDisableChatEnterLeaveNotice, 20, -30)
 	addon.additionalSettings.btnDisableChatEnterLeaveNotice = btnDisableChatEnterLeaveNotice
+	
+	--do the lock for additional settings onShow as well
+	addon.additionalSettings:HookScript("OnShow", function()
+		if XCHT_DB and XCHT_DB.lockChatSettings then
+			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+			configEvent:DoLock()
+		end
+	end)
 	
 	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
