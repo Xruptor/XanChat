@@ -1664,26 +1664,17 @@ function addon:PLAYER_LOGIN()
 				
 				if XCHT_DB.enableSimpleEditbox then
 				
-					--Editbox does NOT have a backdrop, so we have to add one manually for this
-					local parent = (editBox.IsObjectType and editBox:IsObjectType('Texture') and editBox:GetParent()) or editBox
-					local backdrop = editBox.backdrop or CreateFrame('Frame', nil, parent, BackdropTemplateMixin and "BackdropTemplate")
-					if not editBox.backdrop then editBox.backdrop = backdrop end
-					
-					local frameLevel = parent.GetFrameLevel and parent:GetFrameLevel()
-					local frameLevelBelow = frameLevel and (frameLevel - 1)
-					if frameLevelBelow and (frameLevelBelow >= 0) then
-						backdrop:SetFrameLevel(frameLevelBelow)
-					else
-						backdrop:SetFrameLevel(0)
+					if not editBox.SetBackdrop then
+						--add the backdrop mixin to the editbox frame
+						Mixin(editBox, BackdropTemplateMixin)
 					end
-	
+
 					editBox.focusLeft:SetTexture(nil)
 					editBox.focusRight:SetTexture(nil)
 					editBox.focusMid:SetTexture(nil)
-					editBox.backdrop:SetBackdrop(editBoxBackdrop)
-					editBox.backdrop:SetBackdropColor(0, 0, 0, 0.6)
-					editBox.backdrop:SetBackdropBorderColor(0.6, 0.6, 0.6)
-					editBox.backdrop:SetAllPoints(editBox)
+					editBox:SetBackdrop(editBoxBackdrop)
+					editBox:SetBackdropColor(0, 0, 0, 0.6)
+					editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
 					
 				elseif not XCHT_DB.hideEditboxBorder then
 					editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
