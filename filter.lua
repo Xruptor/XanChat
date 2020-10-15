@@ -1,12 +1,12 @@
 local ADDON_NAME, addon = ...
 if not _G[ADDON_NAME] then
-	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent)
+	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
 end
 addon = _G[ADDON_NAME]
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 
-addon.filterList = CreateFrame("frame", ADDON_NAME.."_filterList", UIParent)
+addon.filterList = CreateFrame("frame", ADDON_NAME.."_filterList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 
 local filterList = addon.filterList
 filterList:SetFrameStrata("DIALOG")
@@ -39,7 +39,7 @@ header:SetPoint("CENTER", filterList, "TOP", 0, -20)
 header:SetText(L.EditFilterListHeader)
 
 local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", filterList, "UIPanelScrollFrameTemplate")
-local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame)
+local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
 scrollFrame:SetPoint("TOPLEFT", 10, -50) 
 --scrollbar on the right (x shifts the slider left or right)
 scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70) 
@@ -143,7 +143,7 @@ function addon:DoFilterList()
 	
 	for barCount=1, table.getn(buildList) do
 		
-		local barSlot = _G["xanChat_FilterListBar"..barCount] or CreateFrame("button", "xanChat_FilterListBar"..barCount, scrollFrame_Child)
+		local barSlot = _G["xanChat_FilterListBar"..barCount] or CreateFrame("button", "xanChat_FilterListBar"..barCount, scrollFrame_Child, BackdropTemplateMixin and "BackdropTemplate")
 		
 		if barCount==1 then
 			barSlot:SetPoint("TOPLEFT",scrollFrame_Child, "TOPLEFT", 10, -10)

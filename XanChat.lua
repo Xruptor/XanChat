@@ -1,6 +1,6 @@
 local ADDON_NAME, addon = ...
 if not _G[ADDON_NAME] then
-	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent)
+	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
 end
 addon = _G[ADDON_NAME]
 
@@ -1075,7 +1075,7 @@ local function CreateCopyFrame()
 
 	local AceGUI = LibStub("AceGUI-3.0")
 	
-	local copyFrame = CreateFrame("FRAME", nil, UIParent)
+	local copyFrame = CreateFrame("FRAME", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate")
 	copyFrame:SetBackdrop({
 		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -1171,7 +1171,7 @@ local function CreateCopyFrame()
     copyFrame.buttonForward = buttonForward
     
 	--this is to place it above the group layer
-	local textFrame = CreateFrame("FRAME", nil, group.frame)
+	local textFrame = CreateFrame("FRAME", nil, group.frame, BackdropTemplateMixin and "BackdropTemplate")
 	textFrame:SetFrameLevel(textFrame:GetFrameLevel() + 1)
 	textFrame:SetPoint("BOTTOMLEFT", 80, 18)
 	textFrame:Show()
@@ -1197,7 +1197,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	
 	local copyFrame = CreateCopyFrame()
 
-	local obj = CreateFrame("Button", "xanCopyChatButton"..chatIndex, chatFrame)
+	local obj = CreateFrame("Button", "xanCopyChatButton"..chatIndex, chatFrame, BackdropTemplateMixin and "BackdropTemplate")
 	obj:SetParent(chatFrame)
 	obj:SetNormalTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj:SetHighlightTexture("Interface\\AddOns\\xanChat\\media\\copyhighlight")
@@ -1663,12 +1663,27 @@ function addon:PLAYER_LOGIN()
 				end
 				
 				if XCHT_DB.enableSimpleEditbox then
+				
+					--Editbox does NOT have a backdrop, so we have to add one manually for this
+					local parent = (editBox.IsObjectType and editBox:IsObjectType('Texture') and editBox:GetParent()) or editBox
+					local backdrop = editBox.backdrop or CreateFrame('Frame', nil, parent, BackdropTemplateMixin and "BackdropTemplate")
+					if not editBox.backdrop then editBox.backdrop = backdrop end
+					
+					local frameLevel = parent.GetFrameLevel and parent:GetFrameLevel()
+					local frameLevelBelow = frameLevel and (frameLevel - 1)
+					if frameLevelBelow and (frameLevelBelow >= 0) then
+						backdrop:SetFrameLevel(frameLevelBelow)
+					else
+						backdrop:SetFrameLevel(0)
+					end
+	
 					editBox.focusLeft:SetTexture(nil)
 					editBox.focusRight:SetTexture(nil)
 					editBox.focusMid:SetTexture(nil)
-					editBox:SetBackdrop(editBoxBackdrop)
-					editBox:SetBackdropColor(0, 0, 0, 0.6)
-					editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
+					editBox.backdrop:SetBackdrop(editBoxBackdrop)
+					editBox.backdrop:SetBackdropColor(0, 0, 0, 0.6)
+					editBox.backdrop:SetBackdropBorderColor(0.6, 0.6, 0.6)
+					editBox.backdrop:SetAllPoints(editBox)
 					
 				elseif not XCHT_DB.hideEditboxBorder then
 					editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
