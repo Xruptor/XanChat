@@ -23,12 +23,15 @@ L.DisableChatEnterLeaveNotice = "Disable chat channel (|cFF99CC33Enter/Leave/Cha
 L.ProtectedChannel = " |cFFDF2B2B(Channel is protected by Blizzard. Addon access is prohibited.)|r."
 
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
+--trailing dash is to check for things like [WorldDefense - Alterac Mountains] so it will remove location
 L.ChannelGeneral = "%[%d+%. General.-%]"
 L.ChannelTrade = "%[%d+%. Trade.-%]"
-L.ChannelWorldDefense = "%[%d+%. WorldDefense%]"
+L.ChannelWorldDefense = "%[%d+%. WorldDefense.-%]"
 L.ChannelLocalDefense = "%[%d+%. LocalDefense.-%]"
-L.ChannelLookingForGroup = "%[%d+%. LookingForGroup%]"
+L.ChannelLookingForGroup = "%[%d+%. LookingForGroup.-%]"
 L.ChannelGuildRecruitment = "%[%d+%. GuildRecruitment.-%]"
+L.ChannelNewComerChat = "%[%d+%. Newcomer Chat.-%]"
+L.FindNewcomerChat = "Newcomer Chat"
 
 L.ShortGeneral = "GN"
 L.ShortTrade = "TR"
@@ -36,6 +39,7 @@ L.ShortWorldDefense = "WD"
 L.ShortLocalDefense = "LD"
 L.ShortLookingForGroup = "LFG"
 L.ShortGuildRecruitment = "GR"
+L.ShortNewComerChat = "NC"
 	
 --short channel globals
 --Example: "|Hchannel:  Channel Type   |h  [short channel name]   |h %s: " 

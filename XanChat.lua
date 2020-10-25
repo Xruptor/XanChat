@@ -509,8 +509,9 @@ local AddMessage = function(frame, text, ...)
 		text = gsub(text, L.ChannelLocalDefense, "["..chatNum..L.ShortLocalDefense.."]")
 		text = gsub(text, L.ChannelLookingForGroup, "["..chatNum..L.ShortLookingForGroup.."]")
 		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
+		text = gsub(text, L.ChannelNewComerChat, "["..chatNum..L.ShortNewComerChat.."]")
 	end
-	
+
 	--only do stylized player names if it's even enabled and we have the filter list
 	if addon.isFilterListEnabled and XCHT_DB.enablePlayerChatStyle and type(text) == "string" then
 	
@@ -727,7 +728,7 @@ local function SaveSettings(chatFrame)
 	if XCHT_DB.lockChatSettings then return end
 	
 	if not XCHT_DB then return end
-	if not XCHT_DB.frames then return end
+	if not XCHT_DB.frames then XCHT_DB.frames = {} end
 	
 	--first check to see if we even store this chatFrame
 	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
@@ -741,36 +742,78 @@ local function SaveSettings(chatFrame)
 	if chatFrame.isMoving or chatFrame.isDragging then return end
 
 	local db = XCHT_DB.frames[chatFrame:GetID()]
-	
+
 	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
 	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
 	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
 	local windowMessageColors = {}
-	local windowChannelColors = {}
-	
+
 	--lets save all the message type colors
+	--https://www.townlong-yak.com/framexml/live/ChatConfigFrame.lua#1464
 	for k=1, #windowMessages do
-		if ChatTypeGroup[windowMessages[k]] then
+		if windowMessages[k] and ChatTypeGroup[windowMessages[k]] then
 			local colorR, colorG, colorB, messageType = GetMessageTypeColor(windowMessages[k])
 			if colorR and colorG and colorB then
 				windowMessageColors[k] = {colorR, colorG, colorB, windowMessages[k]}
 			end
 		end
 	end
+
+	--do both debug for the channels and store the color
+	local debugChannels = { }
+	local channelColors = {}
+	--https://www.townlong-yak.com/framexml/live/ChatFrame.lua#3441
 	
-	--lets save the channel colors
-	for k=1, #windowChannels do
-		if Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k]) then
-			windowChannelColors[k] = {Chat_GetChannelColor(ChatTypeInfo["CHANNEL"..k])}
+	-- if chatFrame.zoneChannelList then
+		-- for i, channelID in ipairs(chatFrame.zoneChannelList) do
+			-- Debug(i, channelID)
+		-- end
+	-- end
+	
+	for k = 1, MAX_WOW_CHAT_CHANNELS do
+		local channelNum, channelName, instanceID, isCommunitiesChannel = GetChannelName(k)
+		if channelNum and channelNum > 0 then
+			local shortName = "?"
+			
+			if C_ChatInfo then
+				shortName = C_ChatInfo.GetChannelShortcutForChannelID(channelNum) or "?"
+	
+				if shortName == "?" then
+					if channelName == L.FindNewcomerChat or C_ChatInfo.GetChannelRulesetForChannelID(channelNum) == Enum.ChatChannelRuleset.Mentor or 
+						C_ChatInfo.GetChannelRuleset(channelNum) == Enum.ChatChannelRuleset.Mentor then
+						shortName = C_ChatInfo.GetChannelShortcutForChannelID(C_ChatInfo.GetMentorChannelID())
+					end
+				end
+				
+			end
+			debugChannels[k] = {
+				channelNum,
+				channelName,
+				instanceID,
+				isCommunitiesChannel,
+				shortName,
+				C_ChatInfo.GetChannelRulesetForChannelID(channelNum) or 0,
+				C_ChatInfo.GetChannelRuleset(channelNum) or 0
+			}
+			
+			if ChatTypeInfo["CHANNEL"..k] then
+				local colorR, colorG, colorB, messageType = GetMessageTypeColor("CHANNEL"..k)
+				if colorR and colorG and colorB then
+					channelColors[k] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, shortName=shortName}
+				end
+			end
+		
 		end
 	end
-		
+	XCHT_DB.debugChannels = debugChannels
+	XCHT_DB.channelColors = channelColors
+
 	db.chatParent = chatFrame:GetParent():GetName()
 	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
 	db.windowMessages = windowMessages
 	db.windowChannels = windowChannels
 	db.windowMessageColors = windowMessageColors
-	db.windowChannelColors = windowChannelColors
+	db.windowChannelColors = nil --remove old db stuff
 	db.fadingDuration = chatFrame:GetTimeVisible() or 120
 	db.defaultFrameAlpha = DEFAULT_CHATFRAME_ALPHA
 
@@ -804,6 +847,7 @@ local function RestoreSettings(chatFrame)
 		local newWindowMessageColors = db.windowMessageColors
 		for k=1, #newWindowMessageColors do
 			if newWindowMessageColors[k] and newWindowMessageColors[k][4] then
+				--in future ChangeChatColor FCF_StripChatMsg() may be required.  https://www.townlong-yak.com/framexml/live/ChatConfigFrame.lua
 				ChangeChatColor(newWindowMessageColors[k][4], newWindowMessageColors[k][1], newWindowMessageColors[k][2], newWindowMessageColors[k][3])
 			end
 		end
@@ -822,13 +866,14 @@ local function RestoreSettings(chatFrame)
 		end
 	end
 
-	--lets set the windowChannelColors
-	if db.windowChannelColors then
-		--add the stored ones
-		local newWindowChannelColors = db.windowChannelColors
-		for k=1, #newWindowChannelColors do
-			if newWindowChannelColors[k] and newWindowChannelColors[k][1] then
-				ChangeChatColor("CHANNEL"..k, newWindowChannelColors[k][1], newWindowChannelColors[k][2], newWindowChannelColors[k][3])
+	-- --lets set the windowChannelColors
+	if XCHT_DB.channelColors then
+		for k = 1, MAX_WOW_CHAT_CHANNELS do
+			if XCHT_DB.channelColors[k] then
+				local colorData = XCHT_DB.channelColors[k]
+				if colorData then
+					ChangeChatColor("CHANNEL"..k, colorData.r, colorData.g, colorData.b)
+				end
 			end
 		end
 	end
@@ -902,6 +947,16 @@ hooksecurefunc("FCF_Tab_OnClick", function(self, button)
 	local chatFrame = _G["ChatFrame"..self:GetID()]
 	if chatFrame then
 		saveChatSettings(chatFrame)
+	end
+end)
+
+ChatConfigFrame:HookScript("OnHide", function(self)
+	for i = 1, NUM_CHAT_WINDOWS do
+		local n = ("ChatFrame%d"):format(i)
+		local f = _G[n]
+		if f then
+			saveChatSettings(f)
+		end
 	end
 end)
 
@@ -1527,7 +1582,7 @@ function addon:PLAYER_LOGIN()
 	
 	--set the alpha levels
 	addon:setChatAlpha()
-			
+	
 	for i = 1, NUM_CHAT_WINDOWS do
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
@@ -1538,9 +1593,6 @@ function addon:PLAYER_LOGIN()
 			--create the copy chat buttons
 			CreateCopyChatButtons(i, f)
 		
-			XANCHAT_Frame = XANCHAT_Frame or {}
-			XANCHAT_Frame[i] = f
-
 			--restore any settings and layout
 			restoreChatSettings(f)
 
