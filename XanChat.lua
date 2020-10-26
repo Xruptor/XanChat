@@ -873,7 +873,6 @@ local function SaveChannelColors()
 	local function GetColorInfo(...)
 		local count = 1
 		for i=1, select("#", ...), 3 do
-		
 			local channelNum = select(i, ...)
 			local tag = "CHANNEL"..channelNum
 			local channelName = select(i+1, ...)
@@ -885,7 +884,6 @@ local function SaveChannelColors()
 					XCHT_DB.channelColors[count] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, tag=tag}
 				end
 			end
-			
 			count = count + 1
 		end
 	end
