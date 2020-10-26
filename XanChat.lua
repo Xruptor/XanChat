@@ -759,55 +759,6 @@ local function SaveSettings(chatFrame)
 		end
 	end
 
-	--do both debug for the channels and store the color
-	local debugChannels = { }
-	local channelColors = {}
-	--https://www.townlong-yak.com/framexml/live/ChatFrame.lua#3441
-	
-	-- if chatFrame.zoneChannelList then
-		-- for i, channelID in ipairs(chatFrame.zoneChannelList) do
-			-- Debug(i, channelID)
-		-- end
-	-- end
-	
-	for k = 1, MAX_WOW_CHAT_CHANNELS do
-		local channelNum, channelName, instanceID, isCommunitiesChannel = GetChannelName(k)
-		if channelNum and channelNum > 0 then
-			local shortName = "?"
-			
-			if C_ChatInfo then
-				shortName = C_ChatInfo.GetChannelShortcutForChannelID(channelNum) or "?"
-	
-				if shortName == "?" then
-					if channelName == L.FindNewcomerChat or C_ChatInfo.GetChannelRulesetForChannelID(channelNum) == Enum.ChatChannelRuleset.Mentor or 
-						C_ChatInfo.GetChannelRuleset(channelNum) == Enum.ChatChannelRuleset.Mentor then
-						shortName = C_ChatInfo.GetChannelShortcutForChannelID(C_ChatInfo.GetMentorChannelID())
-					end
-				end
-				
-			end
-			debugChannels[k] = {
-				channelNum,
-				channelName,
-				instanceID,
-				isCommunitiesChannel,
-				shortName,
-				C_ChatInfo.GetChannelRulesetForChannelID(channelNum) or 0,
-				C_ChatInfo.GetChannelRuleset(channelNum) or 0
-			}
-			
-			if ChatTypeInfo["CHANNEL"..k] then
-				local colorR, colorG, colorB, messageType = GetMessageTypeColor("CHANNEL"..k)
-				if colorR and colorG and colorB then
-					channelColors[k] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, shortName=shortName}
-				end
-			end
-		
-		end
-	end
-	XCHT_DB.debugChannels = debugChannels
-	XCHT_DB.channelColors = channelColors
-
 	db.chatParent = chatFrame:GetParent():GetName()
 	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
 	db.windowMessages = windowMessages
@@ -905,9 +856,128 @@ local function RestoreSettings(chatFrame)
 	
 end
 
+local function SaveChannelColors()
+	if not addonLoaded then return end
+	if XCHT_DB.lockChatSettings then return end
+	if not XCHT_DB.channelColors then XCHT_DB.channelColors = {} end
+
+    -- for k = 1, MAX_WOW_CHAT_CHANNELS do
+		-- if ChatTypeInfo["CHANNEL"..k] then
+			-- local colorR, colorG, colorB, messageType = GetMessageTypeColor("CHANNEL"..k)
+			-- if colorR and colorG and colorB then
+				-- channelColors[k] = {r=colorR, g=colorG, b=colorB}
+			-- end
+		-- end
+    -- end
+	
+	local function GetColorInfo(...)
+		local count = 1
+		for i=1, select("#", ...), 3 do
+		
+			local channelNum = select(i, ...)
+			local tag = "CHANNEL"..channelNum
+			local channelName = select(i+1, ...)
+			local disabled = select(i+2, ...)
+			
+			if ChatTypeInfo[tag] then
+				local colorR, colorG, colorB, messageType = GetMessageTypeColor(tag)
+				if colorR and colorG and colorB then
+					XCHT_DB.channelColors[count] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, tag=tag}
+				end
+			end
+			
+			count = count + 1
+		end
+	end
+	
+	GetColorInfo(GetChannelList())
+end
+
+local function SaveDebugInfo(chatFrame)
+	if not addonLoaded then return end
+	if not chatFrame then return end
+	if not XCHT_DB then return end
+
+	if XCHT_DB.debugChannels then XCHT_DB.debugChannels = nil end --remove old debug table
+	if not XCHT_DB.debugInfo then XCHT_DB.debugInfo = {} end
+	
+	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
+		if not XCHT_DB.debugInfo[chatFrame:GetID()] then XCHT_DB.debugInfo[chatFrame:GetID()] = {} end
+	else
+		--don't store it
+		if XCHT_DB.debugInfo[chatFrame:GetID()] then XCHT_DB.debugInfo[chatFrame:GetID()] = nil end
+		return
+	end
+
+	local debugDB = XCHT_DB.debugInfo[chatFrame:GetID()]
+	local channelList = chatFrame.channelList
+	local zoneChannelList = chatFrame.zoneChannelList
+
+	local function IsChannelNameChecked(channelName)
+		if not channelList then return false end
+		for index, value in pairs(channelList) do
+			if value == channelName then
+				return true
+			end
+		end
+		return false
+	end
+	local function GetChannelID(channelName)
+		if not channelList then return 0 end
+		if not zoneChannelList then return 0 end
+		
+		for index, value in pairs(channelList) do
+			if value == channelName then
+				if zoneChannelList[index] then
+					return zoneChannelList[index]
+				end
+				return 0
+			end
+		end
+		return 0
+	end
+	local function GetDebugInfo(...)
+		if not channelList or #channelList < 1 then return end
+		if not zoneChannelList or #zoneChannelList < 1 then return end
+		
+		for i=1, select("#", ...), 3 do
+		
+			local channelNum = select(i, ...)
+			local tag = "CHANNEL"..channelNum
+			local channelName = select(i+1, ...)
+			local disabled = select(i+2, ...)
+			local checked = IsChannelNameChecked(channelName)
+
+			if channelNum then
+				local _, longChannelName, instanceID, isCommunitiesChannel = GetChannelName(channelNum)
+				
+				debugDB[channelNum] = {
+					channelNum = channelNum,
+					tag = tag,
+					channelName = channelName,
+					isDisabled = disabled,
+					isChecked = checked,
+					chatFrameID = chatFrame:GetID() or 0,
+					chatFrameName = chatFrame:GetName() or "Unknown",
+					channelID = GetChannelID(channelName),
+					longChannelName = longChannelName,
+					instanceID = instanceID, 
+					isCommunitiesChannel = isCommunitiesChannel,
+					channelShortcut = C_ChatInfo and C_ChatInfo.GetChannelShortcutForChannelID(GetChannelID(channelName)) or "?",
+				}
+			end
+
+		end
+	end
+	
+	GetDebugInfo(GetChannelList())
+end
+
 local function saveChatSettings(f)
 	SaveLayout(f)
 	SaveSettings(f)
+	SaveDebugInfo(f)
+	SaveChannelColors()
 end
 
 local function restoreChatSettings(f)

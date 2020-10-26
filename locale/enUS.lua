@@ -31,7 +31,6 @@ L.ChannelLocalDefense = "%[%d+%. LocalDefense.-%]"
 L.ChannelLookingForGroup = "%[%d+%. LookingForGroup.-%]"
 L.ChannelGuildRecruitment = "%[%d+%. GuildRecruitment.-%]"
 L.ChannelNewComerChat = "%[%d+%. Newcomer Chat.-%]"
-L.FindNewcomerChat = "Newcomer Chat"
 
 L.ShortGeneral = "GN"
 L.ShortTrade = "TR"
