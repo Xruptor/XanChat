@@ -9,6 +9,28 @@ local function Debug(...)
     if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
 end
 
+--We need to use a customFrame since AceEvent is loaded and it takes over the RegisterEvent frames
+local eventFrame = CreateFrame("Frame", ADDON_NAME.."EventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+	if event == "ADDON_LOADED" or event == "PLAYER_LOGIN" then
+		if event == "ADDON_LOADED" then
+			local arg1 = ...
+			if arg1 and arg1 == ADDON_NAME then
+				eventFrame:UnregisterEvent("ADDON_LOADED")
+				eventFrame:RegisterEvent("PLAYER_LOGIN")
+			end
+			return
+		end
+		if IsLoggedIn() then
+			addon:EnableAddon(event, ...)
+			eventFrame:UnregisterEvent("PLAYER_LOGIN")
+			eventFrame = nil
+		end
+		return
+	end
+end)
+
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 LibStub("AceEvent-3.0"):Embed(addon)
 
@@ -1563,10 +1585,6 @@ function addon:setDisableChatEnterLeaveNotice()
 	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", checkNotice)
 end
 
---[[------------------------
-	PLAYER_LOGIN
---------------------------]]
-
 for i = 1, NUM_CHAT_WINDOWS do
 	local n = ("ChatFrame%d"):format(i)
 	local f = _G[n]
@@ -1576,7 +1594,7 @@ for i = 1, NUM_CHAT_WINDOWS do
 	end
 end
 
-function addon:PLAYER_LOGIN()
+function addon:EnableAddon()
 
 	local currentPlayer = UnitName("player")
 	local currentRealm = select(2, UnitFullName("player")) --get shortend realm name with no spaces and dashes
@@ -1908,15 +1926,11 @@ function addon:PLAYER_LOGIN()
 		InterfaceOptionsFrame_OpenToCategory(addon.aboutPanel) --force the panel to show
 	end
 	
-	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
-	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] loaded:   /xanchat", ADDON_NAME, ver or "1.0"))
-	
 	if XCHT_DB.lockChatSettings then
 		DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
 	end
 	
 	addon:RegisterEvent("UI_SCALE_CHANGED")
-	addon:UnregisterEvent("PLAYER_LOGIN")
 	addonLoaded = true
 	
 	--once everything is loaded updated the settings for the chat, only do this once per updated version
@@ -1931,6 +1945,11 @@ function addon:PLAYER_LOGIN()
 		end
 		XCHT_DB.dbVer = ver 
 	end
+	
+	if addon.configFrame then addon.configFrame:EnableConfig() end
+	
+	local ver = GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
+	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] loaded:   /xanchat", ADDON_NAME, ver or "1.0"))
 end
 
 --this is the fix for alt-tabbing resizing our chatboxes
@@ -1948,5 +1967,3 @@ function addon:UI_SCALE_CHANGED()
 		end
 	end
 end
-
-if IsLoggedIn() then addon:PLAYER_LOGIN() else addon:RegisterEvent("PLAYER_LOGIN") end

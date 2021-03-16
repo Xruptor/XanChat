@@ -4,9 +4,8 @@ if not _G[ADDON_NAME] then
 end
 addon = _G[ADDON_NAME]
 
-addon.configEvent = CreateFrame("frame", ADDON_NAME.."_config_eventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-local configEvent = addon.configEvent
-configEvent:SetScript("OnEvent", function(self, event, ...) if self[event] then return self[event](self, event, ...) end end)
+addon.configFrame = CreateFrame("frame", ADDON_NAME.."_config_eventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
+local configFrame = addon.configFrame
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 local configObjList = {}
@@ -257,7 +256,7 @@ local function LoadAdditionalSettings(childFrameName, parentFrameName)
 	return addSettings
 end
 
-function configEvent:PLAYER_LOGIN()
+function configFrame:EnableConfig()
 	
 	addon.aboutPanel = LoadAboutFrame()
 	addon.additionalSettings = LoadAdditionalSettings(L.AdditionalSettings, ADDON_NAME)
@@ -292,7 +291,7 @@ function configEvent:PLAYER_LOGIN()
 			XCHT_DB.lockChatSettings = true
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOn)
 		end
-		configEvent:DoLock()
+		configFrame:DoLock()
 	end
 	btnLockChatSettings:SetScript("OnClick", btnLockChatSettings.func)
 	
@@ -693,7 +692,7 @@ function configEvent:PLAYER_LOGIN()
 	addon.aboutPanel:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
 			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
-			configEvent:DoLock()
+			configFrame:DoLock()
 		end
 	end)
 	
@@ -747,14 +746,12 @@ function configEvent:PLAYER_LOGIN()
 	addon.additionalSettings:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
 			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
-			configEvent:DoLock()
+			configFrame:DoLock()
 		end
 	end)
-	
-	configEvent:UnregisterEvent("PLAYER_LOGIN")
 end
 
-function configEvent:DoLock()
+function configFrame:DoLock()
 	if XCHT_DB and XCHT_DB.lockChatSettings then
 		for i=1, #configObjList do
 			configObjList[i]:SetEnabled(false)
@@ -765,5 +762,3 @@ function configEvent:DoLock()
 		end
 	end
 end
-
-if IsLoggedIn() then configEvent:PLAYER_LOGIN() else configEvent:RegisterEvent("PLAYER_LOGIN") end
