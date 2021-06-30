@@ -1021,7 +1021,6 @@ hooksecurefunc("ToggleMessageSource", doValueUpdate)
 hooksecurefunc("ToggleMessageDest", doValueUpdate)
 hooksecurefunc("ToggleMessageTypeGroup", doValueUpdate)
 hooksecurefunc("ToggleMessageType", doValueUpdate)
-hooksecurefunc("ToggleChatChannel", doValueUpdate)
 hooksecurefunc("ToggleChatColorNamesByClassGroup", doValueUpdate)
 
 hooksecurefunc("FCF_SavePositionAndDimensions", function(chatFrame) saveChatSettings(chatFrame) end)
