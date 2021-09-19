@@ -1639,7 +1639,7 @@ function addon:EnableAddon()
 	initUpdateCurrentPlayer()
 	
 	--turn off profanity filter
-	SetCVar("profanityFilter", 0)
+	C_CVar.SetCVar("profanityFilter", 0)
 	
 	--do the sticky channels list
 	addon:EnableStickyChannelsList()
