@@ -298,28 +298,30 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnLockChatSettings, 20, -110, true, true)
 	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
 	
-	local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
-	btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
-	btnSocial.func = function()
-		local value = XCHT_DB.hideSocial
+	if addon.IsRetail then 
+		local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
+		btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
+		btnSocial.func = function()
+			local value = XCHT_DB.hideSocial
 
-		if value then
-			XCHT_DB.hideSocial = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
-		else
-			XCHT_DB.hideSocial = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
+			if value then
+				XCHT_DB.hideSocial = false
+				DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
+			else
+				XCHT_DB.hideSocial = true
+				DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
+			end
+			
+			if not addon.xanChatReloadPopup then
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+			end
 		end
-		
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnSocial:SetScript("OnClick", btnSocial.func)
+		btnSocial:SetScript("OnClick", btnSocial.func)
 	
-	addConfigEntry(addon.aboutPanel.name, btnSocial, 20, -22)
-	addon.aboutPanel.btnSocial = btnSocial
-
+		addConfigEntry(addon.aboutPanel.name, btnSocial, 20, -22)
+		addon.aboutPanel.btnSocial = btnSocial
+	end
+	
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
 	btnScroll:SetScript("OnShow", function() btnScroll:SetChecked(XCHT_DB.hideScroll) end)
 	btnScroll.func = function()
@@ -451,7 +453,7 @@ function configFrame:EnableConfig()
 	
 	addConfigEntry(addon.aboutPanel.name, btnVoice, 20, -22)
 	addon.aboutPanel.btnVoice = btnVoice
-	
+
 	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
 	btnEditBoxBorder:SetScript("OnShow", function() btnEditBoxBorder:SetChecked(XCHT_DB.hideEditboxBorder) end)
 	btnEditBoxBorder.func = function()
@@ -713,6 +715,10 @@ function configFrame:EnableConfig()
 		end
 		
 		addon:setOutWhisperColor()
+	
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
 	btnOutWhisperColor:SetScript("OnClick", btnOutWhisperColor.func)
 	

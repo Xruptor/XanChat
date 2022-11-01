@@ -20,7 +20,6 @@ addon.IsClassic = WOW_PROJECT_ID == WOW_PROJECT_CLASSIC
 --BSYC.IsTBC_C = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 addon.IsWLK_C = WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC
 
-
 --We need to use a customFrame since AceEvent is loaded and it takes over the RegisterEvent frames
 local eventFrame = CreateFrame("Frame", ADDON_NAME.."EventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 eventFrame:RegisterEvent("ADDON_LOADED")
@@ -368,7 +367,9 @@ local function addToPlayerList(name, realm, level, class, BNname)
 		addon.chkClassList = {}
 		for i = 1, GetNumClasses() do
 			local className, classFile, classID = GetClassInfo(i)
-			addon.chkClassList[className] = classFile
+			if className and classFile then
+				addon.chkClassList[className] = classFile
+			end
 		end
 	end
 	
@@ -484,15 +485,8 @@ local function initPlayerInfo()
 	addon:RegisterEvent("ZONE_CHANGED_NEW_AREA", function() doRosterUpdate() end)
 	addon:RegisterEvent("UNIT_NAME_UPDATE", function() doRosterUpdate() end)
 	addon:RegisterEvent("UNIT_PORTRAIT_UPDATE", function() doRosterUpdate() end)
+    addon:RegisterEvent("GROUP_ROSTER_UPDATE", function() doRosterUpdate() end)
 	
-	--added in 5.0.4 to replace PARTY_MEMBERS_CHANGED and RAID_ROSTER_UPDATE
-    if select(4, GetBuildInfo()) >= 50000 then
-		addon:RegisterEvent("GROUP_ROSTER_UPDATE", function() doRosterUpdate() end)
-    end
-	--this was removed in patch 8.0.1 so lets check for it
-    if select(4, GetBuildInfo()) < 80000 and select(4, GetBuildInfo()) >= 20000 then
-		addon:RegisterEvent("PARTY_MEMBERS_CHANGED", function() doRosterUpdate() end)
-    end
     addon:RegisterEvent("PLAYER_LEVEL_UP", function() initUpdateCurrentPlayer() end)
 end
 
@@ -1744,21 +1738,22 @@ local function SetupChatFrame(chatID, chatFrame)
 					Mixin(editBox, BackdropTemplateMixin)
 				end
 
-				editBox.focusLeft:SetTexture(nil)
-				editBox.focusRight:SetTexture(nil)
-				editBox.focusMid:SetTexture(nil)
+				if editBox.focusLeft then editBox.focusLeft:SetTexture(nil) end
+				if editBox.focusRight then editBox.focusRight:SetTexture(nil) end
+				if editBox.focusMid then editBox.focusMid:SetTexture(nil) end
+				
 				editBox:SetBackdrop(editBoxBackdrop)
 				editBox:SetBackdropColor(0, 0, 0, 0.6)
 				editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
 				
 			elseif not XCHT_DB.hideEditboxBorder then
-				editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
-				editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
-				editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+				if editBox.focusLeft then editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]]) end
+				if editBox.focusRight then editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]]) end
+				if editBox.focusMid then editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]]) end
 			else
-				editBox.focusLeft:SetTexture(nil)
-				editBox.focusRight:SetTexture(nil)
-				editBox.focusMid:SetTexture(nil)
+				if editBox.focusLeft then editBox.focusLeft:SetTexture(nil) end
+				if editBox.focusRight then editBox.focusRight:SetTexture(nil) end
+				if editBox.focusMid then editBox.focusMid:SetTexture(nil) end
 			end
 			
 			--do editbox positioning
@@ -1879,7 +1874,7 @@ function addon:EnableAddon()
 	end
 
 	--show/hide the chat social buttons
-	if XCHT_DB.hideSocial then
+	if addon.IsRetail and XCHT_DB.hideSocial then
 		ChatFrameMenuButton:Hide()
 		ChatFrameMenuButton:SetScript("OnShow", dummy)
 		QuickJoinToastButton:Hide()
@@ -1927,9 +1922,9 @@ function addon:EnableAddon()
 	
 	--toggle the voice chat buttons if disabled
 	if XCHT_DB.hideVoice then
-		ChatFrameToggleVoiceDeafenButton:Hide()
-		ChatFrameToggleVoiceMuteButton:Hide()
-		ChatFrameChannelButton:Hide()
+		if ChatFrameToggleVoiceDeafenButton then ChatFrameToggleVoiceDeafenButton:Hide() end
+		if ChatFrameToggleVoiceMuteButton then ChatFrameToggleVoiceMuteButton:Hide() end
+		if ChatFrameChannelButton then ChatFrameChannelButton:Hide() end
 	end
 	
 	--remove the annoying guild loot messages by replacing them with the original ones
