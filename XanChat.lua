@@ -411,8 +411,6 @@ local function doRosterUpdate()
 
 	local chkRaid = IsInRaid()
 	local IsInGroup = chkRaid or IsInGroup()
-	--local GetNumPartyMembers = GetNumSubgroupMembers or GetNumPartyMembers
-	--local GetNumRaidMembers = GetNumGroupMembers or GetNumRaidMembers
 
 	if IsInGroup then
 		local playerNum, unit = (chkRaid and GetNumGroupMembers()) or MAX_PARTY_MEMBERS, (chkRaid and "raid") or "party"
@@ -486,7 +484,7 @@ local function initPlayerInfo()
 	addon:RegisterEvent("UNIT_NAME_UPDATE", function() doRosterUpdate() end)
 	addon:RegisterEvent("UNIT_PORTRAIT_UPDATE", function() doRosterUpdate() end)
     addon:RegisterEvent("GROUP_ROSTER_UPDATE", function() doRosterUpdate() end)
-	
+
     addon:RegisterEvent("PLAYER_LEVEL_UP", function() initUpdateCurrentPlayer() end)
 end
 
@@ -613,23 +611,6 @@ local AddMessage = function(frame, text, ...)
 		
 	end
 	
-	-- local tblIndex
-	-- if (... ~= nil) then
-		-- --https://wow.gamepedia.com/API_ScrollingMessageFrame_AddMessage
-		-- --there is a sixth parameter that is currently unknown, the number is random it seems
-		-- table.insert(debugTable, {text = text, opts = {...} })
-		-- tblIndex = #debugTable
-	-- else
-		-- table.insert(debugTable, {text = text})
-		-- tblIndex = #debugTable
-	-- end
-
-	-- if debugTable[tblIndex].opts then
-		-- msgHooks[frame:GetName()].AddMessage(frame, debugTable[tblIndex].text, unpack(debugTable[tblIndex].opts))
-	-- else
-		-- msgHooks[frame:GetName()].AddMessage(frame, debugTable[tblIndex].text)
-	-- end
-	
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
@@ -693,8 +674,6 @@ local function SaveLayout(chatFrame)
 	db.yOffset = yOffset
 	db.width = chatFrame:GetWidth()
 	db.height = chatFrame:GetHeight()
-	
-	--SetChatWindowSavedPosition(chatFrame:GetID(), vertPoint..horizPoint, xOffset, yOffset);
 	
 end
 
@@ -886,15 +865,6 @@ local function SaveChannelColors()
 	if XCHT_DB.lockChatSettings then return end
 	if not XCHT_DB.channelColors then XCHT_DB.channelColors = {} end
 
-    -- for k = 1, MAX_WOW_CHAT_CHANNELS do
-		-- if ChatTypeInfo["CHANNEL"..k] then
-			-- local colorR, colorG, colorB, messageType = GetMessageTypeColor("CHANNEL"..k)
-			-- if colorR and colorG and colorB then
-				-- channelColors[k] = {r=colorR, g=colorG, b=colorB}
-			-- end
-		-- end
-    -- end
-	
 	local function GetColorInfo(...)
 		local count = 1
 		for i=1, select("#", ...), 3 do
@@ -1201,8 +1171,6 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 		parentEditBox:Insert(lineText)
 	end
 	
-	--Debug("Chat", chatIndex, 'msgcount', msgCount, 'pages', #pages, 'start', startPos, 'end', endPos)
-
 	if pageNum then
 		copyFrame.currentPage = pageNum
 	else
@@ -1566,7 +1534,6 @@ function addon:setOutWhisperColor()
 	end
 
 end
-
 
 --[[------------------------
 	Disable enter/leave/changed channel notifications
