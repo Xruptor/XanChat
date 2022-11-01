@@ -9,6 +9,18 @@ local function Debug(...)
     if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
 end
 
+local WOW_PROJECT_ID = _G.WOW_PROJECT_ID
+local WOW_PROJECT_MAINLINE = _G.WOW_PROJECT_MAINLINE
+local WOW_PROJECT_CLASSIC = _G.WOW_PROJECT_CLASSIC
+--local WOW_PROJECT_BURNING_CRUSADE_CLASSIC = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
+local WOW_PROJECT_WRATH_CLASSIC = _G.WOW_PROJECT_WRATH_CLASSIC
+
+addon.IsRetail = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+addon.IsClassic = WOW_PROJECT_ID == WOW_PROJECT_CLASSIC
+--BSYC.IsTBC_C = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
+addon.IsWLK_C = WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC
+
+
 --We need to use a customFrame since AceEvent is loaded and it takes over the RegisterEvent frames
 local eventFrame = CreateFrame("Frame", ADDON_NAME.."EventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 eventFrame:RegisterEvent("ADDON_LOADED")
@@ -33,8 +45,6 @@ end)
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 LibStub("AceEvent-3.0"):Embed(addon)
-
-local IsRetail = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 
 --[[------------------------
 	Scrolling and Chat Links
@@ -71,8 +81,6 @@ end
 --[[------------------------
 	URL COPY
 --------------------------]]
-
-local SetItemRef_orig = SetItemRef
 
 local function doColor(url)
 	url = " |cff99FF33|Hurl:"..url.."|h["..url.."]|h|r "
@@ -536,7 +544,7 @@ local AddMessage = function(frame, text, ...)
 
 	--only do stylized player names if it's even enabled and we have the filter list
 	if addon.isFilterListEnabled and XCHT_DB.enablePlayerChatStyle and type(text) == "string" then
-	
+
 		--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
 		if string.find(text, "|Hplayer:", 1, true) then
 			local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
@@ -851,7 +859,7 @@ local function RestoreSettings(chatFrame)
 		end
 	end
 	
-	if db.windowInfo then
+	if db.windowInfo and db.windowInfo[1] then
 		SetChatWindowName(chatFrame:GetID(), db.windowInfo[1])
 		SetChatWindowSize(chatFrame:GetID(), db.windowInfo[2])
 		SetChatWindowColor(chatFrame:GetID(), db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
@@ -863,7 +871,8 @@ local function RestoreSettings(chatFrame)
 	end
 	
 	if db.chatParent then
-		chatFrame:SetParent(db.chatParent)
+		local checkParent = (type(db.chatParent) == "table" and db.chatParent) or _G[db.chatParent]
+		chatFrame:SetParent(checkParent)
 	end
 	
 	--handling chat frame fading
@@ -1593,6 +1602,203 @@ for i = 1, NUM_CHAT_WINDOWS do
 	end
 end
 
+local processedFrames = {}
+
+local function SetupChatFrame(chatID, chatFrame)
+	if not chatID then return end
+	
+	local n = "ChatFrame"..chatID
+	local f = _G[n]
+	local fTab = _G[n.."Tab"]
+	
+	if f and not processedFrames[n] then
+		
+		--create the copy chat buttons
+		CreateCopyChatButtons(chatID, f)
+	
+		--restore any settings and layout
+		restoreChatSettings(f)
+
+		--ChatFrame
+		f:HookScript("OnMouseDown", function(self, button)
+			if not f.isMoving and not f.isLocked then
+				f.isMoving = true
+				self:StartMoving()
+			end
+		end)
+		f:HookScript("OnMouseUp", function(self, button)
+			if f.isMoving then
+				f.isMoving = false
+				self:StopMovingOrSizing()
+			end
+		end)
+		f:HookScript("OnDragStart", function(self, button)
+			if not f.isDragging and not f.isLocked then
+				f.isDragging = true
+				self:StartMoving()
+			end
+		end)
+		f:HookScript("OnDragStop", function(self, button)
+			if f.isDragging then
+				f.isDragging = false
+				self:StopMovingOrSizing()
+			end
+		end)
+		
+		--ChatFrame
+		hooksecurefunc(f, "StopMovingOrSizing", function(self)
+			saveChatSettings(f)
+		end)
+		--Tab
+		hooksecurefunc(fTab, "StopMovingOrSizing", function(self)
+			saveChatSettings(f)
+		end)
+
+		--always lock the frames regardless
+		SetChatWindowLocked(chatID, true)
+		FCF_SetLocked(f, true)
+		
+		--add font shadows
+		if XCHT_DB.addFontShadow then
+			local font, size = f:GetFont()
+			f:SetFont(font, size, "THINOUTLINE")
+			f:SetShadowColor(0, 0, 0, 0)
+		end
+		
+		--few changes
+		f:EnableMouseWheel(true)
+		f:SetScript('OnMouseWheel', scrollChat)
+		f:SetClampRectInsets(0,0,0,0)
+
+		local editBox = _G[n.."EditBox"]
+		
+		if editBox then
+		
+			local name = editBox:GetName()
+			HistoryDB[name] = HistoryDB[name] or {}
+		
+			--do the editbox history stuff
+			---------------------------------
+			editBox.historyLines = HistoryDB[name]
+			editBox.historyIndex = 0
+			editBox:HookScript("OnArrowPressed", OnArrowPressed)
+			editBox:HookScript("OnShow", function(self)
+				--reset the historyindex so we can always go back to the last thing said by pressing down
+				self.historyIndex = 0
+			end)
+			
+			local count = #HistoryDB[name]
+
+			--count down, check for 0 very important!  It will cause a crash because it's an infinite loop
+			if count > 0 then
+				for dX=count, 1, -1 do
+					if HistoryDB[name][dX] then
+						editBox:AddHistoryLine(HistoryDB[name][dX])
+					else
+						break
+					end
+				end
+			end
+			
+			hooksecurefunc(editBox, "AddHistoryLine", AddEditBoxHistoryLine)
+			hooksecurefunc(editBox, "ClearHistory", ClearEditBoxHistory)
+			
+			---------------------------------
+			
+			if not editBox.left then
+				editBox.left = _G[n.."EditBoxLeft"]
+				editBox.right = _G[n.."EditBoxRight"]
+				editBox.mid = _G[n.."EditBoxMid"]
+			end
+			
+			--remove alt keypress from the EditBox (no longer need alt to move around)
+			editBox:SetAltArrowKeyMode(false)
+
+			editBox.left:SetAlpha(0)
+			editBox.right:SetAlpha(0)
+			editBox.mid:SetAlpha(0)
+			
+			local editBoxBackdrop
+			
+			if XCHT_DB.enableSEBDesign then
+				editBoxBackdrop = {
+					bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+					edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]],
+					tile = true,
+					tileSize = 16,
+					edgeSize = 12,
+					insets = { left = 3, right = 3, top = 3, bottom = 3 }
+				}
+			else
+				editBoxBackdrop = {
+					bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+					edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]], edgeSize = 16,
+					insets = { left = 3, right = 3, top = 3, bottom = 3 }
+				}
+			end
+			
+			if XCHT_DB.enableSimpleEditbox then
+			
+				if not editBox.SetBackdrop then
+					--add the backdrop mixin to the editbox frame
+					Mixin(editBox, BackdropTemplateMixin)
+				end
+
+				editBox.focusLeft:SetTexture(nil)
+				editBox.focusRight:SetTexture(nil)
+				editBox.focusMid:SetTexture(nil)
+				editBox:SetBackdrop(editBoxBackdrop)
+				editBox:SetBackdropColor(0, 0, 0, 0.6)
+				editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
+				
+			elseif not XCHT_DB.hideEditboxBorder then
+				editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
+				editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
+				editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
+			else
+				editBox.focusLeft:SetTexture(nil)
+				editBox.focusRight:SetTexture(nil)
+				editBox.focusMid:SetTexture(nil)
+			end
+			
+			--do editbox positioning
+			if XCHT_DB.editBoxTop then
+				setEditBox(true)
+			else
+				setEditBox()
+			end
+			
+			--when the editbox is on the top, complications occur because sometimes you are not allowed to click on the tabs.
+			--to fix this we'll just make the tab close the editbox
+			--also force the editbox to hide itself when it loses focus
+			_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
+			editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
+		end
+		
+		--hide the scroll bars
+		if XCHT_DB.hideScroll then
+			if f.buttonFrame then
+				f.buttonFrame:Hide()
+				f.buttonFrame:SetScript("OnShow", dummy)
+			end
+			if f.ScrollToBottomButton then
+				f.ScrollToBottomButton:Hide()
+				f.ScrollToBottomButton:SetScript("OnShow", dummy)
+			end
+		end
+		
+		--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
+		if f ~= COMBATLOG and not msgHooks[n] then
+			msgHooks[n] = {}
+			msgHooks[n].AddMessage = f.AddMessage
+			f.AddMessage = AddMessage
+		end
+		
+		processedFrames[n] = true
+	end
+end
+
+
 function addon:EnableAddon()
 
 	local currentPlayer = UnitName("player")
@@ -1669,195 +1875,7 @@ function addon:EnableAddon()
 	addon:setChatAlpha()
 	
 	for i = 1, NUM_CHAT_WINDOWS do
-		local n = ("ChatFrame%d"):format(i)
-		local f = _G[n]
-		local fTab = _G[n.."Tab"]
-		
-		if f then
-			
-			--create the copy chat buttons
-			CreateCopyChatButtons(i, f)
-		
-			--restore any settings and layout
-			restoreChatSettings(f)
-
-			--ChatFrame
-			f:HookScript("OnMouseDown", function(self, button)
-				if not f.isMoving and not f.isLocked then
-					f.isMoving = true
-					self:StartMoving()
-				end
-			end)
-			f:HookScript("OnMouseUp", function(self, button)
-				if f.isMoving then
-					f.isMoving = false
-					self:StopMovingOrSizing()
-				end
-			end)
-			f:HookScript("OnDragStart", function(self, button)
-				if not f.isDragging and not f.isLocked then
-					f.isDragging = true
-					self:StartMoving()
-				end
-			end)
-			f:HookScript("OnDragStop", function(self, button)
-				if f.isDragging then
-					f.isDragging = false
-					self:StopMovingOrSizing()
-				end
-			end)
-			
-			--ChatFrame
-			hooksecurefunc(f, "StopMovingOrSizing", function(self)
-				saveChatSettings(f)
-			end)
-			--Tab
-			hooksecurefunc(fTab, "StopMovingOrSizing", function(self)
-				saveChatSettings(f)
-			end)
-
-			--always lock the frames regardless
-			SetChatWindowLocked(i, true)
-			FCF_SetLocked(f, true)
-			
-			--add font shadows
-			if XCHT_DB.addFontShadow then
-				local font, size = f:GetFont()
-				f:SetFont(font, size, "THINOUTLINE")
-				f:SetShadowColor(0, 0, 0, 0)
-			end
-			
-			--few changes
-			f:EnableMouseWheel(true)
-			f:SetScript('OnMouseWheel', scrollChat)
-			f:SetClampRectInsets(0,0,0,0)
-
-			local editBox = _G[n.."EditBox"]
-			
-			if editBox then
-			
-                local name = editBox:GetName()
-				HistoryDB[name] = HistoryDB[name] or {}
-			
-				--do the editbox history stuff
-				---------------------------------
-				editBox.historyLines = HistoryDB[name]
-				editBox.historyIndex = 0
-				editBox:HookScript("OnArrowPressed", OnArrowPressed)
-				editBox:HookScript("OnShow", function(self)
-					--reset the historyindex so we can always go back to the last thing said by pressing down
-					self.historyIndex = 0
-				end)
-				
-				local count = #HistoryDB[name]
-
-				--count down, check for 0 very important!  It will cause a crash because it's an infinite loop
-				if count > 0 then
-					for i=count, 1, -1 do
-						if HistoryDB[name][i] then
-							editBox:AddHistoryLine(HistoryDB[name][i])
-						else
-							break
-						end
-					end
-				end
-				
-				hooksecurefunc(editBox, "AddHistoryLine", AddEditBoxHistoryLine)
-				hooksecurefunc(editBox, "ClearHistory", ClearEditBoxHistory)
-				
-				---------------------------------
-				
-				if not editBox.left then
-					editBox.left = _G[n.."EditBoxLeft"]
-					editBox.right = _G[n.."EditBoxRight"]
-					editBox.mid = _G[n.."EditBoxMid"]
-				end
-				
-				--remove alt keypress from the EditBox (no longer need alt to move around)
-				editBox:SetAltArrowKeyMode(false)
-
-				editBox.left:SetAlpha(0)
-				editBox.right:SetAlpha(0)
-				editBox.mid:SetAlpha(0)
-				
-				local editBoxBackdrop
-				
-				if XCHT_DB.enableSEBDesign then
-					editBoxBackdrop = {
-						bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
-						edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]],
-						tile = true,
-						tileSize = 16,
-						edgeSize = 12,
-						insets = { left = 3, right = 3, top = 3, bottom = 3 }
-					}
-				else
-					editBoxBackdrop = {
-						bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
-						edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]], edgeSize = 16,
-						insets = { left = 3, right = 3, top = 3, bottom = 3 }
-					}
-				end
-				
-				if XCHT_DB.enableSimpleEditbox then
-				
-					if not editBox.SetBackdrop then
-						--add the backdrop mixin to the editbox frame
-						Mixin(editBox, BackdropTemplateMixin)
-					end
-
-					editBox.focusLeft:SetTexture(nil)
-					editBox.focusRight:SetTexture(nil)
-					editBox.focusMid:SetTexture(nil)
-					editBox:SetBackdrop(editBoxBackdrop)
-					editBox:SetBackdropColor(0, 0, 0, 0.6)
-					editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
-					
-				elseif not XCHT_DB.hideEditboxBorder then
-					editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]])
-					editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]])
-					editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]])
-				else
-					editBox.focusLeft:SetTexture(nil)
-					editBox.focusRight:SetTexture(nil)
-					editBox.focusMid:SetTexture(nil)
-				end
-				
-				--do editbox positioning
-				if XCHT_DB.editBoxTop then
-					setEditBox(true)
-				else
-					setEditBox()
-				end
-				
-				--when the editbox is on the top, complications occur because sometimes you are not allowed to click on the tabs.
-				--to fix this we'll just make the tab close the editbox
-				--also force the editbox to hide itself when it loses focus
-				_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
-				editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
-			end
-			
-			--hide the scroll bars
-			if XCHT_DB.hideScroll then
-				if f.buttonFrame then
-					f.buttonFrame:Hide()
-					f.buttonFrame:SetScript("OnShow", dummy)
-				end
-				if f.ScrollToBottomButton then
-					f.ScrollToBottomButton:Hide()
-					f.ScrollToBottomButton:SetScript("OnShow", dummy)
-				end
-			end
-			
-			--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
-			if f ~= COMBATLOG and not msgHooks[n] then
-				msgHooks[n] = {}
-				msgHooks[n].AddMessage = f.AddMessage
-				f.AddMessage = AddMessage
-			end
-			
-		end
-
+		SetupChatFrame(i)
 	end
 
 	--show/hide the chat social buttons
@@ -1921,7 +1939,9 @@ function addon:EnableAddon()
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
 	SlashCmdList["XANCHAT"] = function()
-		InterfaceOptionsFrame:Show() --has to be here to load the about frame onLoad
+		if not addon.IsRetail then
+			InterfaceOptionsFrame:Show() --has to be here to load the about frame onLoad
+		end
 		InterfaceOptionsFrame_OpenToCategory(addon.aboutPanel) --force the panel to show
 	end
 	
@@ -1965,4 +1985,12 @@ function addon:UI_SCALE_CHANGED()
 			FCF_SetLocked(f, true)
 		end
 	end
+end
+
+--this is for temporary Whisper windows.  They are NUM_CHAT_WINDOWS + 1 and so forth
+local old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
+FCF_OpenTemporaryWindow = function(...)
+	local frame = old_OpenTemporaryWindow(...)
+	SetupChatFrame(frame:GetID())
+	return frame
 end

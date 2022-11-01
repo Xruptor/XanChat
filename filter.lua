@@ -67,6 +67,8 @@ local coreList = {
 	["CHAT_MSG_SKILL"] = true,
 	["CHAT_MSG_CURRENCY"] = true,
 	["CHAT_MSG_MONEY"] = true,
+	["CHAT_MSG_WHISPER"] = true,
+	["CHAT_MSG_BN_WHISPER_INFORM"] = true,
 	["CHAT_MSG_OPENING"] = true,
 	["CHAT_MSG_TRADESKILLS"] = true,
 	["CHAT_MSG_PET_INFO"] = true,
@@ -166,7 +168,7 @@ function addon:DoFilterList()
 		barSlot.xData = buildList[barCount]
 		
 		--check button stuff
-		local bar_chk = _G["xanChat_FilterListBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_FilterListBarChk"..barCount, barSlot, "OptionsCheckButtonTemplate")
+		local bar_chk = _G["xanChat_FilterListBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_FilterListBarChk"..barCount, barSlot, "InterfaceOptionsCheckButtonTemplate")
 		bar_chk.xData = buildList[barCount]
         bar_chk:SetPoint("LEFT", 4, 0)
 		

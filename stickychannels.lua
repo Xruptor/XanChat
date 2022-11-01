@@ -125,7 +125,7 @@ function addon:DoStickyChannelsList()
 		barSlot.xData = buildList[barCount]
 		
 		--check button stuff
-		local bar_chk = _G["xanChat_StickyChannelBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_StickyChannelBarChk"..barCount, barSlot, "OptionsCheckButtonTemplate")
+		local bar_chk = _G["xanChat_StickyChannelBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_StickyChannelBarChk"..barCount, barSlot, "InterfaceOptionsCheckButtonTemplate")
 		bar_chk.xData = buildList[barCount]
         bar_chk:SetPoint("LEFT", 4, 0)
 		
