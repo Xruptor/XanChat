@@ -614,29 +614,6 @@ local AddMessage = function(frame, text, ...)
 	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
 end
 
-local function setEditBox(sSwitch)
-	for i = 1, NUM_CHAT_WINDOWS do
-		local eb = _G[("ChatFrame%dEditBox"):format(i)]
-		local spaceAdjusted = 0
-		
-		if sSwitch then
-			if XCHT_DB.enableEditboxAdjusted then
-				spaceAdjusted = 6
-			end
-			eb:ClearAllPoints()
-			eb:SetPoint("BOTTOMLEFT",  ("ChatFrame%d"):format(i), "TOPLEFT",  -5, spaceAdjusted)
-			eb:SetPoint("BOTTOMRIGHT", ("ChatFrame%d"):format(i), "TOPRIGHT", 5, spaceAdjusted)
-		else
-			if XCHT_DB.enableEditboxAdjusted then
-				spaceAdjusted = -9
-			end
-			eb:ClearAllPoints()
-			eb:SetPoint("TOPLEFT",  ("ChatFrame%d"):format(i), "BOTTOMLEFT",  -5, spaceAdjusted)
-			eb:SetPoint("TOPRIGHT", ("ChatFrame%d"):format(i), "BOTTOMRIGHT", 5, spaceAdjusted)
-		end
-	end
-end
-
 --save and restore layout functions
 local function SaveLayout(chatFrame)
 	if not addonLoaded then return end
@@ -1442,40 +1419,21 @@ local old_FCF_FadeOutChatFrame = FCF_FadeOutChatFrame
 local old_FCF_FadeOutScrollbar = FCF_FadeOutScrollbar
 local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
 
-function addon:setChatAlpha()
-	DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
-	
-	for i = 1, NUM_CHAT_WINDOWS do
-		local n = ("ChatFrame%d"):format(i)
-		local f = _G[n]
-		local fTab = _G[n.."Tab"]
-
-		if f then
-			--these two settings are very important, do not remove
-			f.oldAlpha = 0
-			f.hasBeenFaded = false
-			--only force fade in if we have it disabled
-			if not XCHT_DB.enableChatFrameFade then
-				if f.isDocked or fTab:IsVisible() then
-					FCF_FadeInChatFrame(f)
-					FCF_FadeInScrollbar(f)
-				end
-			end
-		end
-	end
-end
-
 local function doAlphaCheck(chatframe)
 	local frameName = chatframe:GetName()
 	chatframe.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
-	chatframe.hasBeenFaded = true
+	
 	for index, value in pairs(CHAT_FRAME_TEXTURES) do
 		local object = _G[frameName..value]
 		object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
+		if ( object:IsShown() ) then
+			UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), max(chatframe.oldAlpha, DEFAULT_CHATFRAME_ALPHA))
+		end
 	end
+
 end
 
-local function enableChatFrameFading()
+local function disableChatFrameFading()
 
 	FCF_FadeInChatFrame = function(chatframe)
 		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
@@ -1571,8 +1529,33 @@ local function SetupChatFrame(chatID, chatFrame)
 	local n = "ChatFrame"..chatID
 	local f = _G[n]
 	local fTab = _G[n.."Tab"]
+	local editBox = _G[n.."EditBox"]
 	
 	if f and not processedFrames[n] then
+		
+		--set alpha levels
+		------------------------
+		--only force fade in if we have it disabled
+		--FCF_FadeInChatFrame causes TAINT issues during "Edit Mode" in retail
+		--https://www.wowinterface.com/forums/showthread.php?t=59244
+		
+		DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
+		--these two settings are very important, do not remove
+		f.oldAlpha = 0
+		f.hasBeenFaded = nil --causes a taint in retail if set to true/false
+		
+		for index, value in pairs(CHAT_FRAME_TEXTURES) do
+			local object = _G[n..value]
+			if object then
+				object:SetAlpha(DEFAULT_CHATFRAME_ALPHA)
+				
+				--do the setting of the alpha to hidden manually and have it reset based on our predefined Alpha when visable
+				if not XCHT_DB.disableChatFrameFade and object:IsShown() then
+					UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), 0)
+				end
+			end
+		end
+		------------------------
 		
 		--create the copy chat buttons
 		CreateCopyChatButtons(chatID, f)
@@ -1611,9 +1594,11 @@ local function SetupChatFrame(chatID, chatFrame)
 			saveChatSettings(f)
 		end)
 		--Tab
-		hooksecurefunc(fTab, "StopMovingOrSizing", function(self)
-			saveChatSettings(f)
-		end)
+		if fTab then
+			hooksecurefunc(fTab, "StopMovingOrSizing", function(self)
+				saveChatSettings(f)
+			end)
+		end
 
 		--always lock the frames regardless
 		SetChatWindowLocked(chatID, true)
@@ -1631,8 +1616,6 @@ local function SetupChatFrame(chatID, chatFrame)
 		f:SetScript('OnMouseWheel', scrollChat)
 		f:SetClampRectInsets(0,0,0,0)
 
-		local editBox = _G[n.."EditBox"]
-		
 		if editBox then
 		
 			local name = editBox:GetName()
@@ -1724,16 +1707,30 @@ local function SetupChatFrame(chatID, chatFrame)
 			end
 			
 			--do editbox positioning
-			if XCHT_DB.editBoxTop then
-				setEditBox(true)
-			else
-				setEditBox()
-			end
+			local spaceAdjusted = 0
 			
+			if XCHT_DB.editBoxTop then
+				if XCHT_DB.enableEditboxAdjusted then
+					spaceAdjusted = 6
+				end
+				editBox:ClearAllPoints()
+				editBox:SetPoint("BOTTOMLEFT",  f, "TOPLEFT",  -5, spaceAdjusted)
+				editBox:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 5, spaceAdjusted)
+			else
+				if XCHT_DB.enableEditboxAdjusted then
+					spaceAdjusted = -9
+				end
+				editBox:ClearAllPoints()
+				editBox:SetPoint("TOPLEFT",  f, "BOTTOMLEFT",  -5, spaceAdjusted)
+				editBox:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 5, spaceAdjusted)
+			end
+
 			--when the editbox is on the top, complications occur because sometimes you are not allowed to click on the tabs.
 			--to fix this we'll just make the tab close the editbox
 			--also force the editbox to hide itself when it loses focus
-			_G[n.."Tab"]:HookScript("OnClick", function() editBox:Hide() end)
+			if fTab then
+				fTab:HookScript("OnClick", function() editBox:Hide() end)
+			end
 			editBox:HookScript("OnEditFocusLost", function(self) self:Hide() end)
 		end
 		
@@ -1747,6 +1744,19 @@ local function SetupChatFrame(chatID, chatFrame)
 				f.ScrollToBottomButton:Hide()
 				f.ScrollToBottomButton:SetScript("OnShow", dummy)
 			end
+		end
+		
+		--force the chat hide tabs on load
+		if XCHT_DB.hideTabs and fTab then
+			fTab.mouseOverAlpha = CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA
+			fTab.noMouseAlpha = CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA
+			if ( f.hasBeenFaded ) then
+				fTab:SetAlpha(fTab.mouseOverAlpha)
+			else
+				fTab:SetAlpha(fTab.noMouseAlpha)
+			end
+			--UIFrameFadeIn(fTab, CHAT_FRAME_FADE_TIME, fTab:GetAlpha(), fTab.mouseOverAlpha)
+			--UIFrameFadeOut(fTab, CHAT_FRAME_FADE_OUT_TIME, fTab:GetAlpha(), fTab.noMouseAlpha)
 		end
 		
 		--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
@@ -1781,7 +1791,7 @@ function addon:EnableAddon()
 	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
 	if XCHT_DB.enablePlayerChatStyle == nil then XCHT_DB.enablePlayerChatStyle = true end
 	if XCHT_DB.enableChatTextFade == nil then XCHT_DB.enableChatTextFade = true end
-	if XCHT_DB.enableChatFrameFade == nil then XCHT_DB.enableChatFrameFade = true end
+	if XCHT_DB.disableChatFrameFade == nil then XCHT_DB.disableChatFrameFade = true end
 	if XCHT_DB.enableCopyButtonLeft == nil then XCHT_DB.enableCopyButtonLeft = false end
 	if XCHT_DB.lockChatSettings == nil then XCHT_DB.lockChatSettings = false end
 	if XCHT_DB.userChatAlpha == nil then XCHT_DB.userChatAlpha = 0.25 end  --uses blizzard default value from DEFAULT_CHATFRAME_ALPHA
@@ -1829,15 +1839,8 @@ function addon:EnableAddon()
 	addon:setOutWhisperColor()
 
 	--check for chat box fading
-	if not XCHT_DB.enableChatFrameFade then
-		enableChatFrameFading()
-	end
-	
-	--set the alpha levels
-	addon:setChatAlpha()
-	
-	for i = 1, NUM_CHAT_WINDOWS do
-		SetupChatFrame(i)
+	if XCHT_DB.disableChatFrameFade then
+		disableChatFrameFading()
 	end
 
 	--show/hide the chat social buttons
@@ -1879,7 +1882,7 @@ function addon:EnableAddon()
 	if XCHT_DB.hideTabs then
 		--set the blizzard global variables to make the alpha of the chat tabs completely invisible
 		CHAT_TAB_HIDE_DELAY = 1
-		CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 1
+		CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 0.6
 		CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0
 		CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1
 		CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0
@@ -1898,6 +1901,11 @@ function addon:EnableAddon()
 	YOU_LOOT_MONEY_GUILD = YOU_LOOT_MONEY
 	LOOT_MONEY_SPLIT_GUILD = LOOT_MONEY_SPLIT
 
+	--finally, setup all the chat frames
+	for i = 1, NUM_CHAT_WINDOWS do
+		SetupChatFrame(i)
+	end
+	
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
 	SlashCmdList["XANCHAT"] = function()

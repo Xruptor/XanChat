@@ -132,9 +132,9 @@ L.SlashChatTextFadeOff = "xanChat: Chat Text Fade is [|cFF99CC33OFF|r]"
 L.SlashChatTextFadeInfo = "Enable text fade on chat frames."
 
 L.SlashChatFrameFade = "chatfade"
-L.SlashChatFrameFadeOn = "xanChat: Chat Frame Fade is [|cFF99CC33ON|r]"
-L.SlashChatFrameFadeOff = "xanChat: Chat Frame Fade is [|cFF99CC33OFF|r]"
-L.SlashChatFrameFadeInfo = "Enable background fade on chat frames."
+L.SlashChatFrameFadeOn = "xanChat: Disable Chat Frame Fade is [|cFF99CC33ON|r]"
+L.SlashChatFrameFadeOff = "xanChat: Disable Chat Frame Fade is [|cFF99CC33OFF|r]"
+L.SlashChatFrameFadeInfo = "Disable background fade on chat frames."
 
 L.SlashLockChatSettings = "lockchat"
 L.SlashLockChatSettingsOn = "xanChat: Chat Settings Lock is [|cFF99CC33ON|r]"

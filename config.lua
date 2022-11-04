@@ -644,15 +644,15 @@ function configFrame:EnableConfig()
 	addon.aboutPanel.btnChatTextFade = btnChatTextFade
 	
 	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
-	btnChatFrameFade:SetScript("OnShow", function() btnChatFrameFade:SetChecked(XCHT_DB.enableChatFrameFade) end)
+	btnChatFrameFade:SetScript("OnShow", function() btnChatFrameFade:SetChecked(XCHT_DB.disableChatFrameFade) end)
 	btnChatFrameFade.func = function()
-		local value = XCHT_DB.enableChatFrameFade
+		local value = XCHT_DB.disableChatFrameFade
 
 		if value then
-			XCHT_DB.enableChatFrameFade = false
+			XCHT_DB.disableChatFrameFade = false
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatFrameFadeOff)
 		else
-			XCHT_DB.enableChatFrameFade = true
+			XCHT_DB.disableChatFrameFade = true
 			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatFrameFadeOn)
 		end
 		
