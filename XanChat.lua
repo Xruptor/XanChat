@@ -1418,9 +1418,12 @@ local old_FCF_FadeInChatFrame = FCF_FadeInChatFrame
 local old_FCF_FadeOutChatFrame = FCF_FadeOutChatFrame
 local old_FCF_FadeOutScrollbar = FCF_FadeOutScrollbar
 local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
+local old_FCF_OnUpdate = FCF_OnUpdate
 
 local function doAlphaCheck(chatframe)
 	local frameName = chatframe:GetName()
+	local fTab = _G[frameName.."Tab"]
+	
 	chatframe.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
 	
 	for index, value in pairs(CHAT_FRAME_TEXTURES) do
@@ -1430,7 +1433,7 @@ local function doAlphaCheck(chatframe)
 			UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), max(chatframe.oldAlpha, DEFAULT_CHATFRAME_ALPHA))
 		end
 	end
-
+	
 end
 
 local function disableChatFrameFading()
@@ -1464,6 +1467,37 @@ local function disableChatFrameFading()
 			return
 		end
 		old_FCF_SetWindowAlpha(frame, alpha, doNotSave)
+	end
+	
+	FCF_OnUpdate = function(elapsed)
+		for _, frameName in pairs(CHAT_FRAMES) do
+		
+			local chatFrame = _G[frameName]
+			local fTab = _G[frameName.."Tab"]
+			
+			if ( chatFrame and chatFrame:IsShown() and fTab) then
+			
+				--Debug(chatFrame.mouseInTime, chatFrame.mouseOutTime)
+				local topOffset = 28
+				local mouseOver = chatFrame:IsMouseOver(topOffset, -2, -2, 2)
+				
+				if XCHT_DB.hideTabs then
+					--NOTE: Cannot rely on UIFrameFadeIn or UIFrameFadeOut as their threshold always stops at 0.9 for show and 0.2 for hide no matter what arguements are set
+					--this is because of how elaspe time is handled in UIFrameFade
+					--https://github.com/tomrus88/BlizzardInterfaceCode/blob/f0118d6ea34d2d7898a442b6b9a357f07b5d0117/Interface/FrameXML/UIParent.lua
+					
+					if mouseOver then
+						fTab:SetAlpha(fTab.mouseOverAlpha)
+					else
+						fTab:SetAlpha(fTab.noMouseAlpha)
+					end
+
+				end
+			end
+			
+		end
+		
+		old_FCF_OnUpdate(elapsed)
 	end
 	
 end
@@ -1755,8 +1789,6 @@ local function SetupChatFrame(chatID, chatFrame)
 			else
 				fTab:SetAlpha(fTab.noMouseAlpha)
 			end
-			--UIFrameFadeIn(fTab, CHAT_FRAME_FADE_TIME, fTab:GetAlpha(), fTab.mouseOverAlpha)
-			--UIFrameFadeOut(fTab, CHAT_FRAME_FADE_OUT_TIME, fTab:GetAlpha(), fTab.noMouseAlpha)
 		end
 		
 		--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
