@@ -1470,29 +1470,42 @@ local function disableChatFrameFading()
 	end
 	
 	FCF_OnUpdate = function(elapsed)
+		local mouseIn = false
+		
 		for _, frameName in pairs(CHAT_FRAMES) do
 		
 			local chatFrame = _G[frameName]
 			local fTab = _G[frameName.."Tab"]
 			
-			if ( chatFrame and chatFrame:IsShown() and fTab) then
+			if ( chatFrame and fTab) then
 			
-				--Debug(chatFrame.mouseInTime, chatFrame.mouseOutTime)
 				local topOffset = 28
 				local mouseOver = chatFrame:IsMouseOver(topOffset, -2, -2, 2)
+				
+				if mouseOver then
+					mouseIn = true
+				end
 				
 				if XCHT_DB.hideTabs then
 					--NOTE: Cannot rely on UIFrameFadeIn or UIFrameFadeOut as their threshold always stops at 0.9 for show and 0.2 for hide no matter what arguements are set
 					--this is because of how elaspe time is handled in UIFrameFade
 					--https://github.com/tomrus88/BlizzardInterfaceCode/blob/f0118d6ea34d2d7898a442b6b9a357f07b5d0117/Interface/FrameXML/UIParent.lua
-					
-					if mouseOver then
-						fTab:SetAlpha(fTab.mouseOverAlpha)
+							
+					--overwrite it
+					if mouseIn then
+						fTab:SetAlpha(1) --we set this manually as we want it bright when they hover over
 					else
-						fTab:SetAlpha(fTab.noMouseAlpha)
+						fTab:SetAlpha(0) --hide it when we mouse out
 					end
-
+				else
+					--overwrite standard as well because it won't work properly
+					if mouseIn then
+						fTab:SetAlpha(1) --we set this manually as we want it bright when they hover over
+					else
+						fTab:SetAlpha(fTab.noMouseAlpha) --use default alpha when we mouse out
+					end
 				end
+				
 			end
 			
 		end
@@ -1911,6 +1924,7 @@ function addon:EnableAddon()
 	end
 	
 	--do the settings for the tabs
+	--https://github.com/tomrus88/BlizzardInterfaceCode/blob/e2b884c714b3e751a9ec84b89a5fda964f35da05/Interface/FrameXML/FloatingChatFrame.lua
 	if XCHT_DB.hideTabs then
 		--set the blizzard global variables to make the alpha of the chat tabs completely invisible
 		CHAT_TAB_HIDE_DELAY = 1
@@ -1920,6 +1934,15 @@ function addon:EnableAddon()
 		CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0
 		CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1
 		CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 0
+	else
+		--set defaults
+		CHAT_TAB_HIDE_DELAY = 1
+		CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1.0
+		CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0.4
+		CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1.0
+		CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 1.0
+		CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 0.6
+		CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0.2
 	end
 	
 	--toggle the voice chat buttons if disabled
