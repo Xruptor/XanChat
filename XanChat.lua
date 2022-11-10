@@ -1420,20 +1420,22 @@ local old_FCF_FadeOutScrollbar = FCF_FadeOutScrollbar
 local old_FCF_SetWindowAlpha = FCF_SetWindowAlpha
 local old_FCF_OnUpdate = FCF_OnUpdate
 
-local function doAlphaCheck(chatframe)
-	local frameName = chatframe:GetName()
-	local fTab = _G[frameName.."Tab"]
+local function doAlphaCheck(chatFrame, chatName)
+	local objChat = _G[chatName] or chatFrame
+	local objName = chatName or chatFrame:GetName()
 	
-	chatframe.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
-	
-	for index, value in pairs(CHAT_FRAME_TEXTURES) do
-		local object = _G[frameName..value]
-		object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
-		if ( object:IsShown() ) then
-			UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), max(chatframe.oldAlpha, DEFAULT_CHATFRAME_ALPHA))
+	if objChat and objName then
+		objChat.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
+		
+		for index, value in pairs(CHAT_FRAME_TEXTURES) do
+			local object = _G[objName..value]
+			object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
+			if ( object:IsShown() ) then
+				UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), max(objChat.oldAlpha, DEFAULT_CHATFRAME_ALPHA))
+			end
 		end
+		
 	end
-	
 end
 
 local function disableChatFrameFading()
@@ -1538,6 +1540,16 @@ function addon:setOutWhisperColor()
 		ChangeChatColor("WHISPER_INFORM", r, g, b) --change whisper outgoing color
 	end
 
+end
+
+--[[------------------------
+	Sets all the chat frames alpha to the user selected level
+--------------------------]]
+
+function addon:setUserAlpha()
+	for _, frameName in pairs(CHAT_FRAMES) do
+		doAlphaCheck(nil, frameName)
+	end
 end
 
 --[[------------------------
@@ -1651,11 +1663,16 @@ local function SetupChatFrame(chatID, chatFrame)
 		SetChatWindowLocked(chatID, true)
 		FCF_SetLocked(f, true)
 		
-		--add font shadows
-		if XCHT_DB.addFontShadow then
+		--add font outlines or shadows
+		if XCHT_DB.addFontOutline or XCHT_DB.addFontShadow then
+		
 			local font, size = f:GetFont()
 			f:SetFont(font, size, "THINOUTLINE")
-			f:SetShadowColor(0, 0, 0, 0)
+			
+			--only apply this if we don't have the shadows enabled. The code below removes the extended alpha layer creating a slimmer font shadow
+			if not XCHT_DB.addFontShadow then
+				f:SetShadowColor(0, 0, 0, 0)
+			end
 		end
 		
 		--few changes
@@ -1825,6 +1842,7 @@ function addon:EnableAddon()
 	if not XCHT_DB then XCHT_DB = {} end
 	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
 	if XCHT_DB.addFontShadow == nil then XCHT_DB.addFontShadow = false end
+	if XCHT_DB.addFontOutline == nil then XCHT_DB.addFontOutline = false end
 	if XCHT_DB.hideScroll == nil then XCHT_DB.hideScroll = false end
 	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
 	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end

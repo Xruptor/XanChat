@@ -89,7 +89,12 @@ L.SlashTabsInfo = "Hide the chat tabs."
 L.SlashShadow = "shadow"
 L.SlashShadowOn = "xanChat: Chat font shadows are now [|cFF99CC33ON|r]"
 L.SlashShadowOff = "xanChat: Chat font shadows are now [|cFF99CC33OFF|r]"
-L.SlashShadowInfo= "Add shadows to the chat text font."
+L.SlashShadowInfo = "Add shadows to the chat text font. |cFFDF2B2B(Overrides outline option.)|r"
+
+L.SlashOutline = "outline"
+L.SlashOutlineOn = "xanChat: Chat font outline are now [|cFF99CC33ON|r]"
+L.SlashOutlineOff = "xanChat: Chat font outline are now [|cFF99CC33OFF|r]"
+L.SlashOutlineInfo = "Add outlines to the chat text font."
 
 L.SlashVoice = "voice"
 L.SlashVoiceOn = "xanChat: Voice chat buttons are now [|cFF99CC33ON|r]"

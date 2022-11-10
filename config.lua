@@ -410,6 +410,30 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnTabs, 20, -22)
 	addon.aboutPanel.btnTabs = btnTabs
 
+	local btnFontOutline = createCheckbutton(addon.aboutPanel, L.SlashOutlineInfo)
+	btnFontOutline:SetScript("OnShow", function() 
+		btnFontOutline:SetChecked(XCHT_DB.addFontOutline)
+	end)
+	btnFontOutline.func = function()
+		local value = XCHT_DB.addFontOutline
+
+		if value then
+			XCHT_DB.addFontOutline = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashOutlineOff)
+		else
+			XCHT_DB.addFontOutline = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.SlashOutlineOn)
+		end
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnFontOutline:SetScript("OnClick", btnFontOutline.func)
+	
+	addConfigEntry(addon.aboutPanel.name, btnFontOutline, 20, -22)
+	addon.aboutPanel.btnFontOutline = btnFontOutline
+	
 	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
 	btnShadow:SetScript("OnShow", function() btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
 	btnShadow.func = function()
@@ -429,7 +453,7 @@ function configFrame:EnableConfig()
 	end
 	btnShadow:SetScript("OnClick", btnShadow.func)
 	
-	addConfigEntry(addon.aboutPanel.name, btnShadow, 20, -22)
+	addConfigEntry(addon.aboutPanel.name, btnShadow, 45, -22)
 	addon.aboutPanel.btnShadow = btnShadow
 
 	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
@@ -676,7 +700,7 @@ function configFrame:EnableConfig()
 		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
 		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
 		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.SlashChatAlphaSet, floor(value)))
-		addon:setChatAlpha()
+		addon:setUserAlpha()
 	end
 	sliderChatAlpha.sliderMouseUp = function(self, button)
 		sliderChatAlpha.func(sliderChatAlpha:GetValue())
