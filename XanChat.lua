@@ -1426,12 +1426,13 @@ local function doAlphaCheck(chatFrame, chatName)
 	
 	if objChat and objName then
 		objChat.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
+		objChat.hasBeenFaded = true
 		
 		for index, value in pairs(CHAT_FRAME_TEXTURES) do
 			local object = _G[objName..value]
 			object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
 			if ( object:IsShown() ) then
-				UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), max(objChat.oldAlpha, DEFAULT_CHATFRAME_ALPHA))
+				UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), objChat.oldAlpha)
 			end
 		end
 		
@@ -1601,7 +1602,8 @@ local function SetupChatFrame(chatID, chatFrame)
 		DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
 		--these two settings are very important, do not remove
 		f.oldAlpha = 0
-		f.hasBeenFaded = nil --causes a taint in retail if set to true/false
+		--f.hasBeenFaded = nil --causes a taint in retail if set to true/false
+		f.hasBeenFaded = false
 		
 		for index, value in pairs(CHAT_FRAME_TEXTURES) do
 			local object = _G[n..value]
