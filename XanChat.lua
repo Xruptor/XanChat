@@ -1864,6 +1864,8 @@ function addon:EnableAddon()
 	if XCHT_DB.enableOutWhisperColor == nil then XCHT_DB.enableOutWhisperColor = false end
 	if XCHT_DB.outWhisperColor == nil then XCHT_DB.outWhisperColor = "FFF2307C" end
 	if XCHT_DB.disableChatEnterLeaveNotice == nil then XCHT_DB.disableChatEnterLeaveNotice = false end
+	if XCHT_DB.hideChatChannelButton == nil then XCHT_DB.hideChatChannelButton = false end
+	if XCHT_DB.moveSocialButtonToBottom == nil then XCHT_DB.moveSocialButtonToBottom = false end
 
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1910,10 +1912,18 @@ function addon:EnableAddon()
 
 	--show/hide the chat social buttons
 	if addon.IsRetail and XCHT_DB.hideSocial then
-		ChatFrameMenuButton:Hide()
-		ChatFrameMenuButton:SetScript("OnShow", dummy)
 		QuickJoinToastButton:Hide()
 		QuickJoinToastButton:SetScript("OnShow", dummy)
+	end
+	
+	if addon.IsRetail and XCHT_DB.moveSocialButtonToBottom then
+		ChatAlertFrame:ClearAllPoints()
+		ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -33)
+	end
+	
+	if addon.IsRetail and XCHT_DB.hideChatChannelButton then
+		ChatFrameMenuButton:Hide()
+		ChatFrameMenuButton:SetScript("OnShow", dummy)
 	end
 	
 	--enable short channel names for globals
@@ -1991,7 +2001,7 @@ function addon:EnableAddon()
 	end
 	
 	if XCHT_DB.lockChatSettings then
-		DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+		DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.LockChatSettingsAlert)
 	end
 	
 	addon:RegisterEvent("UI_SCALE_CHANGED")

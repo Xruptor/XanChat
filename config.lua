@@ -23,7 +23,7 @@ local function addConfigEntry(frameParentName, objEntry, adjustX, adjustY, isCus
 	if not isCustom then
 		if not lastObject[frameParentName] then
 			if not customStartYPoint then
-				objEntry:SetPoint("TOPLEFT", 20, -150)
+				objEntry:SetPoint("TOPLEFT", 20, -135)
 			else
 				objEntry:SetPoint("TOPLEFT", 20, customStartYPoint)
 			end
@@ -279,17 +279,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnFilterList, 410, -55, true)
 	addon.aboutPanel.btnFilterList = btnFilterList
 	
-	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.SlashLockChatSettingsInfo.."|r")
+	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.LockChatSettingsInfo.."|r")
 	btnLockChatSettings:SetScript("OnShow", function() btnLockChatSettings:SetChecked(XCHT_DB.lockChatSettings) end)
 	btnLockChatSettings.func = function()
 		local value = XCHT_DB.lockChatSettings
 
 		if value then
 			XCHT_DB.lockChatSettings = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.LockChatSettingsOff)
 		else
 			XCHT_DB.lockChatSettings = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashLockChatSettingsOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.LockChatSettingsOn)
 		end
 		configFrame:DoLock()
 	end
@@ -299,17 +299,17 @@ function configFrame:EnableConfig()
 	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
 	
 	if addon.IsRetail then 
-		local btnSocial = createCheckbutton(addon.aboutPanel, L.SlashSocialInfo)
+		local btnSocial = createCheckbutton(addon.aboutPanel, L.SocialInfo)
 		btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
 		btnSocial.func = function()
 			local value = XCHT_DB.hideSocial
 
 			if value then
 				XCHT_DB.hideSocial = false
-				DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOn)
+				DEFAULT_CHAT_FRAME:AddMessage(L.SocialOn)
 			else
 				XCHT_DB.hideSocial = true
-				DEFAULT_CHAT_FRAME:AddMessage(L.SlashSocialOff)
+				DEFAULT_CHAT_FRAME:AddMessage(L.SocialOff)
 			end
 			
 			if not addon.xanChatReloadPopup then
@@ -320,19 +320,66 @@ function configFrame:EnableConfig()
 	
 		addConfigEntry(addon.aboutPanel.name, btnSocial, 20, -22)
 		addon.aboutPanel.btnSocial = btnSocial
+		
+		local btnMoveSocialButton = createCheckbutton(addon.aboutPanel, L.MoveSocialButtonInfo)
+		btnMoveSocialButton:SetScript("OnShow", function() btnMoveSocialButton:SetChecked(XCHT_DB.moveSocialButtonToBottom) end)
+		btnMoveSocialButton.func = function()
+			local value = XCHT_DB.moveSocialButtonToBottom
+
+			if value then
+				XCHT_DB.moveSocialButtonToBottom = false
+				DEFAULT_CHAT_FRAME:AddMessage(L.MoveSocialButtonOff)
+			else
+				XCHT_DB.moveSocialButtonToBottom = true
+				DEFAULT_CHAT_FRAME:AddMessage(L.MoveSocialButtonOn)
+			end
+			
+			if not addon.xanChatReloadPopup then
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+			end
+		end
+		btnMoveSocialButton:SetScript("OnClick", btnMoveSocialButton.func)
+		
+		addConfigEntry(addon.aboutPanel.name, btnMoveSocialButton, 45, -22)
+		addon.aboutPanel.btnMoveSocialButton = btnMoveSocialButton
+	
 	end
 	
-	local btnScroll = createCheckbutton(addon.aboutPanel, L.SlashScrollInfo)
+	if addon.IsRetail then 
+		local btnChatChannel = createCheckbutton(addon.aboutPanel, L.ChatChannelButtonInfo)
+		btnChatChannel:SetScript("OnShow", function() btnChatChannel:SetChecked(XCHT_DB.hideChatChannelButton) end)
+		btnChatChannel.func = function()
+			local value = XCHT_DB.hideChatChannelButton
+
+			if value then
+				XCHT_DB.hideChatChannelButton = false
+				DEFAULT_CHAT_FRAME:AddMessage(L.ChatChannelButtonOn)
+			else
+				XCHT_DB.hideChatChannelButton = true
+				DEFAULT_CHAT_FRAME:AddMessage(L.ChatChannelButtonOff)
+			end
+			
+			if not addon.xanChatReloadPopup then
+				StaticPopup_Show("XANCHAT_APPLYCHANGES")
+			end
+		end
+		btnChatChannel:SetScript("OnClick", btnChatChannel.func)
+	
+		addConfigEntry(addon.aboutPanel.name, btnChatChannel, 20, -22)
+		addon.aboutPanel.btnChatChannel = btnChatChannel
+	end
+	
+	local btnScroll = createCheckbutton(addon.aboutPanel, L.ScrollInfo)
 	btnScroll:SetScript("OnShow", function() btnScroll:SetChecked(XCHT_DB.hideScroll) end)
 	btnScroll.func = function()
 		local value = XCHT_DB.hideScroll
 
 		if value then
 			XCHT_DB.hideScroll = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ScrollOn)
 		else
 			XCHT_DB.hideScroll = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashScrollOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ScrollOff)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -344,17 +391,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnScroll, 20, -22)
 	addon.aboutPanel.btnScroll = btnScroll
 
-	local btnShortNames = createCheckbutton(addon.aboutPanel, L.SlashShortNamesInfo)
+	local btnShortNames = createCheckbutton(addon.aboutPanel, L.ShortNamesInfo)
 	btnShortNames:SetScript("OnShow", function() btnShortNames:SetChecked(XCHT_DB.shortNames) end)
 	btnShortNames.func = function()
 		local value = XCHT_DB.shortNames
 
 		if value then
 			XCHT_DB.shortNames = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ShortNamesOff)
 		else
 			XCHT_DB.shortNames = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShortNamesOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ShortNamesOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -366,17 +413,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnShortNames, 20, -22)
 	addon.aboutPanel.btnShortNames = btnShortNames
 
-	local btnEditBox = createCheckbutton(addon.aboutPanel, L.SlashEditBoxInfo)
+	local btnEditBox = createCheckbutton(addon.aboutPanel, L.EditBoxInfo)
 	btnEditBox:SetScript("OnShow", function() btnEditBox:SetChecked(XCHT_DB.editBoxTop) end)
 	btnEditBox.func = function()
 		local value = XCHT_DB.editBoxTop
 
 		if value then
 			XCHT_DB.editBoxTop = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBottom)
+			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxBottom)
 		else
 			XCHT_DB.editBoxTop = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxTop)
+			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxTop)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -388,17 +435,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnEditBox, 20, -22)
 	addon.aboutPanel.btnEditBox = btnEditBox
 
-	local btnTabs = createCheckbutton(addon.aboutPanel, L.SlashTabsInfo)
+	local btnTabs = createCheckbutton(addon.aboutPanel, L.TabsInfo)
 	btnTabs:SetScript("OnShow", function() btnTabs:SetChecked(XCHT_DB.hideTabs) end)
 	btnTabs.func = function()
 		local value = XCHT_DB.hideTabs
 
 		if value then
 			XCHT_DB.hideTabs = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.TabsOn)
 		else
 			XCHT_DB.hideTabs = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashTabsOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.TabsOff)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -410,7 +457,7 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnTabs, 20, -22)
 	addon.aboutPanel.btnTabs = btnTabs
 
-	local btnFontOutline = createCheckbutton(addon.aboutPanel, L.SlashOutlineInfo)
+	local btnFontOutline = createCheckbutton(addon.aboutPanel, L.OutlineInfo)
 	btnFontOutline:SetScript("OnShow", function() 
 		btnFontOutline:SetChecked(XCHT_DB.addFontOutline)
 	end)
@@ -419,10 +466,10 @@ function configFrame:EnableConfig()
 
 		if value then
 			XCHT_DB.addFontOutline = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashOutlineOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.OutlineOff)
 		else
 			XCHT_DB.addFontOutline = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashOutlineOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.OutlineOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -434,17 +481,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnFontOutline, 20, -22)
 	addon.aboutPanel.btnFontOutline = btnFontOutline
 	
-	local btnShadow = createCheckbutton(addon.aboutPanel, L.SlashShadowInfo)
+	local btnShadow = createCheckbutton(addon.aboutPanel, L.ShadowInfo)
 	btnShadow:SetScript("OnShow", function() btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
 	btnShadow.func = function()
 		local value = XCHT_DB.addFontShadow
 
 		if value then
 			XCHT_DB.addFontShadow = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ShadowOff)
 		else
 			XCHT_DB.addFontShadow = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashShadowOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ShadowOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -456,17 +503,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnShadow, 45, -22)
 	addon.aboutPanel.btnShadow = btnShadow
 
-	local btnVoice = createCheckbutton(addon.aboutPanel, L.SlashVoiceInfo)
+	local btnVoice = createCheckbutton(addon.aboutPanel, L.VoiceInfo)
 	btnVoice:SetScript("OnShow", function() btnVoice:SetChecked(XCHT_DB.hideVoice) end)
 	btnVoice.func = function()
 		local value = XCHT_DB.hideVoice
 
 		if value then
 			XCHT_DB.hideVoice = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.VoiceOn)
 		else
 			XCHT_DB.hideVoice = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashVoiceOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.VoiceOff)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -478,7 +525,7 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnVoice, 20, -22)
 	addon.aboutPanel.btnVoice = btnVoice
 
-	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.SlashEditBoxBorderInfo)
+	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.EditBoxBorderInfo)
 	btnEditBoxBorder:SetScript("OnShow", function() btnEditBoxBorder:SetChecked(XCHT_DB.hideEditboxBorder) end)
 	btnEditBoxBorder.func = function()
 		local value = XCHT_DB.hideEditboxBorder
@@ -486,11 +533,11 @@ function configFrame:EnableConfig()
 		if value then
 			XCHT_DB.hideEditboxBorder = false
 			XCHT_DB.enableSimpleEditbox = false --turn this off
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxBorderOn)
 		else
 			XCHT_DB.hideEditboxBorder = true
 			XCHT_DB.enableSimpleEditbox = false --turn this off
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashEditBoxBorderOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxBorderOff)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -502,7 +549,7 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnEditBoxBorder, 20, -22)
 	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
-	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SlashSimpleEditBoxInfo)
+	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SimpleEditBoxInfo)
 	btnSimpleEditBox:SetScript("OnShow", function() 
 		btnSimpleEditBox:SetChecked(XCHT_DB.enableSimpleEditbox)
 		setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
@@ -514,12 +561,12 @@ function configFrame:EnableConfig()
 			XCHT_DB.enableSimpleEditbox = false
 			XCHT_DB.hideEditboxBorder = false --turn this off
 			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.SimpleEditBoxOff)
 		else
 			XCHT_DB.enableSimpleEditbox = true
 			XCHT_DB.hideEditboxBorder = false --turn this off
 			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSimpleEditBoxOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.SimpleEditBoxOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -531,17 +578,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnSimpleEditBox, 20, -22)
 	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
 	
-	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SlashSEBDesignInfo)
+	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SEBDesignInfo)
 	btnSEBDesign:SetScript("OnShow", function() btnSEBDesign:SetChecked(XCHT_DB.enableSEBDesign) end)
 	btnSEBDesign.func = function()
 		local value = XCHT_DB.enableSEBDesign
 
 		if value then
 			XCHT_DB.enableSEBDesign = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSEBDesignOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.SEBDesignOff)
 		else
 			XCHT_DB.enableSEBDesign = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashSEBDesignOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.SEBDesignOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -553,7 +600,7 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnSEBDesign, 45, -22)
 	addon.aboutPanel.btnSEBDesign = btnSEBDesign
 	
-	local btnAdjustedEditbox = createCheckbutton(addon.aboutPanel, L.SlashAdjustedEditboxInfo)
+	local btnAdjustedEditbox = createCheckbutton(addon.aboutPanel, L.AdjustedEditboxInfo)
 	btnAdjustedEditbox:SetScript("OnShow", function() 
 		btnAdjustedEditbox:SetChecked(XCHT_DB.enableEditboxAdjusted)
 	end)
@@ -562,10 +609,10 @@ function configFrame:EnableConfig()
 
 		if value then
 			XCHT_DB.enableEditboxAdjusted = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashAdjustedEditboxOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.AdjustedEditboxOff)
 		else
 			XCHT_DB.enableEditboxAdjusted = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashAdjustedEditboxOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.AdjustedEditboxOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -577,7 +624,7 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnAdjustedEditbox, 20, -22)
 	addon.aboutPanel.btnAdjustedEditbox = btnAdjustedEditbox
 	
-	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteInfo)
+	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.CopyPasteInfo)
 	btnCopyPaste:SetScript("OnShow", function() 
 		btnCopyPaste:SetChecked(XCHT_DB.enableCopyButton)
 		setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
@@ -588,11 +635,11 @@ function configFrame:EnableConfig()
 		if value then
 			XCHT_DB.enableCopyButton = false
 			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteOff)
 		else
 			XCHT_DB.enableCopyButton = true
 			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -604,17 +651,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnCopyPaste, 20, -22)
 	addon.aboutPanel.btnCopyPaste = btnCopyPaste
 	
-	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.SlashCopyPasteLeftInfo)
+	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.CopyPasteLeftInfo)
 	btnCopyPasteLeft:SetScript("OnShow", function() btnCopyPasteLeft:SetChecked(XCHT_DB.enableCopyButtonLeft) end)
 	btnCopyPasteLeft.func = function()
 		local value = XCHT_DB.enableCopyButtonLeft
 
 		if value then
 			XCHT_DB.enableCopyButtonLeft = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteLeftOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteLeftOff)
 		else
 			XCHT_DB.enableCopyButtonLeft = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashCopyPasteLeftOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteLeftOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -626,17 +673,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnCopyPasteLeft, 45, -22)
 	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 	
-	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.SlashPlayerChatStyleInfo)
+	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.PlayerChatStyleInfo)
 	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
 	btnPlayerChatStyle.func = function()
 		local value = XCHT_DB.enablePlayerChatStyle
 
 		if value then
 			XCHT_DB.enablePlayerChatStyle = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashPlayerChatStyleOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOff)
 		else
 			XCHT_DB.enablePlayerChatStyle = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashPlayerChatStyleOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOn)
 		end
 		
 	end
@@ -645,17 +692,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnPlayerChatStyle, 20, -22)
 	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
 	
-	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.SlashChatTextFadeInfo)
+	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.ChatTextFadeInfo)
 	btnChatTextFade:SetScript("OnShow", function() btnChatTextFade:SetChecked(XCHT_DB.enableChatTextFade) end)
 	btnChatTextFade.func = function()
 		local value = XCHT_DB.enableChatTextFade
 
 		if value then
 			XCHT_DB.enableChatTextFade = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatTextFadeOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ChatTextFadeOff)
 		else
 			XCHT_DB.enableChatTextFade = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatTextFadeOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ChatTextFadeOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -667,17 +714,17 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnChatTextFade, 20, -22)
 	addon.aboutPanel.btnChatTextFade = btnChatTextFade
 	
-	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.SlashChatFrameFadeInfo)
+	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.ChatFrameFadeInfo)
 	btnChatFrameFade:SetScript("OnShow", function() btnChatFrameFade:SetChecked(XCHT_DB.disableChatFrameFade) end)
 	btnChatFrameFade.func = function()
 		local value = XCHT_DB.disableChatFrameFade
 
 		if value then
 			XCHT_DB.disableChatFrameFade = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatFrameFadeOff)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ChatFrameFadeOff)
 		else
 			XCHT_DB.disableChatFrameFade = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SlashChatFrameFadeOn)
+			DEFAULT_CHAT_FRAME:AddMessage(L.ChatFrameFadeOn)
 		end
 		
 		if not addon.xanChatReloadPopup then
@@ -690,7 +737,7 @@ function configFrame:EnableConfig()
 	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
 	
 	--slider chat alpha
-	local sliderChatAlpha = createSlider(addon.aboutPanel, L.SlashChatAlphaText, 0, 100)
+	local sliderChatAlpha = createSlider(addon.aboutPanel, L.ChatAlphaText, 0, 100)
 	sliderChatAlpha:SetScript("OnShow", function()
 		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
 		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
@@ -699,7 +746,7 @@ function configFrame:EnableConfig()
 		XCHT_DB.userChatAlpha = tonumber(value) / 100
 		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
 		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
-		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.SlashChatAlphaSet, floor(value)))
+		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.ChatAlphaSet, floor(value)))
 		addon:setUserAlpha()
 	end
 	sliderChatAlpha.sliderMouseUp = function(self, button)
@@ -711,13 +758,13 @@ function configFrame:EnableConfig()
 	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
 	sliderChatAlpha:SetScript("OnMouseUp", sliderChatAlpha.sliderMouseUp)
 	
-	addConfigEntry(addon.aboutPanel.name, sliderChatAlpha, 20, -53)
+	addConfigEntry(addon.aboutPanel.name, sliderChatAlpha, 20, -45)
 	addon.aboutPanel.sliderChatAlpha = sliderChatAlpha
 	
 	--do the lock settings onShow
 	addon.aboutPanel:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
-			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.LockChatSettingsAlert)
 			configFrame:DoLock()
 		end
 	end)
@@ -775,7 +822,7 @@ function configFrame:EnableConfig()
 	--do the lock for additional settings onShow as well
 	addon.additionalSettings:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
-			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.SlashLockChatSettingsAlert)
+			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.LockChatSettingsAlert)
 			configFrame:DoLock()
 		end
 	end)
