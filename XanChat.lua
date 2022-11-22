@@ -1425,14 +1425,14 @@ local function doAlphaCheck(chatFrame, chatName)
 	local objName = chatName or chatFrame:GetName()
 	
 	if objChat and objName then
-		objChat.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
-		objChat.hasBeenFaded = true
-		
+		objChat.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
+		--objChat.hasBeenFaded = true --causes a taint in retail if set to true/false
+
 		for index, value in pairs(CHAT_FRAME_TEXTURES) do
 			local object = _G[objName..value]
 			object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
 			if ( object:IsShown() ) then
-				UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), objChat.oldAlpha)
+				UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), objChat.oldAlpha) --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 			end
 		end
 		
@@ -1466,7 +1466,7 @@ local function disableChatFrameFading()
 
 	FCF_SetWindowAlpha = function(frame, alpha, doNotSave)
 		if frame:GetName() and string.find(frame:GetName(), "ChatFrame", 1, true) then
-			frame.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
+			frame.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 			return
 		end
 		old_FCF_SetWindowAlpha(frame, alpha, doNotSave)
@@ -1599,20 +1599,19 @@ local function SetupChatFrame(chatID, chatFrame)
 		--FCF_FadeInChatFrame causes TAINT issues during "Edit Mode" in retail
 		--https://www.wowinterface.com/forums/showthread.php?t=59244
 		
-		DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA
 		--these two settings are very important, do not remove
-		f.oldAlpha = 0
-		--f.hasBeenFaded = nil --causes a taint in retail if set to true/false
-		f.hasBeenFaded = false
+		--DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --causes taint issues in Edit Mode
+		--f.oldAlpha = 0 --causes taint issues in Edit Mode
+		f.hasBeenFaded = nil --causes a taint in retail if set to true/false
+		--f.hasBeenFaded = false
 		
 		for index, value in pairs(CHAT_FRAME_TEXTURES) do
 			local object = _G[n..value]
 			if object then
-				object:SetAlpha(DEFAULT_CHATFRAME_ALPHA)
-				
-				--do the setting of the alpha to hidden manually and have it reset based on our predefined Alpha when visable
-				if not XCHT_DB.disableChatFrameFade and object:IsShown() then
-					UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), 0)
+				if XCHT_DB.disableChatFrameFade then
+					object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA) --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
+				else
+					object:SetAlpha(0) --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 				end
 			end
 		end
@@ -1955,25 +1954,27 @@ function addon:EnableAddon()
 	
 	--do the settings for the tabs
 	--https://github.com/tomrus88/BlizzardInterfaceCode/blob/e2b884c714b3e751a9ec84b89a5fda964f35da05/Interface/FrameXML/FloatingChatFrame.lua
-	if XCHT_DB.hideTabs then
-		--set the blizzard global variables to make the alpha of the chat tabs completely invisible
-		CHAT_TAB_HIDE_DELAY = 1
-		CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 0.6
-		CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0
-		CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1
-		CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0
-		CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1
-		CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 0
-	else
-		--set defaults
-		CHAT_TAB_HIDE_DELAY = 1
-		CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1.0
-		CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0.4
-		CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1.0
-		CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 1.0
-		CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 0.6
-		CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0.2
-	end
+	
+	--Note forcing some of these variables causes taint errors in Edit Mode
+	-- if XCHT_DB.hideTabs then
+		-- --set the blizzard global variables to make the alpha of the chat tabs completely invisible
+		-- CHAT_TAB_HIDE_DELAY = 1
+		-- CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 0.6
+		-- CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0
+		-- CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1
+		-- CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0
+		-- CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1
+		-- CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 0
+	-- else
+		-- --set defaults
+		-- CHAT_TAB_HIDE_DELAY = 1
+		-- CHAT_FRAME_TAB_SELECTED_MOUSEOVER_ALPHA = 1.0
+		-- CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA = 0.4
+		-- CHAT_FRAME_TAB_ALERTING_MOUSEOVER_ALPHA = 1.0
+		-- CHAT_FRAME_TAB_ALERTING_NOMOUSE_ALPHA = 1.0
+		-- CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA = 0.6
+		-- CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA = 0.2
+	-- end
 	
 	--toggle the voice chat buttons if disabled
 	if XCHT_DB.hideVoice then
