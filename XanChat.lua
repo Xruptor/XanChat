@@ -663,10 +663,18 @@ local function RestoreLayout(chatFrame)
 	
 	local db = XCHT_DB.frames[chatFrame:GetID()]
 	
+	if addon.IsRetail and chatFrame == DEFAULT_CHAT_FRAME then return end --don't set anything for the default chat frame in retail, it causes taints
+	
  	if ( db.width and db.height ) then
- 		chatFrame:SetSize(db.width, db.height)
+		if not addon.IsRetail then
+			chatFrame:SetSize(db.width, db.height) --causes a taint if you try to set the DEFAULT_CHAT_FRAME height and width in any way in retail due to edit mode
+		end
 		--force the sizing in blizzards settings
 		SetChatWindowSavedDimensions(chatFrame:GetID(), db.width, db.height)
+		
+		if ( not chatFrame.isTemporary and not chatFrame.isDocked) then
+			FCF_RestorePositionAndDimensions(chatFrame)
+		end
  	end
 	
 	local sSwitch = false
@@ -1423,7 +1431,7 @@ local old_FCF_OnUpdate = FCF_OnUpdate
 local function doAlphaCheck(chatFrame, chatName)
 	local objChat = _G[chatName] or chatFrame
 	local objName = chatName or chatFrame:GetName()
-	
+
 	if objChat and objName then
 		objChat.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 		--objChat.hasBeenFaded = true --causes a taint in retail if set to true/false
@@ -1601,9 +1609,9 @@ local function SetupChatFrame(chatID, chatFrame)
 		
 		--these two settings are very important, do not remove
 		--DEFAULT_CHATFRAME_ALPHA = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --causes taint issues in Edit Mode
-		--f.oldAlpha = 0 --causes taint issues in Edit Mode
-		f.hasBeenFaded = nil --causes a taint in retail if set to true/false
-		--f.hasBeenFaded = false
+		f.oldAlpha = 0 --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
+		f.hasBeenFaded = nil --causes a taint in retail if set to true/false (old version)
+		--f.hasBeenFaded = false --causes a taint in retail if set to true/false (new version)
 		
 		for index, value in pairs(CHAT_FRAME_TEXTURES) do
 			local object = _G[n..value]
