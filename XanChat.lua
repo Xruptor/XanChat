@@ -526,6 +526,7 @@ local AddMessage = function(frame, text, ...)
 		local chatNum = string.match(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
 		text = gsub(text, L.ChannelGeneral, "["..chatNum..L.ShortGeneral.."]")
+		text = gsub(text, L.ChannelTradeServices, "["..chatNum..L.ShortTradeServices.."]")
 		text = gsub(text, L.ChannelTrade, "["..chatNum..L.ShortTrade.."]")
 		text = gsub(text, L.ChannelWorldDefense, "["..chatNum..L.ShortWorldDefense.."]")
 		text = gsub(text, L.ChannelLocalDefense, "["..chatNum..L.ShortLocalDefense.."]")
@@ -1731,10 +1732,6 @@ local function SetupChatFrame(chatID, chatFrame)
 			--remove alt keypress from the EditBox (no longer need alt to move around)
 			editBox:SetAltArrowKeyMode(false)
 
-			editBox.left:SetAlpha(0)
-			editBox.right:SetAlpha(0)
-			editBox.mid:SetAlpha(0)
-			
 			local editBoxBackdrop
 			
 			if XCHT_DB.enableSEBDesign then
@@ -1756,6 +1753,10 @@ local function SetupChatFrame(chatID, chatFrame)
 			
 			if XCHT_DB.enableSimpleEditbox then
 			
+				editBox.left:SetAlpha(0)
+				editBox.right:SetAlpha(0)
+				editBox.mid:SetAlpha(0)
+				
 				if not editBox.SetBackdrop then
 					--add the backdrop mixin to the editbox frame
 					Mixin(editBox, BackdropTemplateMixin)
@@ -1777,6 +1778,10 @@ local function SetupChatFrame(chatID, chatFrame)
 				if editBox.focusLeft then editBox.focusLeft:SetTexture(nil) end
 				if editBox.focusRight then editBox.focusRight:SetTexture(nil) end
 				if editBox.focusMid then editBox.focusMid:SetTexture(nil) end
+				
+				editBox.left:SetAlpha(0)
+				editBox.right:SetAlpha(0)
+				editBox.mid:SetAlpha(0)
 			end
 			
 			--do editbox positioning
