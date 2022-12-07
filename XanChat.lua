@@ -1931,7 +1931,7 @@ function addon:EnableAddon()
 		ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -33)
 	end
 	
-	if addon.IsRetail and XCHT_DB.hideChatMenuButton then
+	if XCHT_DB.hideChatMenuButton then
 		ChatFrameMenuButton:Hide()
 		ChatFrameMenuButton:SetScript("OnShow", dummy)
 	end

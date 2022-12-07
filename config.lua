@@ -345,29 +345,27 @@ function configFrame:EnableConfig()
 	
 	end
 	
-	if addon.IsRetail then 
-		local btnChatMenu = createCheckbutton(addon.aboutPanel, L.ChatMenuButtonInfo)
-		btnChatMenu:SetScript("OnShow", function() btnChatMenu:SetChecked(XCHT_DB.hideChatMenuButton) end)
-		btnChatMenu.func = function()
-			local value = XCHT_DB.hideChatMenuButton
+	local btnChatMenu = createCheckbutton(addon.aboutPanel, L.ChatMenuButtonInfo)
+	btnChatMenu:SetScript("OnShow", function() btnChatMenu:SetChecked(XCHT_DB.hideChatMenuButton) end)
+	btnChatMenu.func = function()
+		local value = XCHT_DB.hideChatMenuButton
 
-			if value then
-				XCHT_DB.hideChatMenuButton = false
-				DEFAULT_CHAT_FRAME:AddMessage(L.ChatMenuButtonOn)
-			else
-				XCHT_DB.hideChatMenuButton = true
-				DEFAULT_CHAT_FRAME:AddMessage(L.ChatMenuButtonOff)
-			end
-			
-			if not addon.xanChatReloadPopup then
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
-			end
+		if value then
+			XCHT_DB.hideChatMenuButton = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.ChatMenuButtonOn)
+		else
+			XCHT_DB.hideChatMenuButton = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.ChatMenuButtonOff)
 		end
-		btnChatMenu:SetScript("OnClick", btnChatMenu.func)
-	
-		addConfigEntry(addon.aboutPanel.name, btnChatMenu, 20, -22)
-		addon.aboutPanel.btnChatMenu = btnChatMenu
+		
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
 	end
+	btnChatMenu:SetScript("OnClick", btnChatMenu.func)
+
+	addConfigEntry(addon.aboutPanel.name, btnChatMenu, 20, -22)
+	addon.aboutPanel.btnChatMenu = btnChatMenu
 	
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.ScrollInfo)
 	btnScroll:SetScript("OnShow", function() btnScroll:SetChecked(XCHT_DB.hideScroll) end)
