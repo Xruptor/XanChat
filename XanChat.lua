@@ -517,8 +517,6 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 	hideOnEscape = true,
 }
 
-debugTable = {}
-
 local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
 
@@ -1540,7 +1538,7 @@ function addon:setOutWhisperColor()
 			tonumber('0x' .. string.sub(hex, 1, 2), 10) / 255
 	end
 	
-	local r, g, b = ChatTypeInfo["WHISPER"].r, ChatTypeInfo["WHISPER"].g, ChatTypeInfo["WHISPER"].b
+	local r, g, b, a = ChatTypeInfo["WHISPER"].r, ChatTypeInfo["WHISPER"].g, ChatTypeInfo["WHISPER"].b, 1
 
 	if XCHT_DB.enableOutWhisperColor and XCHT_DB.outWhisperColor then
 		r, g, b, a = ToRGBA(XCHT_DB.outWhisperColor)
@@ -1849,7 +1847,7 @@ end
 
 function addon:EnableAddon()
 
-	local currentPlayer = UnitName("player")
+	local currentPlayer = UnitName("player") or "Unknown"
 	local currentRealm = select(2, UnitFullName("player")) --get shortend realm name with no spaces and dashes
 	
 	--do the DB stuff
@@ -1876,7 +1874,7 @@ function addon:EnableAddon()
 	if XCHT_DB.enableOutWhisperColor == nil then XCHT_DB.enableOutWhisperColor = false end
 	if XCHT_DB.outWhisperColor == nil then XCHT_DB.outWhisperColor = "FFF2307C" end
 	if XCHT_DB.disableChatEnterLeaveNotice == nil then XCHT_DB.disableChatEnterLeaveNotice = false end
-	if XCHT_DB.hideChatChannelButton == nil then XCHT_DB.hideChatChannelButton = false end
+	if XCHT_DB.hideChatMenuButton == nil then XCHT_DB.hideChatMenuButton = false end
 	if XCHT_DB.moveSocialButtonToBottom == nil then XCHT_DB.moveSocialButtonToBottom = false end
 
 	--setup the history DB
@@ -1933,7 +1931,7 @@ function addon:EnableAddon()
 		ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -33)
 	end
 	
-	if addon.IsRetail and XCHT_DB.hideChatChannelButton then
+	if addon.IsRetail and XCHT_DB.hideChatMenuButton then
 		ChatFrameMenuButton:Hide()
 		ChatFrameMenuButton:SetScript("OnShow", dummy)
 	end
