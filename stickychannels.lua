@@ -40,9 +40,9 @@ header:SetText(L.EditStickyChannelsListHeader)
 
 local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", stickyChannelsList, "UIPanelScrollFrameTemplate")
 local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
-scrollFrame:SetPoint("TOPLEFT", 10, -50) 
+scrollFrame:SetPoint("TOPLEFT", 10, -50)
 --scrollbar on the right (x shifts the slider left or right)
-scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70) 
+scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
 scrollFrame:SetScrollChild(scrollFrame_Child)
 
 --hide both frames
@@ -53,7 +53,7 @@ local StickyTypeChannels = {
   SAY = 1,
   YELL = 0,
   EMOTE = 0,
-  PARTY = 1, 
+  PARTY = 1,
   RAID = 1,
   GUILD = 1,
   OFFICER = 1,
@@ -71,7 +71,7 @@ function addon:EnableStickyChannelsList()
 			XCHT_DB.stickyChannelsList[k] = v --set defaults
 		end
 	end
-	
+
 	addon.stickyChannelsList:HookScript("OnShow", function(self)
 		if not addon.stickyChannelsList.ListLoaded then
 			--populate scroll list
@@ -79,7 +79,7 @@ function addon:EnableStickyChannelsList()
 			addon.stickyChannelsList.ListLoaded = true
 		end
 	end)
-	
+
 	addon:UpdateStickyChannels()
 end
 
@@ -87,23 +87,23 @@ function addon:DoStickyChannelsList()
 	scrollFrame_Child:SetPoint("TOPLEFT")
 	scrollFrame_Child:SetWidth(scrollFrame:GetWidth())
 	scrollFrame_Child:SetHeight(scrollFrame:GetHeight())
-	
+
 	local previousBar
 	local buildList = {}
-	
+
 	for k, v in pairs(XCHT_DB.stickyChannelsList) do
 		table.insert(buildList, { name=k, val=v } )
 	end
 
 	--sort it
 	table.sort(buildList, function(a,b)
-		return (a.name < b.name) 
+		return (a.name < b.name)
 	end)
-	
+
 	for barCount=1, table.getn(buildList) do
-		
+
 		local barSlot = _G["xanChat_StickyChannelBar"..barCount] or CreateFrame("button", "xanChat_StickyChannelBar"..barCount, scrollFrame_Child, BackdropTemplateMixin and "BackdropTemplate")
-		
+
 		if barCount==1 then
 			barSlot:SetPoint("TOPLEFT",scrollFrame_Child, "TOPLEFT", 10, -10)
 			barSlot:SetPoint("BOTTOMRIGHT",scrollFrame_Child, "TOPRIGHT", -10, -30)
@@ -123,14 +123,14 @@ function addon:DoStickyChannelsList()
 
 		--store the data
 		barSlot.xData = buildList[barCount]
-		
+
 		--check button stuff
 		local bar_chk = _G["xanChat_StickyChannelBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_StickyChannelBarChk"..barCount, barSlot, "InterfaceOptionsCheckButtonTemplate")
 		bar_chk.xData = buildList[barCount]
         bar_chk:SetPoint("LEFT", 4, 0)
-		
+
 		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..buildList[barCount].name.."|r")
-		
+
 		--set if checked or not
 		if XCHT_DB.stickyChannelsList[buildList[barCount].name] == 1 then
 			bar_chk:SetChecked(true)
@@ -138,7 +138,7 @@ function addon:DoStickyChannelsList()
 			bar_chk:SetChecked(false)
 		end
 		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
-        
+
 		bar_chk:SetScript("OnClick", function(self)
 			local checked = self:GetChecked()
 
@@ -152,7 +152,7 @@ function addon:DoStickyChannelsList()
 			end
 			addon:UpdateStickyChannels()
 		end)
-		
+
 		--show them if hidden
 		barSlot:Show()
 		bar_chk:Show()

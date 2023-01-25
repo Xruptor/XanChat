@@ -40,9 +40,9 @@ header:SetText(L.EditFilterListHeader)
 
 local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", filterList, "UIPanelScrollFrameTemplate")
 local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
-scrollFrame:SetPoint("TOPLEFT", 10, -50) 
+scrollFrame:SetPoint("TOPLEFT", 10, -50)
 --scrollbar on the right (x shifts the slider left or right)
-scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70) 
+scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
 scrollFrame:SetScrollChild(scrollFrame_Child)
 
 --hide both frames
@@ -92,7 +92,7 @@ function addon:EnableFilterList()
 	if not XCHT_DB.filterList then XCHT_DB.filterList = {} end
 	if not XCHT_DB.filterList.core then XCHT_DB.filterList.core = coreList end
 	if not XCHT_DB.filterList.custom then XCHT_DB.filterList.custom = customList end
-	
+
 	--update the list in case anything was added in future updates
 	for k, v in pairs(coreList) do
 		if k and XCHT_DB.filterList.core[k] == nil then
@@ -104,7 +104,7 @@ function addon:EnableFilterList()
 			XCHT_DB.filterList.custom[k] = v
 		end
 	end
-	
+
 	addon.filterList:HookScript("OnShow", function(self)
 		if not addon.filterList.ListLoaded then
 			--populate scroll list
@@ -112,7 +112,7 @@ function addon:EnableFilterList()
 			addon.filterList.ListLoaded = true
 		end
 	end)
-	
+
 	--allow the stylized routines to work
 	addon.isFilterListEnabled = true
 end
@@ -121,10 +121,10 @@ function addon:DoFilterList()
 	scrollFrame_Child:SetPoint("TOPLEFT")
 	scrollFrame_Child:SetWidth(scrollFrame:GetWidth())
 	scrollFrame_Child:SetHeight(scrollFrame:GetHeight())
-	
+
 	local previousBar
 	local buildList = {}
-	
+
 	--core list
 	for k, v in pairs(XCHT_DB.filterList.core) do
 		table.insert(buildList, { name=k, val=1 } )
@@ -137,16 +137,16 @@ function addon:DoFilterList()
 	--sort it based on where the list is coming from
 	table.sort(buildList, function(a,b)
 		if a.val == b.val then
-			return (a.name < b.name) 
+			return (a.name < b.name)
 		else
 			return (a.val < b.val)
 		end
 	end)
-	
+
 	for barCount=1, table.getn(buildList) do
-		
+
 		local barSlot = _G["xanChat_FilterListBar"..barCount] or CreateFrame("button", "xanChat_FilterListBar"..barCount, scrollFrame_Child, BackdropTemplateMixin and "BackdropTemplate")
-		
+
 		if barCount==1 then
 			barSlot:SetPoint("TOPLEFT",scrollFrame_Child, "TOPLEFT", 10, -10)
 			barSlot:SetPoint("BOTTOMRIGHT",scrollFrame_Child, "TOPRIGHT", -10, -30)
@@ -166,17 +166,17 @@ function addon:DoFilterList()
 
 		--store the data
 		barSlot.xData = buildList[barCount]
-		
+
 		--check button stuff
 		local bar_chk = _G["xanChat_FilterListBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_FilterListBarChk"..barCount, barSlot, "InterfaceOptionsCheckButtonTemplate")
 		bar_chk.xData = buildList[barCount]
         bar_chk:SetPoint("LEFT", 4, 0)
-		
+
 		--change text color depending on where the entry came from
 		if buildList[barCount].val == 1 then
 			--core list
 			_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..buildList[barCount].name.."|r")
-			
+
 			--set if checked or not
 			if XCHT_DB.filterList.core[buildList[barCount].name] then
 				bar_chk:SetChecked(true)
@@ -186,7 +186,7 @@ function addon:DoFilterList()
 		else
 			--custom list
 			_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText("|cFF61F200"..buildList[barCount].name.."|r")
-			
+
 			--set if checked or not
 			if XCHT_DB.filterList.custom[buildList[barCount].name] then
 				bar_chk:SetChecked(true)
@@ -195,7 +195,7 @@ function addon:DoFilterList()
 			end
 		end
 		_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
-        
+
 		bar_chk:SetScript("OnClick", function(self)
 			local checked = self:GetChecked()
 
@@ -209,9 +209,9 @@ function addon:DoFilterList()
 					XCHT_DB.filterList.custom[self.xData.name] = checked
 				end
 			end
-			
+
 		end)
-		
+
 		--show them if hidden
 		barSlot:Show()
 		bar_chk:Show()
@@ -224,7 +224,7 @@ end
 function addon:searchFilterList(event, text)
 	if not XCHT_DB.filterList then return false end
 	if not event then return false end
-	
+
 	--first lets check the core
 	if XCHT_DB.filterList.core[event] then return true end
 
