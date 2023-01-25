@@ -1341,7 +1341,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	else
 		local leftButtonFrame = "ChatFrame"..chatIndex.."ButtonFrame"
 		if _G[leftButtonFrame] then
-			obj:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, -40)
+			obj:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, XCHT_DB.hideScroll and -40 or -128)
 		else
 			obj:SetPoint("TOPLEFT", chatFrame, "TOPLEFT", -30, -40)
 		end
