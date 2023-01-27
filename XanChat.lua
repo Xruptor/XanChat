@@ -435,18 +435,20 @@ local function doFriendUpdate()
 		end
 	end
 
-	local numBNet, onlineBNet = BNGetNumFriends()
-	for i = 1, numBNet do
-		local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
-		if accountInfo and accountInfo.gameAccountInfo then
-			local friendInfo = accountInfo.gameAccountInfo
-			--make sure they are online and playing WOW
-			if friendInfo and friendInfo.isOnline and friendInfo.clientProgram == BNET_CLIENT_WOW then
-				--Whether or not the friend is known by their BattleTag
-				local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
+	if C_BattleNet then
+		local numBNet, onlineBNet = BNGetNumFriends()
+		for i = 1, numBNet do
+			local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+			if accountInfo and accountInfo.gameAccountInfo then
+				local friendInfo = accountInfo.gameAccountInfo
+				--make sure they are online and playing WOW
+				if friendInfo and friendInfo.isOnline and friendInfo.clientProgram == BNET_CLIENT_WOW then
+					--Whether or not the friend is known by their BattleTag
+					local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
 
-				if friendInfo.characterName and friendInfo.realmName and friendInfo.characterLevel and friendInfo.className then
-					addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
+					if friendInfo.characterName and friendInfo.realmName and friendInfo.characterLevel and friendInfo.className then
+						addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
+					end
 				end
 			end
 		end
@@ -1340,10 +1342,17 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 
 	else
 		local leftButtonFrame = "ChatFrame"..chatIndex.."ButtonFrame"
+
+		local offSetY = -50
+		if not addon.IsRetail and not XCHT_DB.hideScroll then
+			--we have to move this as it will be on the scrollbars on classic
+			offSetY = 60
+		end
+
 		if _G[leftButtonFrame] then
-			obj:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, XCHT_DB.hideScroll and -40 or -128)
+			obj:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, offSetY)
 		else
-			obj:SetPoint("TOPLEFT", chatFrame, "TOPLEFT", -30, -40)
+			obj:SetPoint("TOPLEFT", chatFrame, "TOPLEFT", -30, offSetY)
 		end
 		obj:Show()
 	end
@@ -1812,7 +1821,11 @@ local function SetupChatFrame(chatID, chatFrame)
 
 		--hide the scroll bars
 		if XCHT_DB.hideScroll then
-			if f.buttonFrame then
+			if f.ScrollBar then
+				f.ScrollBar:Hide()
+				f.ScrollBar:SetScript("OnShow", dummy)
+			end
+			if not addon.IsRetail and f.buttonFrame then
 				f.buttonFrame:Hide()
 				f.buttonFrame:SetScript("OnShow", dummy)
 			end
