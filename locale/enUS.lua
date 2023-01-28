@@ -70,6 +70,10 @@ L.ScrollOn = "xanChat: Scroll buttons are now [|cFF99CC33ON|r]"
 L.ScrollOff = "xanChat: Scroll buttons are now [|cFF99CC33OFF|r]"
 L.ScrollInfo = "Hide the chat scroll bars."
 
+L.HideScrollBarsOn = "xanChat: Hide left and right button bars is now [|cFF99CC33ON|r]"
+L.HideScrollBarsOff = "xanChat: Hide left and right button bars is now [|cFF99CC33OFF|r]"
+L.HideScrollBarsInfo = "Hide the left & right button bars on the chat windows. |cFFDF2B2B(Hides all buttons!)|r"
+
 L.ShortNamesOn = "xanChat: Short channel names are now [|cFF99CC33ON|r]"
 L.ShortNamesOff = "xanChat: Short channel names are now [|cFF99CC33OFF|r]"
 L.ShortNamesInfo = "Use channel short names."

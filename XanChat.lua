@@ -1825,13 +1825,24 @@ local function SetupChatFrame(chatID, chatFrame)
 				f.ScrollBar:Hide()
 				f.ScrollBar:SetScript("OnShow", dummy)
 			end
-			if not addon.IsRetail and f.buttonFrame then
-				f.buttonFrame:Hide()
-				f.buttonFrame:SetScript("OnShow", dummy)
+			if f.buttonFrame and f.buttonFrame.Background then
+				f.buttonFrame.Background:SetTexture(nil)
+				f.buttonFrame.Background:SetAlpha(0)
+			end
+			if f.buttonFrame and f.buttonFrame.minimizeButton then
+				f.buttonFrame.minimizeButton:Hide()
+				f.buttonFrame.minimizeButton:SetScript("OnShow", dummy)
 			end
 			if f.ScrollToBottomButton then
 				f.ScrollToBottomButton:Hide()
 				f.ScrollToBottomButton:SetScript("OnShow", dummy)
+			end
+		end
+
+		if XCHT_DB.hideSideButtonBars then
+			if f.buttonFrame then
+				f.buttonFrame:Hide()
+				f.buttonFrame:SetScript("OnShow", dummy)
 			end
 		end
 
@@ -1889,6 +1900,7 @@ function addon:EnableAddon()
 	if XCHT_DB.disableChatEnterLeaveNotice == nil then XCHT_DB.disableChatEnterLeaveNotice = false end
 	if XCHT_DB.hideChatMenuButton == nil then XCHT_DB.hideChatMenuButton = false end
 	if XCHT_DB.moveSocialButtonToBottom == nil then XCHT_DB.moveSocialButtonToBottom = false end
+	if XCHT_DB.hideSideButtonBars == nil then XCHT_DB.hideSideButtonBars = false end
 
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end

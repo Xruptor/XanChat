@@ -389,6 +389,28 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnScroll, 20, -22)
 	addon.aboutPanel.btnScroll = btnScroll
 
+	local btnHideSideBars = createCheckbutton(addon.aboutPanel, L.HideScrollBarsInfo)
+	btnHideSideBars:SetScript("OnShow", function() btnHideSideBars:SetChecked(XCHT_DB.hideSideButtonBars) end)
+	btnHideSideBars.func = function()
+		local value = XCHT_DB.hideSideButtonBars
+	
+		if value then
+			XCHT_DB.hideSideButtonBars = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.HideScrollBarsOn)
+		else
+			XCHT_DB.hideSideButtonBars = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.HideScrollBarsOff)
+		end
+	
+		if not addon.xanChatReloadPopup then
+			StaticPopup_Show("XANCHAT_APPLYCHANGES")
+		end
+	end
+	btnHideSideBars:SetScript("OnClick", btnHideSideBars.func)
+	
+	addConfigEntry(addon.aboutPanel.name, btnHideSideBars, 20, -22)
+	addon.aboutPanel.btnHideSideBars = btnHideSideBars
+
 	local btnShortNames = createCheckbutton(addon.aboutPanel, L.ShortNamesInfo)
 	btnShortNames:SetScript("OnShow", function() btnShortNames:SetChecked(XCHT_DB.shortNames) end)
 	btnShortNames.func = function()
@@ -671,25 +693,6 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnCopyPasteLeft, 45, -22)
 	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 
-	local btnPlayerChatStyle = createCheckbutton(addon.aboutPanel, L.PlayerChatStyleInfo)
-	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
-	btnPlayerChatStyle.func = function()
-		local value = XCHT_DB.enablePlayerChatStyle
-
-		if value then
-			XCHT_DB.enablePlayerChatStyle = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOff)
-		else
-			XCHT_DB.enablePlayerChatStyle = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOn)
-		end
-
-	end
-	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
-
-	addConfigEntry(addon.aboutPanel.name, btnPlayerChatStyle, 20, -22)
-	addon.aboutPanel.btnPlayerChatStyle = btnPlayerChatStyle
-
 	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.ChatTextFadeInfo)
 	btnChatTextFade:SetScript("OnShow", function() btnChatTextFade:SetChecked(XCHT_DB.enableChatTextFade) end)
 	btnChatTextFade.func = function()
@@ -816,6 +819,25 @@ function configFrame:EnableConfig()
 
 	addConfigEntry(addon.additionalSettings.name, btnDisableChatEnterLeaveNotice, 20, -30)
 	addon.additionalSettings.btnDisableChatEnterLeaveNotice = btnDisableChatEnterLeaveNotice
+
+	local btnPlayerChatStyle = createCheckbutton(addon.additionalSettings, L.PlayerChatStyleInfo)
+	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
+	btnPlayerChatStyle.func = function()
+		local value = XCHT_DB.enablePlayerChatStyle
+
+		if value then
+			XCHT_DB.enablePlayerChatStyle = false
+			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOff)
+		else
+			XCHT_DB.enablePlayerChatStyle = true
+			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOn)
+		end
+
+	end
+	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
+
+	addConfigEntry(addon.additionalSettings.name, btnPlayerChatStyle, 20, -30)
+	addon.additionalSettings.btnPlayerChatStyle = btnPlayerChatStyle
 
 	--do the lock for additional settings onShow as well
 	addon.additionalSettings:HookScript("OnShow", function()
