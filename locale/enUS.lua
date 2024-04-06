@@ -151,3 +151,5 @@ L.ChatMenuButtonInfo = "Hide the chat menu button."
 L.MoveSocialButtonOn = "xanChat: Move Social and Toast Alert Frame to the bottom. [|cFF99CC33ON|r]"
 L.MoveSocialButtonOff = "xanChat: Move Social and Toast Alert Frame to the bottom. [|cFF99CC33OFF|r]"
 L.MoveSocialButtonInfo = "Move the social button and toast alert frame to the bottom."
+
+L.PageLimitText = "Recent chat pages to display in Copy Chat. |cFF99CC33(0 for no limit)|r"

@@ -1110,6 +1110,21 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	  table.insert(pages, pageCount)
 	end
 
+	--check for custom buffer limit by the user, ignore if it's set to zero
+	if XCHT_DB.pageBufferLimit > 0 and #pages > XCHT_DB.pageBufferLimit then
+		local counter = 0
+		local tmpPages = {}
+		for i = #pages, 1, -1 do
+			counter = counter + 1
+			if counter <= XCHT_DB.pageBufferLimit then
+				table.insert(tmpPages, pages[i])
+			else
+				break
+			end
+		end
+		pages = tmpPages
+	end
+
 	--load past page if we don't have a pageNum
 	if not pageNum and startPos < 1 then
 		if msgCount > MAXLINES then
@@ -1901,6 +1916,7 @@ function addon:EnableAddon()
 	if XCHT_DB.hideChatMenuButton == nil then XCHT_DB.hideChatMenuButton = false end
 	if XCHT_DB.moveSocialButtonToBottom == nil then XCHT_DB.moveSocialButtonToBottom = false end
 	if XCHT_DB.hideSideButtonBars == nil then XCHT_DB.hideSideButtonBars = false end
+	if XCHT_DB.pageBufferLimit == nil then XCHT_DB.pageBufferLimit = 0 end  --set how many pages to display in CopyChat (0 for no limit)
 
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end

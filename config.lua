@@ -270,15 +270,6 @@ function configFrame:EnableConfig()
 	addConfigEntry(addon.aboutPanel.name, btnStickyChannelsList, 403, -20, true)
 	addon.aboutPanel.btnStickyChannelsList = btnStickyChannelsList
 
-	local btnFilterList = createButton(addon.aboutPanel, L.EditFilterListHeader)
-	btnFilterList.func = function()
-		if addon.filterList then addon.filterList:Show() end
-	end
-	btnFilterList:SetScript("OnClick", btnFilterList.func)
-
-	addConfigEntry(addon.aboutPanel.name, btnFilterList, 410, -55, true)
-	addon.aboutPanel.btnFilterList = btnFilterList
-
 	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.LockChatSettingsInfo.."|r")
 	btnLockChatSettings:SetScript("OnShow", function() btnLockChatSettings:SetChecked(XCHT_DB.lockChatSettings) end)
 	btnLockChatSettings.func = function()
@@ -775,6 +766,16 @@ function configFrame:EnableConfig()
 	-------------------------------------------------------
 	--ADDITIONAL SETTINGS
 
+
+	local btnFilterList = createButton(addon.additionalSettings, L.EditFilterListHeader)
+	btnFilterList.func = function()
+		if addon.filterList then addon.filterList:Show() end
+	end
+	btnFilterList:SetScript("OnClick", btnFilterList.func)
+
+	addConfigEntry(addon.additionalSettings.name, btnFilterList, 403, -20, true)
+	addon.additionalSettings.btnFilterList = btnFilterList
+
 	local btnOutWhisperColor = createCheckbutton(addon.additionalSettings, L.EnableOutWhisperColor)
 	btnOutWhisperColor:SetScript("OnShow", function() btnOutWhisperColor:SetChecked(XCHT_DB.enableOutWhisperColor) end)
 	btnOutWhisperColor.func = function()
@@ -838,6 +839,30 @@ function configFrame:EnableConfig()
 
 	addConfigEntry(addon.additionalSettings.name, btnPlayerChatStyle, 20, -30)
 	addon.additionalSettings.btnPlayerChatStyle = btnPlayerChatStyle
+
+	--slider page limit
+	local sliderPageLimit = createSlider(addon.additionalSettings, L.PageLimitText, 0, 20)
+	sliderPageLimit:SetScript("OnShow", function()
+		sliderPageLimit:SetValue(floor(XCHT_DB.pageBufferLimit))
+		sliderPageLimit.currVal:SetText("("..floor(XCHT_DB.pageBufferLimit)..")")
+	end)
+	sliderPageLimit.func = function(value)
+		XCHT_DB.pageBufferLimit = floor(tonumber(value))
+		sliderPageLimit:SetValue(floor(XCHT_DB.pageBufferLimit))
+		sliderPageLimit.currVal:SetText("("..floor(XCHT_DB.pageBufferLimit)..")")
+	end
+	sliderPageLimit.sliderMouseUp = function(self, button)
+		sliderPageLimit.func(sliderPageLimit:GetValue())
+	end
+	sliderPageLimit.sliderFunc = function(self, value)
+		sliderPageLimit.currVal:SetText("("..floor(value)..")")
+	end
+	sliderPageLimit:SetScript("OnValueChanged", sliderPageLimit.sliderFunc)
+	sliderPageLimit:SetScript("OnMouseUp", sliderPageLimit.sliderMouseUp)
+
+	addConfigEntry(addon.additionalSettings.name, sliderPageLimit, 55, -55)
+	addon.additionalSettings.sliderPageLimit = sliderPageLimit
+
 
 	--do the lock for additional settings onShow as well
 	addon.additionalSettings:HookScript("OnShow", function()
