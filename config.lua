@@ -188,7 +188,7 @@ local function LoadAboutFrame()
 	about:Hide()
 
     local fields = {"Version", "Author"}
-	local notes = GetAddOnMetadata(ADDON_NAME, "Notes")
+	local notes = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Notes")
 
     local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 
@@ -206,7 +206,7 @@ local function LoadAboutFrame()
 
 	local anchor
 	for _,field in pairs(fields) do
-		local val = GetAddOnMetadata(ADDON_NAME, field)
+		local val = C_AddOns.GetAddOnMetadata(ADDON_NAME, field)
 		if val then
 			local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 			title:SetWidth(75)
@@ -225,7 +225,13 @@ local function LoadAboutFrame()
 		end
 	end
 
-	InterfaceOptions_AddCategory(about)
+	if InterfaceOptions_AddCategory then
+		InterfaceOptions_AddCategory(about)
+	else
+		local category, layout = _G.Settings.RegisterCanvasLayoutCategory(about, about.name);
+		_G.Settings.RegisterAddOnCategory(category);
+		addon.settingsCategory = category
+	end
 
 	return about
 end
@@ -251,10 +257,19 @@ local function LoadAdditionalSettings(childFrameName, parentFrameName)
 	subtitle:SetJustifyV("TOP")
 	subtitle:SetText(childFrameName)
 
-	InterfaceOptions_AddCategory(addSettings)
+	if InterfaceOptions_AddCategory then
+		InterfaceOptions_AddCategory(addSettings)
+	else
+		if addon.settingsCategory then
+			--local category = _G.Settings.GetCategory(addon.settingsCategory)
+			local subcategory = _G.Settings.RegisterCanvasLayoutSubcategory(addon.settingsCategory, addSettings, addSettings.name)
+			addon.addSettingsCategory = subcategory
+		end
+	end
 
 	return addSettings
 end
+
 
 function configFrame:EnableConfig()
 
