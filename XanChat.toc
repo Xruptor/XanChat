@@ -4,6 +4,7 @@
 ## Interface-Cata: 40400
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
+## Notes-zhCN: 一个非常简约的聊天修改插件。
 ## Author: Xruptor
 ## Version: 10.10
 ## IconTexture: 2056011
@@ -21,6 +22,7 @@ libs\AceEvent-3.0\AceEvent-3.0.xml
 
 locale\enUS.lua
 locale\deDE.lua
+locale\zhCN.lua
 
 xanChat.lua
 config.lua
