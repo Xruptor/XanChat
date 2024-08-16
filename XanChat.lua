@@ -1969,7 +1969,7 @@ function addon:EnableAddon()
 
 	if addon.IsRetail and XCHT_DB.moveSocialButtonToBottom then
 		ChatAlertFrame:ClearAllPoints()
-		ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -33)
+		ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -60)
 	end
 
 	if XCHT_DB.hideChatMenuButton then
