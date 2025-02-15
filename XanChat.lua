@@ -2047,7 +2047,7 @@ function addon:EnableAddon()
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
 	SlashCmdList["XANCHAT"] = function()
-		if not addon.IsRetail then
+		if not addon.IsRetail and InterfaceOptionsFrame then
 			InterfaceOptionsFrame:Show() --has to be here to load the about frame onLoad
 		end
 		InterfaceOptionsFrame_OpenToCategory(addon.aboutPanel) --force the panel to show
