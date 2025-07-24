@@ -25,12 +25,12 @@ L.ProtectedChannel = " |cFFDF2B2B(Канал защищен Blizzard. Досту
 --trailing dash is to check for things like [WorldDefense - Alterac Mountains] so it will remove location
 L.ChannelGeneral = "(%[%d+%. )Общий.-%]"
 L.ChannelTrade = "(%[%d+%. )Торговля.-%]"
-L.ChannelWorldDefense = "(%[%d+%. )Мировая оборона.-%]"
-L.ChannelLocalDefense = "(%[%d+%. )Местная оборона.-%]"
+L.ChannelWorldDefense = "(%[%d+%. )Оборона глобальный.-%]"
+L.ChannelLocalDefense = "(%[%d+%. )Оборона локальный.-%]"
 L.ChannelLookingForGroup = "(%[%d+%. )Поиск группы.-%]"
 L.ChannelGuildRecruitment = "(%[%d+%. )Набор в гильдию.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )Чат новичков.-%]"
-L.ChannelTradeServices  = "(%[%d+%. )Торговые услуги %([^()]*%).-%]"
+L.ChannelTradeServices  = "(%[%d+%. )Услуги %([^()]*%).-%]"
 
 L.ShortGeneral = "ОБ"
 L.ShortTrade = "ТР"
