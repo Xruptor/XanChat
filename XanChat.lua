@@ -1193,6 +1193,10 @@ local function CreateCopyFrame()
 	})
 	copyFrame:SetBackdropColor(0, 0, 0, 1)
 	copyFrame:EnableMouse(true)
+	copyFrame:SetMovable(true)
+	copyFrame:RegisterForDrag("LeftButton")
+	copyFrame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+	copyFrame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 	copyFrame:SetFrameStrata("DIALOG")
 	copyFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	copyFrame:SetWidth(830)
@@ -1205,6 +1209,10 @@ local function CreateCopyFrame()
 	local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."CopyScrollFrame", copyFrame, "ScrollingEditBoxTemplate")
 	scrollFrame:SetPoint("TOPLEFT", 20, -38)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -35, 45)
+	scrollFrame:EnableMouseWheel(true)
+	if scrollFrame.SetPropagateMouseWheel then
+		scrollFrame:SetPropagateMouseWheel(true)
+	end
 
 	local editBox = scrollFrame.EditBox or _G[scrollFrame:GetName().."EditBox"]
 	if not editBox then
@@ -1213,6 +1221,10 @@ local function CreateCopyFrame()
 	end
 	editBox:SetAutoFocus(false)
 	editBox:EnableMouse(true)
+	editBox:EnableMouseWheel(true)
+	if editBox.SetPropagateMouseWheel then
+		editBox:SetPropagateMouseWheel(true)
+	end
 	editBox:EnableKeyboard(true)
 	editBox:SetMultiLine(true)
 	editBox:SetFontObject("ChatFontNormal")
@@ -1252,6 +1264,50 @@ local function CreateCopyFrame()
 	UpdateEditSize()
 
 	local scrollBar = scrollFrame.ScrollBar or _G[scrollFrame:GetName().."ScrollBar"]
+	if not scrollBar then
+		scrollBar = CreateFrame("Slider", ADDON_NAME.."CopyScrollBar", scrollFrame, "UIPanelScrollBarTemplate")
+		scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 4, -16)
+		scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 4, 16)
+		scrollBar:SetValueStep(20)
+		scrollBar:SetObeyStepOnDrag(true)
+		scrollFrame.ScrollBar = scrollBar
+		scrollBar:SetScript("OnValueChanged", function(self, value)
+			scrollFrame:SetVerticalScroll(value)
+		end)
+	end
+	if scrollBar then
+		scrollFrame:HookScript("OnScrollRangeChanged", function(self, xRange, yRange)
+			local maxVal = math.max(0, yRange or 0)
+			scrollBar:SetMinMaxValues(0, maxVal)
+			scrollBar:SetShown(maxVal > 0)
+		end)
+		scrollBar:Show()
+	end
+	local function ScrollCopyFrame(delta)
+		if scrollBar then
+			local step = scrollBar:GetValueStep() or 20
+			local minVal, maxVal = scrollBar:GetMinMaxValues()
+			local newVal = scrollBar:GetValue() - (delta * step)
+			if newVal < minVal then newVal = minVal end
+			if newVal > maxVal then newVal = maxVal end
+			scrollBar:SetValue(newVal)
+		else
+			local cur = scrollFrame:GetVerticalScroll()
+			local max = scrollFrame:GetVerticalScrollRange()
+			local newVal = cur - (delta * 20)
+			if newVal < 0 then newVal = 0 end
+			if newVal > max then newVal = max end
+			scrollFrame:SetVerticalScroll(newVal)
+		end
+	end
+	scrollFrame:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	if scrollFrame.ScrollBox then
+		scrollFrame.ScrollBox:EnableMouseWheel(true)
+		scrollFrame.ScrollBox:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	end
+	editBox:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	copyFrame:EnableMouseWheel(true)
+	copyFrame:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
 	local MLEditBox = {
 		editBox = editBox,
 		scrollFrame = scrollFrame,
