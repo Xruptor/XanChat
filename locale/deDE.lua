@@ -1,6 +1,6 @@
-local ADDON_NAME, addon = ...
+local ADDON_NAME, private = ...
 
-local L = LibStub("AceLocale-3.0"):NewLocale(ADDON_NAME, "deDE")
+local L = private:NewLocale("deDE")
 if not L then return end
 
 L.WhoPlayer = "Who Player?"
@@ -70,6 +70,10 @@ L.SocialInfo = "Schaltfläche für die Kontakte ausblenden."
 L.ScrollOn = "xanChat: Bildlaufpfeile sind jetzt [|cFF99CC33AN|r]"
 L.ScrollOff = "xanChat: Bildlaufpfeile sind jetzt [|cFF99CC33AUS|r]"
 L.ScrollInfo = "Bildlaufpfeile ausblenden."
+
+L.HideScrollBarsOn = "xanChat: Linke und rechte Button-Leisten ausblenden ist jetzt [|cFF99CC33AN|r]"
+L.HideScrollBarsOff = "xanChat: Linke und rechte Button-Leisten ausblenden ist jetzt [|cFF99CC33AUS|r]"
+L.HideScrollBarsInfo = "Blendet die linken & rechten Button-Leisten an den Chatfenstern aus. |cFFDF2B2B(Blendet alle Buttons aus!)|r"
 
 L.ShortNamesOn = "xanChat: Abkürzungen für die Chat-Channels sind jetzt [|cFF99CC33AN|r]"
 L.ShortNamesOff = "xanChat: Abkürzungen für die Chat-Channels sind jetzt [|cFF99CC33AUS|r]"
@@ -148,3 +152,5 @@ L.ChatMenuButtonInfo = "Schaltfläche für das Chat-Menü ausblenden."
 L.MoveSocialButtonOn = "xanChat: Schaltfläche für die Kontakte ist jetzt [|cFF99CC33UNTEN|r]"
 L.MoveSocialButtonOff = "xanChat: Schaltfläche für die Kontakte ist jetzt [|cFF99CC33OBEN|r]"
 L.MoveSocialButtonInfo = "Schaltfläche für die Kontakte unterhalb des Chat-Fensters anzeigen."
+
+L.PageLimitText = "Anzahl der letzten Chat-Seiten in Chat-Kopie. |cFF99CC33(0 ohne Limit)|r"

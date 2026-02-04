@@ -1,13 +1,10 @@
-local ADDON_NAME, addon = ...
+local ADDON_NAME, private = ...
 if not _G[ADDON_NAME] then
 	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
 end
-addon = _G[ADDON_NAME]
-
-local debugf = tekDebug and tekDebug:GetFrame(ADDON_NAME)
-local function Debug(...)
-    if debugf then debugf:AddMessage(string.join(", ", tostringall(...))) end
-end
+local addon = _G[ADDON_NAME]
+addon.private = private or addon.private
+addon.L = (private and private.L) or addon.L or {}
 
 local WOW_PROJECT_ID = _G.WOW_PROJECT_ID
 local WOW_PROJECT_MAINLINE = _G.WOW_PROJECT_MAINLINE
@@ -20,30 +17,64 @@ addon.IsClassic = WOW_PROJECT_ID == WOW_PROJECT_CLASSIC
 --BSYC.IsTBC_C = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 addon.IsWLK_C = WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC
 
---We need to use a customFrame since AceEvent is loaded and it takes over the RegisterEvent frames
-local eventFrame = CreateFrame("Frame", ADDON_NAME.."EventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:SetScript("OnEvent", function(self, event, ...)
-	if event == "ADDON_LOADED" or event == "PLAYER_LOGIN" then
-		if event == "ADDON_LOADED" then
-			local arg1 = ...
-			if arg1 and arg1 == ADDON_NAME then
-				eventFrame:UnregisterEvent("ADDON_LOADED")
-				eventFrame:RegisterEvent("PLAYER_LOGIN")
-			end
-			return
-		end
-		if IsLoggedIn() then
-			addon:EnableAddon(event, ...)
-			eventFrame:UnregisterEvent("PLAYER_LOGIN")
-			eventFrame = nil
-		end
-		return
-	end
-end)
+local L = addon.L
+local strfind = string.find
+local strsub = string.sub
+local strmatch = string.match
+local gsub = string.gsub
+local strlen = string.len
+local tinsert = table.insert
+local tremove = table.remove
 
-local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
-LibStub("AceEvent-3.0"):Embed(addon)
+local EXTRA_CHAT_FILTER_EVENTS = {
+	"CHAT_MSG_ADDON",
+	"CHAT_MSG_ADDON_LOGGED",
+	"CHAT_MSG_BATTLEGROUND",
+	"CHAT_MSG_BATTLEGROUND_LEADER",
+	"CHAT_MSG_BN_CONVERSATION",
+	"CHAT_MSG_BN_CONVERSATION_LIST",
+	"CHAT_MSG_BN_CONVERSATION_NOTICE",
+	"CHAT_MSG_BN_INLINE_TOAST_CONVERSATION",
+}
+
+local SHORT_CHANNEL_REPLACEMENTS = {
+	{ L.ChannelGeneral, L.ShortGeneral },
+	{ L.ChannelTradeServices, L.ShortTradeServices },
+	{ L.ChannelTrade, L.ShortTrade },
+	{ L.ChannelWorldDefense, L.ShortWorldDefense },
+	{ L.ChannelLocalDefense, L.ShortLocalDefense },
+	{ L.ChannelLookingForGroup, L.ShortLookingForGroup },
+	{ L.ChannelGuildRecruitment, L.ShortGuildRecruitment },
+	{ L.ChannelNewComerChat, L.ShortNewComerChat },
+}
+
+local function RegisterChatFilters(filterFunc)
+	for group, values in pairs(ChatTypeGroup) do
+		for _, value in pairs(values) do
+			ChatFrame_AddMessageEventFilter(value, filterFunc)
+		end
+	end
+	for _, eventName in ipairs(EXTRA_CHAT_FILTER_EVENTS) do
+		ChatFrame_AddMessageEventFilter(eventName, filterFunc)
+	end
+end
+
+local URL_PATTERNS = {
+	{ "(%a+)://(%S+)%s?", "%1://%2" },
+	{ "www%.([_A-Za-z0-9-]+)%.(%S+)%s?", "www.%1.%2" },
+	{ "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?", "%1@%2%3%4" },
+	{ "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?", "%1.%2.%3.%4:%5" },
+	{ "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?", "%1.%2.%3.%4" },
+	{ "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]", "%1" },
+}
+
+function addon:OnLoad()
+	-- wrapper lifecycle hook (ADDON_LOADED)
+end
+
+function addon:OnEnable()
+	self:EnableAddon()
+end
 
 --[[------------------------
 	Scrolling and Chat Links
@@ -87,23 +118,11 @@ local function doColor(url)
 end
 
 local function urlFilter(self, event, msg, author, ...)
-	if strfind(msg, "(%a+)://(%S+)%s?") then
-		return false, gsub(msg, "(%a+)://(%S+)%s?", doColor("%1://%2")), author, ...
-	end
-	if strfind(msg, "www%.([_A-Za-z0-9-]+)%.(%S+)%s?") then
-		return false, gsub(msg, "www%.([_A-Za-z0-9-]+)%.(%S+)%s?", doColor("www.%1.%2")), author, ...
-	end
-	if strfind(msg, "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?") then
-		return false, gsub(msg, "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?", doColor("%1@%2%3%4")), author, ...
-	end
-	if strfind(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?") then
-		return false, gsub(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?", doColor("%1.%2.%3.%4:%5")), author, ...
-	end
-	if strfind(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?") then
-		return false, gsub(msg, "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?", doColor("%1.%2.%3.%4")), author, ...
-	end
-	if strfind(msg, "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]") then
-		return false, gsub(msg, "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]", doColor("%1")), author, ...
+	for i = 1, #URL_PATTERNS do
+		local pattern, replacement = URL_PATTERNS[i][1], URL_PATTERNS[i][2]
+		if strfind(msg, pattern) then
+			return false, gsub(msg, pattern, doColor(replacement)), author, ...
+		end
 	end
 end
 
@@ -145,19 +164,7 @@ function _G.ItemRefTooltip:SetHyperlink(link, ...)
 end
 
 --register them all
-for group, values in pairs(ChatTypeGroup) do
-	for _, value in pairs(values) do
-		ChatFrame_AddMessageEventFilter(value, urlFilter)
-	end
-end
-ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", urlFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", urlFilter)
+RegisterChatFilters(urlFilter)
 
 --[[------------------------
 	Stylized Player Names
@@ -177,19 +184,7 @@ local function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
 end
 
 --register them all
-for group, values in pairs(ChatTypeGroup) do
-	for _, value in pairs(values) do
-		ChatFrame_AddMessageEventFilter(value, playerInfoFilter)
-	end
-end
-ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_ADDON_LOGGED", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BATTLEGROUND_LEADER", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_LIST", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_CONVERSATION_NOTICE", playerInfoFilter)
-ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_INLINE_TOAST_CONVERSATION", playerInfoFilter)
+RegisterChatFilters(playerInfoFilter)
 
 local function ToHex(r, g, b, a)
 	return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
@@ -206,7 +201,7 @@ local function slowPlayerLinkStrip(msg)
 	local p3_Start, p3_End
 
 	--lets grab the first part
-	p1_Start, p1_End = string.find(newMsg, "|Hplayer:", 1, true)
+	p1_Start, p1_End = strfind(newMsg, "|Hplayer:", 1, true)
 
 	--do we have anything to work with on first part
 	if p1_Start and p1_End then
@@ -215,7 +210,7 @@ local function slowPlayerLinkStrip(msg)
 
 		--lets grab the second part
 		if newMsg then
-			p2_Start, p2_End = string.find(newMsg, "|h[", 1, true)
+			p2_Start, p2_End = strfind(newMsg, "|h[", 1, true)
 		end
 
 		--do we have anything to work with on second part
@@ -228,7 +223,7 @@ local function slowPlayerLinkStrip(msg)
 
 			--finally check for our third part
 			if newMsg then
-				p3_Start, p3_End = string.find(newMsg, "]|h", 1, true)
+				p3_Start, p3_End = strfind(newMsg, "]|h", 1, true)
 			end
 
 			--do we have anything to work with?
@@ -265,7 +260,7 @@ end
 
 local function ContainsWholeWord(input, word)
 	--return string.find(input, "%f[%a]" .. word .. "%f[%A]")
-	return string.find(input, "%f[^%z%s]"..word.."%f[%z%s]")
+	return strfind(input, "%f[^%z%s]"..word.."%f[%z%s]")
 end
 
 local function replaceText(source, findStr, replaceStr, wholeword)
@@ -281,7 +276,7 @@ local function parsePlayerInfo(frame, text, ...)
 	text = text or "" --fix string just in case, avoid nulls
 	local playerLink, player, pmsg
 
-	playerLink, player, pmsg = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
+	playerLink, player, pmsg = strmatch(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
 
 	if not playerLink or not player then
 		--only use this if top fails
@@ -299,15 +294,15 @@ local function parsePlayerInfo(frame, text, ...)
 			playerName, playerServer = linkName:match("([^%-]+)%-?(.*)")
 
 			if not playerName or not playerServer then
-				if chkPlayer and chkServer and string.len(chkPlayer) > 0 and string.len(chkServer) > 0 then
+				if chkPlayer and chkServer and strlen(chkPlayer) > 0 and strlen(chkServer) > 0 then
 					playerName = chkPlayer
 					playerServer = chkServer
 				else
 					--last case scenario, using a really crappy method
-					local findFirst = string.find(linkName, "-", 1, true)
+					local findFirst = strfind(linkName, "-", 1, true)
 					if findFirst then
-						playerName = string.sub(linkName, 1, findFirst - 1)
-						playerServer = string.sub(linkName, findFirst + 1)
+						playerName = strsub(linkName, 1, findFirst - 1)
+						playerServer = strsub(linkName, findFirst + 1)
 					else
 						--didn't find anything, so give up
 						return
@@ -316,7 +311,7 @@ local function parsePlayerInfo(frame, text, ...)
 			end
 		end
 		if not playerName or not playerServer then return end
-		if string.len(playerName) <= 0 or string.len(playerServer) <= 0 then return end
+		if strlen(playerName) <= 0 or strlen(playerServer) <= 0 then return end
 
 		local playerInfo
 
@@ -375,10 +370,10 @@ local function addToPlayerList(name, realm, level, class, BNname)
 
 	local playerName, playerServer = name:match("([^%-]+)%-?(.*)")
 
-	if playerName and string.len(playerName) > 0 then
+	if playerName and strlen(playerName) > 0 then
 		name = playerName
 	end
-	if playerServer and string.len(playerServer) > 0 then
+	if playerServer and strlen(playerServer) > 0 then
 		realm = playerServer
 	end
 	--one last try
@@ -389,7 +384,7 @@ local function addToPlayerList(name, realm, level, class, BNname)
 			-- realm = playerServer
 		-- end
 	-- end
-	if not realm or string.len(realm) <= 0 then
+	if not realm or strlen(realm) <= 0 then
 		realm = GetRealmName()
 	end
 	if not name or not realm then return end
@@ -523,25 +518,24 @@ local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
 
 	if XCHT_DB.shortNames and type(text) == "string" then
-		local chatNum = string.match(text,"%d+") or ""
+		local chatNum = strmatch(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
-		text = gsub(text, L.ChannelGeneral, "["..chatNum..L.ShortGeneral.."]")
-		text = gsub(text, L.ChannelTradeServices, "["..chatNum..L.ShortTradeServices.."]")
-		text = gsub(text, L.ChannelTrade, "["..chatNum..L.ShortTrade.."]")
-		text = gsub(text, L.ChannelWorldDefense, "["..chatNum..L.ShortWorldDefense.."]")
-		text = gsub(text, L.ChannelLocalDefense, "["..chatNum..L.ShortLocalDefense.."]")
-		text = gsub(text, L.ChannelLookingForGroup, "["..chatNum..L.ShortLookingForGroup.."]")
-		text = gsub(text, L.ChannelGuildRecruitment, "["..chatNum..L.ShortGuildRecruitment.."]")
-		text = gsub(text, L.ChannelNewComerChat, "["..chatNum..L.ShortNewComerChat.."]")
+		for i = 1, #SHORT_CHANNEL_REPLACEMENTS do
+			local longName = SHORT_CHANNEL_REPLACEMENTS[i][1]
+			local shortName = SHORT_CHANNEL_REPLACEMENTS[i][2]
+			if longName and shortName then
+				text = gsub(text, longName, "["..chatNum..shortName.."]")
+			end
+		end
 	end
 
 	--only do stylized player names if it's even enabled and we have the filter list
 	if addon.isFilterListEnabled and XCHT_DB.enablePlayerChatStyle and type(text) == "string" then
 
 		--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
-		if string.find(text, "|Hplayer:", 1, true) then
+		if strfind(text, "|Hplayer:", 1, true) then
 			local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
-			if old and new and string.find(text, old, 1, true) then
+			if old and new and strfind(text, old, 1, true) then
 				text = plainTextReplace(text, old, new)
 			end
 		end
@@ -556,7 +550,7 @@ local AddMessage = function(frame, text, ...)
 				--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 
 				--don't do this on strings with player links and we have a positive filter
-				if not string.find(text, "|Hplayer:", 1, true) and not string.find(text, "|HBNplayer:", 1, true) and addon:searchFilterList(lastMsgEvent.event, text) then
+				if not strfind(text, "|Hplayer:", 1, true) and not strfind(text, "|HBNplayer:", 1, true) and addon:searchFilterList(lastMsgEvent.event, text) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 					local origText = text
 
@@ -569,7 +563,7 @@ local AddMessage = function(frame, text, ...)
 							--playerName, playerServer = linkName:match("([^%-]+)%-?(.*)")
 
 							--make sure we even have a player in the string before editing it
-							if pN and pR and string.find(text, pN, 1, true) and v.class then
+							if pN and pR and strfind(text, pN, 1, true) and v.class then
 
 								--do the replace here
 								local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class] or RAID_CLASS_COLORS[v.class]
@@ -989,7 +983,6 @@ hooksecurefunc("FCF_ToggleLock", function() doSaveCurrentChatFrame() end)
 hooksecurefunc("FCF_ToggleLockOnDockedFrame", function() doSaveCurrentChatFrame() end)
 hooksecurefunc("FCF_ToggleUninteractable", function() doSaveCurrentChatFrame() end)
 hooksecurefunc("FCF_DockFrame", function(chatFrame, index, selected) saveChatSettings(chatFrame) end)
-hooksecurefunc("FCF_Close", function(chatFrame, fallback) saveChatSettings(chatFrame) end)
 hooksecurefunc("FCF_StopDragging", function(chatFrame) saveChatSettings(chatFrame) end)
 hooksecurefunc("FCF_Tab_OnClick", function(self, button)
 	local chatFrame = _G["ChatFrame"..self:GetID()]
@@ -1019,7 +1012,7 @@ local function unescape(str)
 
 	--this is for testing for protected strings and only for officer chat, since even the text in officer chat is protected not just the officer name
 	local isOfficerChat = false
-	if string.find(str, "|Hchannel:officer", 1, true) then
+	if strfind(str, "|Hchannel:officer", 1, true) then
 		isOfficerChat = true
 	end
 	--str = gsub(str, "|c%x%x%x%x%x%x%x%x", "") --color tag 1
@@ -1038,10 +1031,10 @@ local function unescape(str)
 	--I want to point out that event addons like ElvUI suffer from  this problem.
 	--They get around it by not displaying protected messages at ALL.  Check MessageIsProtected(message) in ElvUI
 
-	if string.find(str, "|K", 1, true) then
+	if strfind(str, "|K", 1, true) then
 
 		--str = gsub(str, "|K(.-)|k", "%1")
-		local presenceID = string.match(str, "|K(.-)|k")
+		local presenceID = strmatch(str, "|K(.-)|k")
 		local accountName
 		local stripBNet
 
@@ -1060,7 +1053,7 @@ local function unescape(str)
 						--if it matches the one we found earlier, then replace it with a battle.net tag instead
 						if accountName and accountName == presenceID then
 							--don't show entire bnet tag just the name
-							stripBNet = string.match(accountInfo.battleTag, "(.-)#")
+						stripBNet = strmatch(accountInfo.battleTag, "(.-)#")
 							str = gsub(str, "|K(.-)|k", stripBNet or accountInfo.battleTag)
 							--return out of here since we already did the replace
 							--we don't want to go to the failsafe below
@@ -1189,9 +1182,7 @@ local function CreateCopyFrame()
 	--check to see if we have the frame already, if we do then return it
 	if addon.copyFrame then return addon.copyFrame end
 
-	local AceGUI = LibStub("AceGUI-3.0")
-
-	local copyFrame = CreateFrame("FRAME", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	local copyFrame = CreateFrame("FRAME", ADDON_NAME.."CopyFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 	copyFrame:SetBackdrop({
 		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -1207,48 +1198,87 @@ local function CreateCopyFrame()
 	copyFrame:SetWidth(830)
 	copyFrame:SetHeight(490)
 
-	local group = AceGUI:Create("InlineGroup")
-	group.frame:SetParent(copyFrame)
-	group.frame:SetPoint("BOTTOMRIGHT", copyFrame, "BOTTOMRIGHT", -17, 12)
-	group.frame:SetPoint("TOPLEFT", copyFrame, "TOPLEFT", 17, -10)
-	group.frame:Hide()
-	group:SetLayout("fill")
-	group.frame:Show() --show the group so everything in it displays in the frame
+	local title = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	title:SetPoint("TOPLEFT", copyFrame, "TOPLEFT", 20, -12)
+	title:SetText(L.CopyChat)
 
-	local MLEditBox = AceGUI:Create("MultiLineEditBox")
-	MLEditBox:SetWidth(400)
-	MLEditBox.button:Hide()
-	MLEditBox.frame:SetClipsChildren(true)
-	MLEditBox:SetLabel(L.CopyChat)
-    MLEditBox:ClearFocus()
-	MLEditBox:SetText("")
-	group:AddChild(MLEditBox)
+	local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."CopyScrollFrame", copyFrame, "UIPanelScrollFrameTemplate")
+	scrollFrame:SetPoint("TOPLEFT", 20, -38)
+	scrollFrame:SetPoint("BOTTOMRIGHT", -35, 45)
+
+	local editBox = CreateFrame("EditBox", ADDON_NAME.."CopyEditBox", scrollFrame)
+	editBox:SetAutoFocus(false)
+	editBox:SetMultiLine(true)
+	editBox:SetFontObject("ChatFontNormal")
+	editBox:SetWidth(scrollFrame:GetWidth())
+	editBox:SetText("")
+	scrollFrame:SetScrollChild(editBox)
+
+	local function UpdateEditSize()
+		local width = scrollFrame:GetWidth() or 0
+		if width > 0 then
+			editBox:SetWidth(width)
+		end
+		local height = editBox:GetTextHeight() + 10
+		local minHeight = scrollFrame:GetHeight() or 0
+		if height < minHeight then height = minHeight end
+		editBox:SetHeight(height)
+	end
+
+	editBox:SetScript("OnTextChanged", UpdateEditSize)
+	scrollFrame:HookScript("OnSizeChanged", UpdateEditSize)
+	UpdateEditSize()
+
+	local scrollBar = scrollFrame.ScrollBar or _G[scrollFrame:GetName().."ScrollBar"]
+	local MLEditBox = {
+		editBox = editBox,
+		scrollFrame = scrollFrame,
+		scrollBar = scrollBar,
+		SetText = function(self, text)
+			self.editBox:SetText(text or "")
+			UpdateEditSize()
+		end,
+		GetText = function(self)
+			return self.editBox:GetText()
+		end,
+		SetCursorPosition = function(self, pos)
+			self.editBox:SetCursorPosition(pos)
+		end,
+		ClearFocus = function(self)
+			self.editBox:ClearFocus()
+		end,
+		SetFocus = function(self)
+			self.editBox:SetFocus()
+		end,
+	}
 	copyFrame.MLEditBox = MLEditBox
 
 	copyFrame.handleCursorChange = false --setting this to true will update the scrollbar to the cursor position
-	MLEditBox.scrollFrame:HookScript("OnUpdate", function(self, elapsed)
-		if not MLEditBox.scrollFrame:IsVisible() then return end
+	scrollFrame:HookScript("OnUpdate", function(self, elapsed)
+		if not scrollFrame:IsVisible() then return end
 
 		self.OnUpdateCounter = (self.OnUpdateCounter or 0) + elapsed
 		if self.OnUpdateCounter < 0.1 then return end
 		self.OnUpdateCounter = 0
 
-		local pos = math.max(string.len(MLEditBox:GetText()), MLEditBox.editBox:GetNumLetters())
+		local pos = math.max(strlen(editBox:GetText()), editBox:GetNumLetters())
 
-		if ( copyFrame.handleCursorChange ) then
-			MLEditBox:SetFocus()
-			MLEditBox:SetCursorPosition(pos)
-			MLEditBox:ClearFocus()
-			--put the scrollbar button at the max it can go
-			local statusMin, statusMax = MLEditBox.scrollBar:GetMinMaxValues()
-			MLEditBox.scrollBar:SetValue(statusMax + 100) --extra 100 just in case (sometimes the offset is slightly off)
+		if copyFrame.handleCursorChange then
+			editBox:SetFocus()
+			editBox:SetCursorPosition(pos)
+			editBox:ClearFocus()
+			if scrollBar then
+				local _, statusMax = scrollBar:GetMinMaxValues()
+				scrollBar:SetValue(statusMax)
+			else
+				scrollFrame:SetVerticalScroll(scrollFrame:GetVerticalScrollRange())
+			end
 			copyFrame.handleCursorChange = false
 		end
-
 	end)
 	copyFrame:HookScript("OnShow", function() copyFrame.handleCursorChange = true end)
 
-	local close = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
+	local close = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
 	close:SetScript("OnClick", function() copyFrame:Hide() end)
 	close:SetPoint("BOTTOMRIGHT", -27, 13)
 	close:SetFrameLevel(close:GetFrameLevel() + 1)
@@ -1256,7 +1286,7 @@ local function CreateCopyFrame()
 	close:SetWidth(100)
 	close:SetText(L.Done)
 
-    local buttonBack = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
+    local buttonBack = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
     buttonBack:SetText("<")
     buttonBack:SetHeight(25)
     buttonBack:SetWidth(25)
@@ -1271,7 +1301,7 @@ local function CreateCopyFrame()
     end)
     copyFrame.buttonBack = buttonBack
 
-    local buttonForward = CreateFrame("Button", nil, group.frame, "UIPanelButtonTemplate")
+    local buttonForward = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
     buttonForward:SetText(">")
     buttonForward:SetHeight(25)
     buttonForward:SetWidth(25)
@@ -1287,17 +1317,10 @@ local function CreateCopyFrame()
     copyFrame.buttonForward = buttonForward
 
 	--this is to place it above the group layer
-	local textFrame = CreateFrame("FRAME", nil, group.frame, BackdropTemplateMixin and "BackdropTemplate")
-	textFrame:SetFrameLevel(textFrame:GetFrameLevel() + 1)
-	textFrame:SetPoint("BOTTOMLEFT", 80, 18)
-	textFrame:Show()
-
-    local pageNumText = textFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    pageNumText:SetPoint("LEFT", textFrame)
+    local pageNumText = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    pageNumText:SetPoint("BOTTOMLEFT", 80, 18)
     pageNumText:SetShadowOffset(1, -1)
     pageNumText:SetText(L.Page.." 1")
-	textFrame:SetHeight(pageNumText:GetHeight() + 2)
-	textFrame:SetWidth(pageNumText:GetWidth() + 2)
     copyFrame.pageNumText = pageNumText
 
 	copyFrame:Hide()
@@ -1323,7 +1346,7 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	obj:SetWidth(18)
 	obj:SetHeight(18)
 	obj:Hide()
-	obj:SetScript("OnClick", function(self, arg)
+	obj:SetScript("OnClick", function(self)
 		GetChatText(copyFrame, chatIndex)
 	end)
 
@@ -1473,7 +1496,7 @@ end
 local function disableChatFrameFading()
 
 	FCF_FadeInChatFrame = function(chatframe)
-		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+		if chatframe:GetName() and strfind(chatframe:GetName(), "ChatFrame", 1, true) then
 			doAlphaCheck(chatframe)
 			return
 		end
@@ -1481,7 +1504,7 @@ local function disableChatFrameFading()
 	end
 
 	FCF_FadeOutChatFrame = function(chatframe)
-		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+		if chatframe:GetName() and strfind(chatframe:GetName(), "ChatFrame", 1, true) then
 			doAlphaCheck(chatframe)
 			return
 		end
@@ -1489,14 +1512,14 @@ local function disableChatFrameFading()
 	end
 
 	FCF_FadeOutScrollbar = function(chatframe)
-		if chatframe:GetName() and string.find(chatframe:GetName(), "ChatFrame", 1, true) then
+		if chatframe:GetName() and strfind(chatframe:GetName(), "ChatFrame", 1, true) then
 			return
 		end
 		old_FCF_FadeOutScrollbar(chatframe)
 	end
 
 	FCF_SetWindowAlpha = function(frame, alpha, doNotSave)
-		if frame:GetName() and string.find(frame:GetName(), "ChatFrame", 1, true) then
+		if frame:GetName() and strfind(frame:GetName(), "ChatFrame", 1, true) then
 			frame.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 			return
 		end
@@ -1891,32 +1914,43 @@ function addon:EnableAddon()
 
 	--do the DB stuff
 	if not XCHT_DB then XCHT_DB = {} end
-	if XCHT_DB.hideSocial == nil then XCHT_DB.hideSocial = false end
-	if XCHT_DB.addFontShadow == nil then XCHT_DB.addFontShadow = false end
-	if XCHT_DB.addFontOutline == nil then XCHT_DB.addFontOutline = false end
-	if XCHT_DB.hideScroll == nil then XCHT_DB.hideScroll = false end
-	if XCHT_DB.shortNames == nil then XCHT_DB.shortNames = false end
-	if XCHT_DB.editBoxTop == nil then XCHT_DB.editBoxTop = false end
-	if XCHT_DB.hideTabs == nil then XCHT_DB.hideTabs = false end
-	if XCHT_DB.hideVoice == nil then XCHT_DB.hideVoice = false end
-	if XCHT_DB.hideEditboxBorder == nil then XCHT_DB.hideEditboxBorder = false end
-	if XCHT_DB.enableSimpleEditbox == nil then XCHT_DB.enableSimpleEditbox = true end
-	if XCHT_DB.enableSEBDesign == nil then XCHT_DB.enableSEBDesign = false end
-	if XCHT_DB.enableCopyButton == nil then XCHT_DB.enableCopyButton = true end
-	if XCHT_DB.enablePlayerChatStyle == nil then XCHT_DB.enablePlayerChatStyle = true end
-	if XCHT_DB.enableChatTextFade == nil then XCHT_DB.enableChatTextFade = true end
-	if XCHT_DB.disableChatFrameFade == nil then XCHT_DB.disableChatFrameFade = true end
-	if XCHT_DB.enableCopyButtonLeft == nil then XCHT_DB.enableCopyButtonLeft = false end
-	if XCHT_DB.lockChatSettings == nil then XCHT_DB.lockChatSettings = false end
-	if XCHT_DB.userChatAlpha == nil then XCHT_DB.userChatAlpha = 0.25 end  --uses blizzard default value from DEFAULT_CHATFRAME_ALPHA
-	if XCHT_DB.enableEditboxAdjusted == nil then XCHT_DB.enableEditboxAdjusted = false end
-	if XCHT_DB.enableOutWhisperColor == nil then XCHT_DB.enableOutWhisperColor = false end
-	if XCHT_DB.outWhisperColor == nil then XCHT_DB.outWhisperColor = "FFF2307C" end
-	if XCHT_DB.disableChatEnterLeaveNotice == nil then XCHT_DB.disableChatEnterLeaveNotice = false end
-	if XCHT_DB.hideChatMenuButton == nil then XCHT_DB.hideChatMenuButton = false end
-	if XCHT_DB.moveSocialButtonToBottom == nil then XCHT_DB.moveSocialButtonToBottom = false end
-	if XCHT_DB.hideSideButtonBars == nil then XCHT_DB.hideSideButtonBars = false end
-	if XCHT_DB.pageBufferLimit == nil then XCHT_DB.pageBufferLimit = 0 end  --set how many pages to display in CopyChat (0 for no limit)
+	local defaults = {
+		hideSocial = false,
+		addFontShadow = false,
+		addFontOutline = false,
+		hideScroll = false,
+		shortNames = false,
+		editBoxTop = false,
+		hideTabs = false,
+		hideVoice = false,
+		hideEditboxBorder = false,
+		enableSimpleEditbox = true,
+		enableSEBDesign = false,
+		enableCopyButton = true,
+		enablePlayerChatStyle = true,
+		enableChatTextFade = true,
+		disableChatFrameFade = true,
+		enableCopyButtonLeft = false,
+		lockChatSettings = false,
+		userChatAlpha = 0.25, --uses blizzard default value from DEFAULT_CHATFRAME_ALPHA
+		enableEditboxAdjusted = false,
+		enableOutWhisperColor = false,
+		outWhisperColor = "FFF2307C",
+		disableChatEnterLeaveNotice = false,
+		hideChatMenuButton = false,
+		moveSocialButtonToBottom = false,
+		hideSideButtonBars = false,
+		pageBufferLimit = 0, --set how many pages to display in CopyChat (0 for no limit)
+		debugWrapper = false,
+	}
+	for key, value in pairs(defaults) do
+		if XCHT_DB[key] == nil then
+			XCHT_DB[key] = value
+		end
+	end
+	addon.wrapperDebug = XCHT_DB.debugWrapper
+
+	local ver = (addon.GetAddOnMetadata and addon.GetAddOnMetadata(ADDON_NAME, "Version")) or "1.0"
 
 	--setup the history DB
 	if not XCHT_HISTORY then XCHT_HISTORY = {} end
@@ -1935,7 +1969,9 @@ function addon:EnableAddon()
 	initUpdateCurrentPlayer()
 
 	--turn off profanity filter
-	C_CVar.SetCVar("profanityFilter", 0)
+	if addon.SetCVar then
+		addon.SetCVar("profanityFilter", 0)
+	end
 
 	--do the sticky channels list
 	addon:EnableStickyChannelsList()
@@ -2046,7 +2082,18 @@ function addon:EnableAddon()
 
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
-	SlashCmdList["XANCHAT"] = function()
+	SlashCmdList["XANCHAT"] = function(msg)
+		local cmd = msg and msg:lower():match("^%s*(%S+)") or ""
+		if cmd == "debug" then
+			XCHT_DB.debugWrapper = not XCHT_DB.debugWrapper
+			addon.wrapperDebug = XCHT_DB.debugWrapper
+			DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: wrapper debug "..(addon.wrapperDebug and "ON" or "OFF"))
+			if addon.wrapperDebug then
+				DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: wrapper loaded = "..tostring(addon.wrapperLoaded))
+			end
+			return
+		end
+
 		if Settings then
 			Settings.OpenToCategory("xanChat")
 		elseif InterfaceOptionsFrame_OpenToCategory then
@@ -2086,7 +2133,6 @@ function addon:EnableAddon()
 
 	if addon.configFrame then addon.configFrame:EnableConfig() end
 
-	local ver = C_AddOns.GetAddOnMetadata(ADDON_NAME,"Version") or '1.0'
 	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] loaded:   /xanchat", ADDON_NAME, ver or "1.0"))
 end
 

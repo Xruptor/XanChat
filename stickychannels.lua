@@ -1,10 +1,12 @@
-local ADDON_NAME, addon = ...
+local ADDON_NAME, private = ...
 if not _G[ADDON_NAME] then
 	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
 end
-addon = _G[ADDON_NAME]
+local addon = _G[ADDON_NAME]
+addon.private = private or addon.private
+addon.L = (private and private.L) or addon.L or {}
 
-local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
+local L = addon.L
 
 addon.stickyChannelsList = CreateFrame("frame", ADDON_NAME.."_stickyChannelsList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 
@@ -100,7 +102,7 @@ function addon:DoStickyChannelsList()
 		return (a.name < b.name)
 	end)
 
-	for barCount=1, table.getn(buildList) do
+	for barCount=1, #buildList do
 
 		local barSlot = _G["xanChat_StickyChannelBar"..barCount] or CreateFrame("button", "xanChat_StickyChannelBar"..barCount, scrollFrame_Child, BackdropTemplateMixin and "BackdropTemplate")
 

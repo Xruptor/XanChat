@@ -1,9 +1,9 @@
-## Interface: 120000, 110207, 50503, 40402, 38000, 30405, 20504, 11508
+## Interface: 120000, 110207, 50503, 40402, 38000, 30405, 20505, 11508
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Notes-zhCN: 一个非常简约的聊天修改插件。
 ## Author: Xruptor
-## Version: 10.19
+## Version: 11.0
 ## IconTexture: 2056011
 ## X-Curse-Project-ID: 28603
 ## X-WoWI-ID: 18787
@@ -11,15 +11,19 @@
 ## OptionalDeps: tekDebug
 ## SavedVariables: XCHT_DB, XCHT_HISTORY
 
-libs\LibStub\LibStub.lua
-libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
-libs\AceGUI-3.0\AceGUI-3.0.xml
-libs\AceLocale-3.0\AceLocale-3.0.xml
-libs\AceEvent-3.0\AceEvent-3.0.xml
-
+locale\locales.lua
+wrapper.lua
 locale\enUS.lua
 locale\deDE.lua
+locale\esES.lua
+locale\esMX.lua
+locale\frFR.lua
+locale\itIT.lua
+locale\koKR.lua
+locale\ptBR.lua
+locale\ruRU.lua
 locale\zhCN.lua
+locale\zhTW.lua
 
 xanChat.lua
 config.lua

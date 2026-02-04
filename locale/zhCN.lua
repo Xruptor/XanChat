@@ -1,6 +1,6 @@
-local ADDON_NAME, addon = ...
+local ADDON_NAME, private = ...
 
-local L = LibStub("AceLocale-3.0"):NewLocale(ADDON_NAME, "zhCN")
+local L = private:NewLocale("zhCN")
 if not L then return end
 
 L.WhoPlayer = "是玩家？"
@@ -23,23 +23,23 @@ L.ProtectedChannel = " |cFFDF2B2B（频道受暴雪保护，禁止插件修改�
 
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 --trailing dash is to check for things like [WorldDefense - Alterac Mountains] so it will remove location
-L.ChannelGeneral = "(%[%d+%. )General.-%]"
-L.ChannelTrade = "(%[%d+%. )Trade.-%]"
-L.ChannelWorldDefense = "(%[%d+%. )WorldDefense.-%]"
-L.ChannelLocalDefense = "(%[%d+%. )LocalDefense.-%]"
-L.ChannelLookingForGroup = "(%[%d+%. )LookingForGroup.-%]"
-L.ChannelGuildRecruitment = "(%[%d+%. )GuildRecruitment.-%]"
-L.ChannelNewComerChat = "(%[%d+%. )Newcomer Chat.-%]"
-L.ChannelTradeServices  = "(%[%d+%. )Trade %([^()]*%).-%]"
+L.ChannelGeneral = "(%[%d+%. )综合.-%]"
+L.ChannelTrade = "(%[%d+%. )交易.-%]"
+L.ChannelWorldDefense = "(%[%d+%. )世界防务.-%]"
+L.ChannelLocalDefense = "(%[%d+%. )本地防务.-%]"
+L.ChannelLookingForGroup = "(%[%d+%. )寻求组队.-%]"
+L.ChannelGuildRecruitment = "(%[%d+%. )公会招募.-%]"
+L.ChannelNewComerChat = "(%[%d+%. )新人聊天.-%]"
+L.ChannelTradeServices  = "(%[%d+%. )交易 %([^()]*%).-%]"
 
-L.ShortGeneral = "GN"
-L.ShortTrade = "TR"
-L.ShortWorldDefense = "WD"
-L.ShortLocalDefense = "LD"
-L.ShortLookingForGroup = "LFG"
-L.ShortGuildRecruitment = "GR"
-L.ShortNewComerChat = "NC"
-L.ShortTradeServices = "TRS"
+L.ShortGeneral = "综"
+L.ShortTrade = "交"
+L.ShortWorldDefense = "世防"
+L.ShortLocalDefense = "本防"
+L.ShortLookingForGroup = "组队"
+L.ShortGuildRecruitment = "招募"
+L.ShortNewComerChat = "新"
+L.ShortTradeServices = "交服"
 
 --short channel globals
 --Example: "|Hchannel:  Channel Type   |h  [short channel name]   |h %s: " 

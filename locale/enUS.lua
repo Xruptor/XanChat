@@ -1,6 +1,6 @@
-local ADDON_NAME, addon = ...
+local ADDON_NAME, private = ...
 
-local L = LibStub("AceLocale-3.0"):NewLocale(ADDON_NAME, "enUS", true)
+local L = private:NewLocale("enUS", true)
 if not L then return end
 
 L.WhoPlayer = "Who Player?"
