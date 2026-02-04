@@ -1202,27 +1202,49 @@ local function CreateCopyFrame()
 	title:SetPoint("TOPLEFT", copyFrame, "TOPLEFT", 20, -12)
 	title:SetText(L.CopyChat)
 
-	local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."CopyScrollFrame", copyFrame, "UIPanelScrollFrameTemplate")
+	local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."CopyScrollFrame", copyFrame, "ScrollingEditBoxTemplate")
 	scrollFrame:SetPoint("TOPLEFT", 20, -38)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -35, 45)
 
-	local editBox = CreateFrame("EditBox", ADDON_NAME.."CopyEditBox", scrollFrame)
+	local editBox = scrollFrame.EditBox or _G[scrollFrame:GetName().."EditBox"]
+	if not editBox then
+		editBox = CreateFrame("EditBox", ADDON_NAME.."CopyEditBox", scrollFrame)
+		scrollFrame:SetScrollChild(editBox)
+	end
 	editBox:SetAutoFocus(false)
+	editBox:EnableMouse(true)
+	editBox:EnableKeyboard(true)
 	editBox:SetMultiLine(true)
 	editBox:SetFontObject("ChatFontNormal")
-	editBox:SetWidth(scrollFrame:GetWidth())
+	editBox:SetJustifyH("LEFT")
+	editBox:SetJustifyV("TOP")
+	editBox:SetTextInsets(4, 4, 4, 4)
 	editBox:SetText("")
-	scrollFrame:SetScrollChild(editBox)
+	if not editBox.SetBackdrop then
+		Mixin(editBox, BackdropTemplateMixin)
+	end
+	editBox:SetBackdrop({
+		bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true,
+		tileSize = 16,
+		edgeSize = 12,
+		insets = { left = 3, right = 3, top = 3, bottom = 3 }
+	})
+	editBox:SetBackdropColor(0, 0, 0, 0.5)
+	editBox:SetBackdropBorderColor(0.2, 0.2, 0.2, 0.8)
+	editBox:HookScript("OnMouseDown", function(self) self:SetFocus() end)
+	editBox:HookScript("OnMouseUp", function(self) self:SetFocus() end)
+	editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
 	local function UpdateEditSize()
 		local width = scrollFrame:GetWidth() or 0
 		if width > 0 then
 			editBox:SetWidth(width)
 		end
-		local height = editBox:GetTextHeight() + 10
-		local minHeight = scrollFrame:GetHeight() or 0
-		if height < minHeight then height = minHeight end
-		editBox:SetHeight(height)
+		if scrollFrame.UpdateScrollChildRect then
+			scrollFrame:UpdateScrollChildRect()
+		end
 	end
 
 	editBox:SetScript("OnTextChanged", UpdateEditSize)
