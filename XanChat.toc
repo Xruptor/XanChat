@@ -1,9 +1,9 @@
-## Interface: 120000, 110207, 50503, 40402, 38000, 30405, 20505, 11508
+## Interface: 120001, 110207, 50503, 40402, 38000, 30405, 20505, 11508
 ## Title: xanChat
 ## Notes: A very minimalistic chat modification addon.
 ## Notes-zhCN: 一个非常简约的聊天修改插件。
 ## Author: Xruptor
-## Version: 11.2
+## Version: 11.3
 ## IconTexture: 2056011
 ## X-Curse-Project-ID: 28603
 ## X-WoWI-ID: 18787
