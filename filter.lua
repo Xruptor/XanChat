@@ -7,6 +7,7 @@ addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
 
 local L = addon.L
+local strfind = string.find
 
 addon.filterList = CreateFrame("frame", ADDON_NAME.."_filterList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 
@@ -92,28 +93,36 @@ local customList = {
 function addon:EnableFilterList()
 
 	if not XCHT_DB.filterList then XCHT_DB.filterList = {} end
-	if not XCHT_DB.filterList.core then XCHT_DB.filterList.core = coreList end
-	if not XCHT_DB.filterList.custom then XCHT_DB.filterList.custom = customList end
+	XCHT_DB.filterList.core = XCHT_DB.filterList.core or {}
+	XCHT_DB.filterList.custom = XCHT_DB.filterList.custom or {}
 
 	--update the list in case anything was added in future updates
-	for k, v in pairs(coreList) do
-		if k and XCHT_DB.filterList.core[k] == nil then
-			XCHT_DB.filterList.core[k] = v
+	if addon.ApplyDefaults then
+		addon.ApplyDefaults(XCHT_DB.filterList.core, coreList)
+		addon.ApplyDefaults(XCHT_DB.filterList.custom, customList)
+	else
+		for k, v in pairs(coreList) do
+			if k and XCHT_DB.filterList.core[k] == nil then
+				XCHT_DB.filterList.core[k] = v
+			end
 		end
-	end
-	for k, v in pairs(customList) do
-		if k and XCHT_DB.filterList.custom[k] == nil then
-			XCHT_DB.filterList.custom[k] = v
+		for k, v in pairs(customList) do
+			if k and XCHT_DB.filterList.custom[k] == nil then
+				XCHT_DB.filterList.custom[k] = v
+			end
 		end
 	end
 
-	addon.filterList:HookScript("OnShow", function(self)
-		if not addon.filterList.ListLoaded then
-			--populate scroll list
-			addon:DoFilterList()
-			addon.filterList.ListLoaded = true
-		end
-	end)
+	if not addon.filterList._xanHooked then
+		addon.filterList:HookScript("OnShow", function(self)
+			if not addon.filterList.ListLoaded then
+				--populate scroll list
+				addon:DoFilterList()
+				addon.filterList.ListLoaded = true
+			end
+		end)
+		addon.filterList._xanHooked = true
+	end
 
 	--allow the stylized routines to work
 	addon.isFilterListEnabled = true
@@ -129,11 +138,11 @@ function addon:DoFilterList()
 
 	--core list
 	for k, v in pairs(XCHT_DB.filterList.core) do
-		table.insert(buildList, { name=k, val=1 } )
+		buildList[#buildList + 1] = { name=k, val=1 }
 	end
 	--custom list
 	for k, v in pairs(XCHT_DB.filterList.custom) do
-		table.insert(buildList, { name=k, val=2 } )
+		buildList[#buildList + 1] = { name=k, val=2 }
 	end
 
 	--sort it based on where the list is coming from
@@ -224,16 +233,17 @@ function addon:DoFilterList()
 end
 
 function addon:searchFilterList(event, text)
-	if not XCHT_DB.filterList then return false end
+	local filterList = XCHT_DB.filterList
+	if not filterList then return false end
 	if not event then return false end
 
 	--first lets check the core
-	if XCHT_DB.filterList.core[event] then return true end
+	if filterList.core[event] then return true end
 
 	--if not lets check custom
-	for k, v in pairs(XCHT_DB.filterList.custom) do
+	for k, v in pairs(filterList.custom) do
 		--if it's enabled then check the string
-		if v and string.find(event, k, 1, true) then
+		if v and strfind(event, k, 1, true) then
 			return true
 		end
 	end

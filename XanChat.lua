@@ -21,10 +21,22 @@ local L = addon.L
 local strfind = string.find
 local strsub = string.sub
 local strmatch = string.match
+local strlower = string.lower
 local gsub = string.gsub
 local strlen = string.len
 local tinsert = table.insert
 local tremove = table.remove
+
+local function ApplyDefaults(target, defaults)
+	if not target or not defaults then return end
+	for key, value in pairs(defaults) do
+		if target[key] == nil then
+			target[key] = value
+		end
+	end
+end
+
+addon.ApplyDefaults = ApplyDefaults
 
 local EXTRA_CHAT_FILTER_EVENTS = {
 	"CHAT_MSG_ADDON",
@@ -67,6 +79,8 @@ local URL_PATTERNS = {
 	{ "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?", "%1.%2.%3.%4" },
 	{ "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]", "%1" },
 }
+
+local PLAYERLIST_MAX = 500
 
 function addon:OnLoad()
 	-- wrapper lifecycle hook (ADDON_LOADED)
@@ -117,11 +131,22 @@ local function doColor(url)
 	return url
 end
 
-local function urlFilter(self, event, msg, author, ...)
-	for i = 1, #URL_PATTERNS do
-		local pattern, replacement = URL_PATTERNS[i][1], URL_PATTERNS[i][2]
-		if strfind(msg, pattern) then
-			return false, gsub(msg, pattern, doColor(replacement)), author, ...
+local messageIndex = 0
+local lastMsgEvent = {}
+
+local function chatMessageFilter(self, event, msg, author, ...)
+	if addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle then
+		messageIndex = messageIndex + 1
+		lastMsgEvent.event = event
+		lastMsgEvent.messageIndex = messageIndex
+	end
+
+	if type(msg) == "string" then
+		for i = 1, #URL_PATTERNS do
+			local pattern, replacement = URL_PATTERNS[i][1], URL_PATTERNS[i][2]
+			if strfind(msg, pattern) then
+				return false, gsub(msg, pattern, doColor(replacement)), author, ...
+			end
 		end
 	end
 end
@@ -147,6 +172,7 @@ function _G.ItemRefTooltip:SetHyperlink(link, ...)
 	if link and (strsub(link, 1, 3) == "url") then
 		local url = strsub(link, 5)
 		local dialog = StaticPopup_Show("LINKME")
+		if not dialog then return end
 		local editbox = _G[dialog:GetName().."EditBox"]
 
 		editbox:SetText(url)
@@ -164,27 +190,12 @@ function _G.ItemRefTooltip:SetHyperlink(link, ...)
 end
 
 --register them all
-RegisterChatFilters(urlFilter)
+RegisterChatFilters(chatMessageFilter)
 
 --[[------------------------
 	Stylized Player Names
 --------------------------]]
 --https://www.wowinterface.com/forums/showthread.php?t=39328
-
-local messageIndex = 0
-local lastMsgEvent = {}
-
-local function playerInfoFilter(self, event, msg, author, arg1, arg2, arg3, ...)
-	if not addon.isFilterListEnabled or not XCHT_DB.enablePlayerChatStyle then return false end
-	--capture the events for AddMessage since they aren't forwarded.  Filters always go first before AddMessage
-	--use a messageIndex to keep track when messages are filtered or not, otherwise AddMessage can have something sent that didn't go through these filters.
-	messageIndex = messageIndex + 1
-	lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
-	return false
-end
-
---register them all
-RegisterChatFilters(playerInfoFilter)
 
 local function ToHex(r, g, b, a)
 	return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
@@ -253,14 +264,59 @@ local function plainTextReplace(text, old, new)
 end
 
 local function stripAndLowercase(text)
-	text = string.lower(text)
-	text = text:gsub("%s+", "") --remove empty spaces
+	if not text then return "" end
+	text = strlower(text)
+	text = gsub(text, "%s+", "") --remove empty spaces
 	return text
 end
 
-local function ContainsWholeWord(input, word)
-	--return string.find(input, "%f[%a]" .. word .. "%f[%A]")
-	return strfind(input, "%f[^%z%s]"..word.."%f[%z%s]")
+local function stripNameKey(text)
+	if not text then return "" end
+	text = strlower(text)
+	text = gsub(text, "[^%a%d]", "") --remove whitespace and special characters
+	return text
+end
+
+local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
+	if not key or not entry then return end
+
+	local ring = addon.playerListRing
+	if not ring then
+		ring = {}
+		addon.playerListRing = ring
+		addon.playerListRingPos = 0
+	end
+
+	local pos = (addon.playerListRingPos or 0) + 1
+	if pos > PLAYERLIST_MAX then pos = 1 end
+	addon.playerListRingPos = pos
+
+	local old = ring[pos]
+	if old then
+		local current = addon.playerList and addon.playerList[old.key]
+		if current and current._sig == old.sig then
+			if not current._pinned then
+				addon.playerList[old.key] = nil
+				local byName = addon.playerListByName
+				if byName then
+					if old.name and byName[old.name] == current then
+						byName[old.name] = nil
+					end
+					if old.lowerName and byName[old.lowerName] == current then
+						byName[old.lowerName] = nil
+					end
+					if old.cleanName and byName[old.cleanName] == current then
+						byName[old.cleanName] = nil
+					end
+				end
+			end
+		end
+	end
+
+	addon.playerListSig = (addon.playerListSig or 0) + 1
+	local sig = addon.playerListSig
+	entry._sig = sig
+	ring[pos] = { key = key, sig = sig, name = name, lowerName = lowerName, cleanName = cleanName }
 end
 
 local function replaceText(source, findStr, replaceStr, wholeword)
@@ -274,9 +330,12 @@ end
 local function parsePlayerInfo(frame, text, ...)
 	--local red, green, blue, messageId, holdTime = ...
 	text = text or "" --fix string just in case, avoid nulls
-	local playerLink, player, pmsg
+	local playerLink, player
 
-	playerLink, player, pmsg = strmatch(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
+	local playerList = addon.playerList
+	if not playerList then return end
+
+	playerLink, player = strmatch(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
 
 	if not playerLink or not player then
 		--only use this if top fails
@@ -313,25 +372,23 @@ local function parsePlayerInfo(frame, text, ...)
 		if not playerName or not playerServer then return end
 		if strlen(playerName) <= 0 or strlen(playerServer) <= 0 then return end
 
-		local playerInfo
+		local realmKey = stripAndLowercase(playerServer)
+		local nameKey = stripAndLowercase(playerName)
 
-		--lets check our list
-		if addon.playerList[playerName.."@"..stripAndLowercase(playerServer)] then
-			playerInfo = addon.playerList[playerName.."@"..stripAndLowercase(playerServer)]
-		elseif addon.playerList[playerName.."@"..playerServer] then
-			playerInfo = addon.playerList[playerName.."@"..playerServer]
-		elseif addon.playerList[stripAndLowercase(playerName).."@"..stripAndLowercase(playerServer)] then
-			playerInfo = addon.playerList[stripAndLowercase(playerName).."@"..stripAndLowercase(playerServer)]
-		else
+		local playerInfo = playerList[playerName.."@"..realmKey]
+			or playerList[playerName.."@"..playerServer]
+			or playerList[nameKey.."@"..realmKey]
+
+		if not playerInfo and addon.playerListByName then
+			playerInfo = addon.playerListByName[playerName] or addon.playerListByName[nameKey]
+		end
+
+		if not playerInfo then
 			--last resort for playername checking
-			for k, v in pairs(addon.playerList) do
-				--just in case
-				if k and v then
-					local pN, pR = strsplit("@", k)
-					if pN and pR and pN == playerName then
-						playerInfo = v
-						break
-					end
+			for _, v in pairs(playerList) do
+				if v and v.name == playerName then
+					playerInfo = v
+					break
 				end
 			end
 		end
@@ -352,9 +409,10 @@ local function parsePlayerInfo(frame, text, ...)
 	end
 end
 
-local function addToPlayerList(name, realm, level, class, BNname)
+local function addToPlayerList(name, realm, level, class, BNname, pin)
 	if not name or not level or not class then return end
 	if not addon.playerList then addon.playerList = {} end
+	local playerList = addon.playerList
 	if level <= 0 then return end --don't store anything with no actual level
 
 	--do the class list if it's missing, this is to check for localized classes, so we can get proper color
@@ -392,46 +450,114 @@ local function addToPlayerList(name, realm, level, class, BNname)
 	--fix the class color if needed, get the non-local blizzard one, that way we can grab the correct color
 	if addon.chkClassList[class] then class = addon.chkClassList[class] end
 
-	addon.playerList[name.."@"..stripAndLowercase(realm)] = {name=name, realm=realm, stripRealm=stripAndLowercase(realm), level=level, class=class, BNname=BNname}
+	local realmKey = stripAndLowercase(realm)
+	local lowerName = strlower(name)
+	local cleanName = stripNameKey(name)
+	local key = name.."@"..realmKey
+	local entry = playerList[key]
+	local isNew = false
+	if entry then
+		entry.name = name
+		entry.realm = realm
+		entry.stripRealm = realmKey
+		entry.level = level
+		entry.class = class
+		entry.BNname = BNname
+	else
+		entry = {name=name, realm=realm, stripRealm=realmKey, level=level, class=class, BNname=BNname}
+		playerList[key] = entry
+		isNew = true
+	end
+	if pin then
+		entry._pinned = true
+	end
+
+	--best-effort name lookup for fallback searches
+	addon.playerListByName = addon.playerListByName or {}
+	addon.playerListByName[name] = entry
+	addon.playerListByName[lowerName] = entry
+	if cleanName ~= "" then
+		addon.playerListByName[cleanName] = entry
+	end
+	if (isNew or not entry._sig) and not entry._pinned then
+		rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
+	end
 end
 
 local function initUpdateCurrentPlayer()
 	local class = select(2, UnitClass("player"))
 	local name, realm = UnitName("player")
 	local level = UnitLevel("player")
-	addToPlayerList(name, realm, level, class)
+	addToPlayerList(name, realm, level, class, nil, true)
 end
 
 local function doRosterUpdate()
 
-	local chkRaid = IsInRaid()
-	local IsInGroup = chkRaid or IsInGroup()
+	local inRaid = IsInRaid()
+	local inGroup = inRaid or IsInGroup()
+	if not inGroup then return end
 
-	if IsInGroup then
-		local playerNum, unit = (chkRaid and GetNumGroupMembers()) or MAX_PARTY_MEMBERS, (chkRaid and "raid") or "party"
-		for i = 1, playerNum do
-			if UnitExists(unit..i) then
-				local playerName, playerServer = UnitName(unit..i)
-				local _, class = UnitClass(unit..i)
-				local level = UnitLevel(unit..i)
-				addToPlayerList(playerName, playerServer, level, class)
-			end
+	local playerNum = inRaid and GetNumGroupMembers() or MAX_PARTY_MEMBERS
+	local unit = inRaid and "raid" or "party"
+	for i = 1, playerNum do
+		if UnitExists(unit..i) then
+			local playerName, playerServer = UnitName(unit..i)
+			local _, class = UnitClass(unit..i)
+			local level = UnitLevel(unit..i)
+			addToPlayerList(playerName, playerServer, level, class)
 		end
 	end
 
 end
 
-local function doFriendUpdate()
-	for i = 1, C_FriendList.GetNumFriends() do
-		local info = C_FriendList.GetFriendInfoByIndex(i)
-		--make sure they are online
-		if info and info.connected then
-			addToPlayerList(info.name, GetRealmName(), info.level, info.className)
+local function ensureInstanceChatMessages()
+	local inInstance, instanceType = IsInInstance()
+	if not inInstance or (instanceType ~= "pvp" and instanceType ~= "arena") then
+		return
+	end
+
+	local chatFrame = DEFAULT_CHAT_FRAME
+	if not chatFrame or not chatFrame.GetID then return end
+	local chatID = chatFrame:GetID()
+	if not chatID then return end
+
+	local current = {}
+	for _, msg in ipairs({ GetChatWindowMessages(chatID) }) do
+		current[msg] = true
+	end
+
+	local function addGroup(group)
+		if group and ChatTypeGroup[group] and not current[group] then
+			AddChatWindowMessages(chatID, group)
+			current[group] = true
 		end
 	end
 
-	if C_BattleNet then
-		local numBNet, onlineBNet = BNGetNumFriends()
+	addGroup("INSTANCE_CHAT")
+	addGroup("INSTANCE_CHAT_LEADER")
+	addGroup("BATTLEGROUND")
+	addGroup("BATTLEGROUND_LEADER")
+end
+
+local function handleRosterEvent()
+	doRosterUpdate()
+	ensureInstanceChatMessages()
+end
+
+local function doFriendUpdate()
+	local realmName = GetRealmName()
+	if C_FriendList and C_FriendList.GetNumFriends then
+		for i = 1, C_FriendList.GetNumFriends() do
+			local info = C_FriendList.GetFriendInfoByIndex(i)
+			--make sure they are online
+			if info and info.connected then
+				addToPlayerList(info.name, realmName, info.level, info.className, nil, true)
+			end
+		end
+	end
+
+	if C_BattleNet and BNGetNumFriends and C_BattleNet.GetFriendAccountInfo then
+		local numBNet = BNGetNumFriends()
 		for i = 1, numBNet do
 			local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
 			if accountInfo and accountInfo.gameAccountInfo then
@@ -442,7 +568,7 @@ local function doFriendUpdate()
 					local friendAccountName = accountInfo.isBattleTagFriend and accountInfo.battleTag or accountInfo.accountName
 
 					if friendInfo.characterName and friendInfo.realmName and friendInfo.characterLevel and friendInfo.className then
-						addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName)
+						addToPlayerList(friendInfo.characterName, friendInfo.realmName, friendInfo.characterLevel, friendInfo.className, friendAccountName, true)
 					end
 				end
 			end
@@ -451,38 +577,44 @@ local function doFriendUpdate()
 end
 
 local function doGuildUpdate()
-	if IsInGuild()  then
+	if not IsInGuild() then return end
+	if C_GuildInfo and C_GuildInfo.GuildRoster then
 		C_GuildInfo.GuildRoster()
-		for i = 1, GetNumGuildMembers(true) do
-			local name, _, _, level, _, _, _, _, online, _, class = GetGuildRosterInfo(i)
+	elseif GuildRoster then
+		GuildRoster()
+	end
+	local numMembers = GetNumGuildMembers and GetNumGuildMembers(true) or 0
+	if numMembers <= 0 then return end
+
+	for i = 1, numMembers do
+		local name, _, _, level, _, _, _, _, online, _, class = GetGuildRosterInfo(i)
 			if online then
 				--only do online players
 				local playerName, playerServer = name:match("([^%-]+)%-?(.*)")
 				if playerName and playerServer then
-					addToPlayerList(playerName, playerServer, level, class)
+					addToPlayerList(playerName, playerServer, level, class, nil, true)
 				else
-					addToPlayerList(name, GetRealmName(), level, class)
+					addToPlayerList(name, GetRealmName(), level, class, nil, true)
 				end
 			end
 		end
-	end
 end
 
 local function initPlayerInfo()
 	if not XCHT_DB.enablePlayerChatStyle then return end
 
-	addon:RegisterEvent("GUILD_ROSTER_UPDATE", function() doGuildUpdate() end)
-    addon:RegisterEvent("FRIENDLIST_UPDATE", function() doFriendUpdate() end)
-	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() doFriendUpdate() end)
-    addon:RegisterEvent("RAID_ROSTER_UPDATE", function() doRosterUpdate() end)
-	addon:RegisterEvent("PLAYER_ENTERING_WORLD", function() doRosterUpdate() end)
-	addon:RegisterEvent("UPDATE_INSTANCE_INFO", function() doRosterUpdate() end)
-	addon:RegisterEvent("ZONE_CHANGED_NEW_AREA", function() doRosterUpdate() end)
-	addon:RegisterEvent("UNIT_NAME_UPDATE", function() doRosterUpdate() end)
-	addon:RegisterEvent("UNIT_PORTRAIT_UPDATE", function() doRosterUpdate() end)
-    addon:RegisterEvent("GROUP_ROSTER_UPDATE", function() doRosterUpdate() end)
+	addon:RegisterEvent("GUILD_ROSTER_UPDATE", doGuildUpdate)
+	addon:RegisterEvent("FRIENDLIST_UPDATE", doFriendUpdate)
+	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", doFriendUpdate)
+	addon:RegisterEvent("RAID_ROSTER_UPDATE", doRosterUpdate)
+	addon:RegisterEvent("PLAYER_ENTERING_WORLD", handleRosterEvent)
+	addon:RegisterEvent("UPDATE_INSTANCE_INFO", handleRosterEvent)
+	addon:RegisterEvent("ZONE_CHANGED_NEW_AREA", handleRosterEvent)
+	addon:RegisterEvent("UNIT_NAME_UPDATE", doRosterUpdate)
+	addon:RegisterEvent("UNIT_PORTRAIT_UPDATE", doRosterUpdate)
+	addon:RegisterEvent("GROUP_ROSTER_UPDATE", doRosterUpdate)
 
-    addon:RegisterEvent("PLAYER_LEVEL_UP", function() initUpdateCurrentPlayer() end)
+	addon:RegisterEvent("PLAYER_LEVEL_UP", initUpdateCurrentPlayer)
 end
 
 --[[------------------------
@@ -516,8 +648,14 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 
 local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
+	local hook = msgHooks[frame:GetName()]
+	if not hook or not hook.AddMessage then return end
 
-	if XCHT_DB.shortNames and type(text) == "string" then
+	if type(text) ~= "string" then
+		return hook.AddMessage(frame, text, ...)
+	end
+
+	if XCHT_DB.shortNames then
 		local chatNum = strmatch(text,"%d+") or ""
 		if not tonumber(chatNum) then chatNum = "" else chatNum = chatNum..":" end
 		for i = 1, #SHORT_CHANNEL_REPLACEMENTS do
@@ -530,11 +668,12 @@ local AddMessage = function(frame, text, ...)
 	end
 
 	--only do stylized player names if it's even enabled and we have the filter list
-	if addon.isFilterListEnabled and XCHT_DB.enablePlayerChatStyle and type(text) == "string" then
+	if addon.isFilterListEnabled and XCHT_DB.enablePlayerChatStyle then
 
 		--The string.find method provides an optional 4th parameter to enforce a plaintext search by itself.
-		if strfind(text, "|Hplayer:", 1, true) then
-			local old, new, playerLink, player, playerName, playerServer, playerInfo = parsePlayerInfo(frame, text, ...)
+		local hasPlayerLink = strfind(text, "|Hplayer:", 1, true) ~= nil
+		if hasPlayerLink then
+			local old, new = parsePlayerInfo(frame, text, ...)
 			if old and new and strfind(text, old, 1, true) then
 				text = plainTextReplace(text, old, new)
 			end
@@ -550,34 +689,28 @@ local AddMessage = function(frame, text, ...)
 				--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 
 				--don't do this on strings with player links and we have a positive filter
-				if not strfind(text, "|Hplayer:", 1, true) and not strfind(text, "|HBNplayer:", 1, true) and addon:searchFilterList(lastMsgEvent.event, text) then
+				local hasBNPlayerLink = hasPlayerLink or (strfind(text, "|HBNplayer:", 1, true) ~= nil)
+				if not hasPlayerLink and not hasBNPlayerLink and addon:searchFilterList(lastMsgEvent.event, text) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
-					local origText = text
+					local playerList = addon.playerList
 
 					--check for names
-					for k, v in pairs(addon.playerList) do
-						--just in case
-						if k and v then
-							local pN, pR = strsplit("@", k)
-							local passChk = false
-							--playerName, playerServer = linkName:match("([^%-]+)%-?(.*)")
-
-							--make sure we even have a player in the string before editing it
-							if pN and pR and strfind(text, pN, 1, true) and v.class then
-
+					if playerList then
+						for _, v in pairs(playerList) do
+							if v and v.name and v.class and strfind(text, v.name, 1, true) then
 								--do the replace here
 								local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class] or RAID_CLASS_COLORS[v.class]
 								if color then
-
 									local colorCode = ToHex(color.r, color.g, color.b, 1)
-									--replace if we have the name and hyphen server
+									local passChk = false
 									local hasReplaced = false
+									local playerName = v.name
 
 									--only do this for system messages that don't have a player link in it, otherwise it will ruin the player link
 									if v.realm and v.stripRealm then
-										text, passChk = plainTextReplace(text, pN.."-"..v.realm, "|c"..colorCode..pN.."-"..v.realm.."|r")
+										text, passChk = plainTextReplace(text, playerName.."-"..v.realm, "|c"..colorCode..playerName.."-"..v.realm.."|r")
 										if not passChk then
-											text, passChk = plainTextReplace(text, pN.."-"..v.stripRealm, "|c"..colorCode..pN.."-"..v.stripRealm.."|r")
+											text, passChk = plainTextReplace(text, playerName.."-"..v.stripRealm, "|c"..colorCode..playerName.."-"..v.stripRealm.."|r")
 										end
 										if passChk then
 											hasReplaced = true
@@ -585,7 +718,7 @@ local AddMessage = function(frame, text, ...)
 									end
 									if not hasReplaced then
 										--replace only whole words
-										text = replaceText(text, pN, "|c"..colorCode..pN.."|r", true)
+										text = replaceText(text, playerName, "|c"..colorCode..playerName.."|r", true)
 									end
 
 									--exit out of loop
@@ -606,7 +739,7 @@ local AddMessage = function(frame, text, ...)
 
 	end
 
-	msgHooks[frame:GetName()].AddMessage(frame, text, ...)
+	hook.AddMessage(frame, text, ...)
 end
 
 --save and restore layout functions
@@ -617,17 +750,19 @@ local function SaveLayout(chatFrame)
 
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
 
 	--first check to see if we even store this chatFrame
 	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
-		if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
+		if not XCHT_DB.frames[frameID] then XCHT_DB.frames[frameID] = {} end
 	else
 		--don't store it
-		if XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = nil end
+		if XCHT_DB.frames[frameID] then XCHT_DB.frames[frameID] = nil end
 		return
 	end
 
-	local db = XCHT_DB.frames[chatFrame:GetID()]
+	local db = XCHT_DB.frames[frameID]
 
 	local point, relativeTo, relativePoint, xOffset, yOffset = chatFrame:GetPoint()
 
@@ -654,9 +789,11 @@ local function RestoreLayout(chatFrame)
 
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then return end
-	if not XCHT_DB.frames[chatFrame:GetID()] then return end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+	if not XCHT_DB.frames[frameID] then return end
 
-	local db = XCHT_DB.frames[chatFrame:GetID()]
+	local db = XCHT_DB.frames[frameID]
 
 	if addon.IsRetail and chatFrame == DEFAULT_CHAT_FRAME then return end --don't set anything for the default chat frame in retail, it causes taints
 
@@ -712,23 +849,25 @@ local function SaveSettings(chatFrame)
 
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
 
 	--first check to see if we even store this chatFrame
 	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
-		if not XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = {} end
+		if not XCHT_DB.frames[frameID] then XCHT_DB.frames[frameID] = {} end
 	else
 		--don't store it
-		if XCHT_DB.frames[chatFrame:GetID()] then XCHT_DB.frames[chatFrame:GetID()] = nil end
+		if XCHT_DB.frames[frameID] then XCHT_DB.frames[frameID] = nil end
 		return
 	end
 
 	if chatFrame.isMoving or chatFrame.isDragging then return end
 
-	local db = XCHT_DB.frames[chatFrame:GetID()]
+	local db = XCHT_DB.frames[frameID]
 
-	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(chatFrame:GetID())
-	local windowMessages = { GetChatWindowMessages(chatFrame:GetID())}
-	local windowChannels = { GetChatWindowChannels(chatFrame:GetID())}
+	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(frameID)
+	local windowMessages = { GetChatWindowMessages(frameID)}
+	local windowChannels = { GetChatWindowChannels(frameID)}
 	local windowMessageColors = {}
 
 	--lets save all the message type colors
@@ -758,20 +897,22 @@ local function RestoreSettings(chatFrame)
 
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then return end
-	if not XCHT_DB.frames[chatFrame:GetID()] then return end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+	if not XCHT_DB.frames[frameID] then return end
 
-	local db = XCHT_DB.frames[chatFrame:GetID()]
+	local db = XCHT_DB.frames[frameID]
 
 	if db.windowMessages then
 		--remove current window messages
-		local oldWindowMessages = { GetChatWindowMessages(chatFrame:GetID())}
+		local oldWindowMessages = { GetChatWindowMessages(frameID)}
 		for k=1, #oldWindowMessages do
-			RemoveChatWindowMessages(chatFrame:GetID(), oldWindowMessages[k])
+			RemoveChatWindowMessages(frameID, oldWindowMessages[k])
 		end
 		--add the stored ones
 		local newWindowMessages = db.windowMessages
 		for k=1, #newWindowMessages do
-			AddChatWindowMessages(chatFrame:GetID(), newWindowMessages[k])
+			AddChatWindowMessages(frameID, newWindowMessages[k])
 		end
 	end
 
@@ -789,14 +930,14 @@ local function RestoreSettings(chatFrame)
 
 	if db.windowChannels then
 		--remove current window channels
-		local oldWindowChannels = { GetChatWindowChannels(chatFrame:GetID())}
+		local oldWindowChannels = { GetChatWindowChannels(frameID)}
 		for k=1, #oldWindowChannels do
-			RemoveChatWindowChannel(chatFrame:GetID(), oldWindowChannels[k])
+			RemoveChatWindowChannel(frameID, oldWindowChannels[k])
 		end
 		--add the stored ones
 		local newWindowChannels = db.windowChannels
 		for k=1, #newWindowChannels do
-			AddChatWindowChannel(chatFrame:GetID(), newWindowChannels[k])
+			AddChatWindowChannel(frameID, newWindowChannels[k])
 		end
 	end
 
@@ -813,14 +954,14 @@ local function RestoreSettings(chatFrame)
 	end
 
 	if db.windowInfo and db.windowInfo[1] then
-		SetChatWindowName(chatFrame:GetID(), db.windowInfo[1])
-		SetChatWindowSize(chatFrame:GetID(), db.windowInfo[2])
-		SetChatWindowColor(chatFrame:GetID(), db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
-		SetChatWindowAlpha(chatFrame:GetID(), db.windowInfo[6])
-		SetChatWindowShown(chatFrame:GetID(), db.windowInfo[7])
-		SetChatWindowLocked(chatFrame:GetID(), db.windowInfo[8])
-		SetChatWindowDocked(chatFrame:GetID(), db.windowInfo[9])
-		SetChatWindowUninteractable(chatFrame:GetID(), db.windowInfo[10])
+		SetChatWindowName(frameID, db.windowInfo[1])
+		SetChatWindowSize(frameID, db.windowInfo[2])
+		SetChatWindowColor(frameID, db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
+		SetChatWindowAlpha(frameID, db.windowInfo[6])
+		SetChatWindowShown(frameID, db.windowInfo[7])
+		SetChatWindowLocked(frameID, db.windowInfo[8])
+		SetChatWindowDocked(frameID, db.windowInfo[9])
+		SetChatWindowUninteractable(frameID, db.windowInfo[10])
 	end
 
 	if db.chatParent then
@@ -845,105 +986,85 @@ local function SaveChannelColors()
 	if XCHT_DB.lockChatSettings then return end
 	if not XCHT_DB.channelColors then XCHT_DB.channelColors = {} end
 
-	local function GetColorInfo(...)
-		local count = 1
-		for i=1, select("#", ...), 3 do
-			local channelNum = select(i, ...)
-			local tag = "CHANNEL"..channelNum
-			local channelName = select(i+1, ...)
-			local disabled = select(i+2, ...)
+	local channelData = { GetChannelList() }
+	local count = 1
+	for i = 1, #channelData, 3 do
+		local channelNum = channelData[i]
+		local channelName = channelData[i + 1]
+		local tag = "CHANNEL"..channelNum
 
-			if ChatTypeInfo[tag] then
-				local colorR, colorG, colorB, messageType = GetMessageTypeColor(tag)
-				if colorR and colorG and colorB then
-					XCHT_DB.channelColors[count] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, tag=tag}
-				end
+		if ChatTypeInfo[tag] then
+			local colorR, colorG, colorB = GetMessageTypeColor(tag)
+			if colorR and colorG and colorB then
+				XCHT_DB.channelColors[count] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, tag=tag}
 			end
-			count = count + 1
 		end
+		count = count + 1
 	end
-
-	GetColorInfo(GetChannelList())
 end
 
 local function SaveDebugInfo(chatFrame)
 	if not addonLoaded then return end
 	if not chatFrame then return end
 	if not XCHT_DB then return end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
 
 	if XCHT_DB.debugChannels then XCHT_DB.debugChannels = nil end --remove old debug table
 	if not XCHT_DB.debugInfo then XCHT_DB.debugInfo = {} end
 
 	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
-		if not XCHT_DB.debugInfo[chatFrame:GetID()] then XCHT_DB.debugInfo[chatFrame:GetID()] = {} end
+		if not XCHT_DB.debugInfo[frameID] then XCHT_DB.debugInfo[frameID] = {} end
 	else
 		--don't store it
-		if XCHT_DB.debugInfo[chatFrame:GetID()] then XCHT_DB.debugInfo[chatFrame:GetID()] = nil end
+		if XCHT_DB.debugInfo[frameID] then XCHT_DB.debugInfo[frameID] = nil end
 		return
 	end
 
-	local debugDB = XCHT_DB.debugInfo[chatFrame:GetID()]
+	local debugDB = XCHT_DB.debugInfo[frameID]
 	local channelList = chatFrame.channelList
 	local zoneChannelList = chatFrame.zoneChannelList
 
-	local function IsChannelNameChecked(channelName)
-		if not channelList then return false end
-		for index, value in pairs(channelList) do
-			if value == channelName then
-				return true
-			end
-		end
-		return false
+	if not channelList or #channelList < 1 then return end
+	if not zoneChannelList or #zoneChannelList < 1 then return end
+
+	local channelIndexByName = {}
+	for i = 1, #channelList do
+		channelIndexByName[channelList[i]] = i
 	end
-	local function GetChannelID(channelName)
-		if not channelList then return 0 end
-		if not zoneChannelList then return 0 end
 
-		for index, value in pairs(channelList) do
-			if value == channelName then
-				if zoneChannelList[index] then
-					return zoneChannelList[index]
-				end
-				return 0
-			end
-		end
-		return 0
-	end
-	local function GetDebugInfo(...)
-		if not channelList or #channelList < 1 then return end
-		if not zoneChannelList or #zoneChannelList < 1 then return end
-
-		for i=1, select("#", ...), 3 do
-
-			local channelNum = select(i, ...)
+	local channels = { GetChannelList() }
+	for i = 1, #channels, 3 do
+		local channelNum = channels[i]
+		local channelName = channels[i + 1]
+		local disabled = channels[i + 2]
+		if channelNum then
 			local tag = "CHANNEL"..channelNum
-			local channelName = select(i+1, ...)
-			local disabled = select(i+2, ...)
-			local checked = IsChannelNameChecked(channelName)
-
-			if channelNum then
-				local _, longChannelName, instanceID, isCommunitiesChannel = GetChannelName(channelNum)
-
-				debugDB[channelNum] = {
-					channelNum = channelNum,
-					tag = tag,
-					channelName = channelName,
-					isDisabled = disabled,
-					isChecked = checked,
-					chatFrameID = chatFrame:GetID() or 0,
-					chatFrameName = chatFrame:GetName() or "Unknown",
-					channelID = GetChannelID(channelName),
-					longChannelName = longChannelName,
-					instanceID = instanceID,
-					isCommunitiesChannel = isCommunitiesChannel,
-					channelShortcut = C_ChatInfo and C_ChatInfo.GetChannelShortcutForChannelID(GetChannelID(channelName)) or "?",
-				}
+			local index = channelIndexByName[channelName]
+			local checked = index ~= nil
+			local channelID = index and zoneChannelList[index] or 0
+			local _, longChannelName, instanceID, isCommunitiesChannel = GetChannelName(channelNum)
+			local shortcut = "?"
+			if C_ChatInfo and C_ChatInfo.GetChannelShortcutForChannelID then
+				shortcut = C_ChatInfo.GetChannelShortcutForChannelID(channelID) or "?"
 			end
 
+			debugDB[channelNum] = {
+				channelNum = channelNum,
+				tag = tag,
+				channelName = channelName,
+				isDisabled = disabled,
+				isChecked = checked,
+				chatFrameID = frameID or 0,
+				chatFrameName = chatFrame:GetName() or "Unknown",
+				channelID = channelID,
+				longChannelName = longChannelName,
+				instanceID = instanceID,
+				isCommunitiesChannel = isCommunitiesChannel,
+				channelShortcut = shortcut,
+			}
 		end
 	end
-
-	GetDebugInfo(GetChannelList())
 end
 
 local function saveChatSettings(f)
@@ -991,15 +1112,17 @@ hooksecurefunc("FCF_Tab_OnClick", function(self, button)
 	end
 end)
 
-ChatConfigFrame:HookScript("OnHide", function(self)
-	for i = 1, NUM_CHAT_WINDOWS do
-		local n = ("ChatFrame%d"):format(i)
-		local f = _G[n]
-		if f then
-			saveChatSettings(f)
+if ChatConfigFrame and ChatConfigFrame.HookScript then
+	ChatConfigFrame:HookScript("OnHide", function(self)
+		for i = 1, NUM_CHAT_WINDOWS do
+			local n = ("ChatFrame%d"):format(i)
+			local f = _G[n]
+			if f then
+				saveChatSettings(f)
+			end
 		end
-	end
-end)
+	end)
+end
 
 --[[------------------------
 	CHAT COPY
@@ -1038,8 +1161,8 @@ local function unescape(str)
 		local accountName
 		local stripBNet
 
-		if presenceID then
-			local numBNet, onlineBNet = BNGetNumFriends()
+		if presenceID and C_BattleNet and BNGetNumFriends and C_BattleNet.GetFriendAccountInfo then
+			local numBNet = BNGetNumFriends()
 			for i = 1, numBNet do
 				local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
 				--only continue if we have a account info to work with
@@ -1053,7 +1176,7 @@ local function unescape(str)
 						--if it matches the one we found earlier, then replace it with a battle.net tag instead
 						if accountName and accountName == presenceID then
 							--don't show entire bnet tag just the name
-						stripBNet = strmatch(accountInfo.battleTag, "(.-)#")
+							stripBNet = strmatch(accountInfo.battleTag, "(.-)#")
 							str = gsub(str, "|K(.-)|k", stripBNet or accountInfo.battleTag)
 							--return out of here since we already did the replace
 							--we don't want to go to the failsafe below
@@ -1083,13 +1206,15 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	copyFrame.MLEditBox:SetText("") --clear it first in case there were previous messages
 	copyFrame.currChatIndex = chatIndex
 
+	local chatFrame = _G["ChatFrame"..chatIndex]
+	if not chatFrame then return end
+
 	--the editbox of the multiline editbox (The parent of the multiline object)
 	local parentEditBox = copyFrame.MLEditBox.editBox
 
 	--there is a hard limit of text that can be highlighted in an editbox to 500 lines.
 	local MAXLINES = 150 --150 don't use large numbers or it will cause LAG when frame opens.  EditBox was not made for large amounts of text
-	local msgCount = _G["ChatFrame"..chatIndex]:GetNumMessages()
-	local motdString = COMMUNITIES_MESSAGE_OF_THE_DAY_FORMAT:gsub("\"%%s\"", "")
+	local msgCount = chatFrame:GetNumMessages()
 	local startPos = 0
 	local endPos = 0
 	local lineText
@@ -1100,7 +1225,7 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	for i = 1, msgCount, MAXLINES do
 	  pageCount = i-1 --the block will extend by 1 past 150, so subtract 1
 	  if pageCount <= 0 then pageCount = 1 end --this is the first page, so start at 1
-	  table.insert(pages, pageCount)
+	  pages[#pages + 1] = pageCount
 	end
 
 	--check for custom buffer limit by the user, ignore if it's set to zero
@@ -1110,7 +1235,7 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 		for i = #pages, 1, -1 do
 			counter = counter + 1
 			if counter <= XCHT_DB.pageBufferLimit then
-				table.insert(tmpPages, pages[i])
+				tmpPages[#tmpPages + 1] = pages[i]
 			else
 				break
 			end
@@ -1146,7 +1271,7 @@ local function GetChatText(copyFrame, chatIndex, pageNum)
 	if endPos > msgCount then endPos = msgCount end
 
 	for i = startPos, endPos do
-		local chatMsg, r, g, b, chatTypeID = _G["ChatFrame"..chatIndex]:GetMessageInfo(i)
+		local chatMsg, r, g, b, chatTypeID = chatFrame:GetMessageInfo(i)
 		if not chatMsg then break end
 
 		--fix situations where links end the color prematurely
@@ -1339,7 +1464,7 @@ local function CreateCopyFrame()
 		if self.OnUpdateCounter < 0.1 then return end
 		self.OnUpdateCounter = 0
 
-		local pos = math.max(strlen(editBox:GetText()), editBox:GetNumLetters())
+		local pos = editBox:GetNumLetters()
 
 		if copyFrame.handleCursorChange then
 			editBox:SetFocus()
@@ -1419,7 +1544,6 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 	obj:SetNormalTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj:SetHighlightTexture("Interface\\AddOns\\xanChat\\media\\copyhighlight")
 	obj:SetPushedTexture("Interface\\AddOns\\xanChat\\media\\copy")
-	obj.texture = obj.bg
 	obj:SetFrameLevel(7)
 	obj:SetWidth(18)
 	obj:SetHeight(18)
@@ -1438,12 +1562,14 @@ local function CreateCopyChatButtons(chatIndex, chatFrame)
 		chatFrame:HookScript("OnLeave", function(self)
 			obj:Hide()
 		end)
-		chatFrame.ScrollToBottomButton:HookScript("OnEnter", function(self)
-			obj:Show()
-		end)
-		chatFrame.ScrollToBottomButton:HookScript("OnLeave", function(self)
-			obj:Hide()
-		end)
+		if chatFrame.ScrollToBottomButton then
+			chatFrame.ScrollToBottomButton:HookScript("OnEnter", function(self)
+				obj:Show()
+			end)
+			chatFrame.ScrollToBottomButton:HookScript("OnLeave", function(self)
+				obj:Hide()
+			end)
+		end
 
 		--prevent object blinking because chat continues to scroll
 		function obj.show()
@@ -1503,23 +1629,23 @@ local function AddEditBoxHistoryLine(editBox)
 	if not HistoryDB then return end
 
 	local text = ""
-	local type = editBox:GetAttribute("chatType")
-	local header = _G["SLASH_" .. type .. "1"]
+	local chatType = editBox:GetAttribute("chatType")
+	local header = chatType and _G["SLASH_" .. chatType .. "1"]
 
 	if (header) then
 		text = header
 	end
 
-	if (type == "WHISPER") then
+	if (chatType == "WHISPER") then
 		text = text .. " " .. editBox:GetAttribute("tellTarget")
-	elseif (type == "CHANNEL") then
+	elseif (chatType == "CHANNEL") then
 		text = "/" .. editBox:GetAttribute("channelTarget")
 	end
 
 	local editBoxText = editBox:GetText()
 	if (strlen(editBoxText) > 0) then
 
-		text = text .. " " .. editBox:GetText()
+		text = text .. " " .. editBoxText
         if not text or (text == "") then
             return
         end
@@ -1527,7 +1653,7 @@ local function AddEditBoxHistoryLine(editBox)
 		local name = editBox:GetName()
 		HistoryDB[name] = HistoryDB[name] or {}
 
-		tinsert(HistoryDB[name], #HistoryDB[name] + 1, text)
+		HistoryDB[name][#HistoryDB[name] + 1] = text
 		if #HistoryDB[name] > 40 then  --max number of lines we want 40 seems like a good number
 			tremove(HistoryDB[name], 1)
 		end
@@ -1538,7 +1664,11 @@ local function ClearEditBoxHistory(editBox)
 	if not HistoryDB then return end
 
 	local name = editBox:GetName()
-	HistoryDB[name] = {}
+	if wipe and HistoryDB[name] then
+		wipe(HistoryDB[name])
+	else
+		HistoryDB[name] = {}
+	end
 
 end
 
@@ -1560,11 +1690,13 @@ local function doAlphaCheck(chatFrame, chatName)
 		objChat.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 		--objChat.hasBeenFaded = true --causes a taint in retail if set to true/false
 
-		for index, value in pairs(CHAT_FRAME_TEXTURES) do
-			local object = _G[objName..value]
-			object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
-			if ( object:IsShown() ) then
-				UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), objChat.oldAlpha) --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
+		for i = 1, #CHAT_FRAME_TEXTURES do
+			local object = _G[objName..CHAT_FRAME_TEXTURES[i]]
+			if object then
+				object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA)
+				if object:IsShown() then
+					UIFrameFadeIn(object, CHAT_FRAME_FADE_TIME, object:GetAlpha(), objChat.oldAlpha) --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
+				end
 			end
 		end
 
@@ -1574,7 +1706,8 @@ end
 local function disableChatFrameFading()
 
 	FCF_FadeInChatFrame = function(chatframe)
-		if chatframe:GetName() and strfind(chatframe:GetName(), "ChatFrame", 1, true) then
+		local name = chatframe:GetName()
+		if name and strfind(name, "ChatFrame", 1, true) then
 			doAlphaCheck(chatframe)
 			return
 		end
@@ -1582,7 +1715,8 @@ local function disableChatFrameFading()
 	end
 
 	FCF_FadeOutChatFrame = function(chatframe)
-		if chatframe:GetName() and strfind(chatframe:GetName(), "ChatFrame", 1, true) then
+		local name = chatframe:GetName()
+		if name and strfind(name, "ChatFrame", 1, true) then
 			doAlphaCheck(chatframe)
 			return
 		end
@@ -1590,14 +1724,16 @@ local function disableChatFrameFading()
 	end
 
 	FCF_FadeOutScrollbar = function(chatframe)
-		if chatframe:GetName() and strfind(chatframe:GetName(), "ChatFrame", 1, true) then
+		local name = chatframe:GetName()
+		if name and strfind(name, "ChatFrame", 1, true) then
 			return
 		end
 		old_FCF_FadeOutScrollbar(chatframe)
 	end
 
 	FCF_SetWindowAlpha = function(frame, alpha, doNotSave)
-		if frame:GetName() and strfind(frame:GetName(), "ChatFrame", 1, true) then
+		local name = frame:GetName()
+		if name and strfind(name, "ChatFrame", 1, true) then
 			frame.oldAlpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
 			return
 		end
@@ -1680,8 +1816,8 @@ end
 --------------------------]]
 
 function addon:setUserAlpha()
-	for _, frameName in pairs(CHAT_FRAMES) do
-		doAlphaCheck(nil, frameName)
+	for i = 1, #CHAT_FRAMES do
+		doAlphaCheck(nil, CHAT_FRAMES[i])
 	end
 end
 
@@ -1689,19 +1825,21 @@ end
 	Disable enter/leave/changed channel notifications
 --------------------------]]
 
-function addon:setDisableChatEnterLeaveNotice()
-
-	local function checkNotice(self, event, msg, author, ...)
-		if XCHT_DB.disableChatEnterLeaveNotice then
-			return true
-		else
-			return false, msg, author, ...
-		end
+local function checkNoticeFilter(self, event, msg, author, ...)
+	if XCHT_DB.disableChatEnterLeaveNotice then
+		return true
 	end
+	return false, msg, author, ...
+end
 
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", checkNotice)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", checkNotice)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", checkNotice)
+function addon:setDisableChatEnterLeaveNotice()
+	if addon._noticeFilterRegistered then return end
+	if ChatFrame_AddMessageEventFilter then
+		ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", checkNoticeFilter)
+		ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", checkNoticeFilter)
+		ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", checkNoticeFilter)
+	end
+	addon._noticeFilterRegistered = true
 end
 
 for i = 1, NUM_CHAT_WINDOWS do
@@ -1737,8 +1875,8 @@ local function SetupChatFrame(chatID, chatFrame)
 		f.hasBeenFaded = nil --causes a taint in retail if set to true/false (old version)
 		--f.hasBeenFaded = false --causes a taint in retail if set to true/false (new version)
 
-		for index, value in pairs(CHAT_FRAME_TEXTURES) do
-			local object = _G[n..value]
+		for i = 1, #CHAT_FRAME_TEXTURES do
+			local object = _G[n..CHAT_FRAME_TEXTURES[i]]
 			if object then
 				if XCHT_DB.disableChatFrameFade then
 					object:SetAlpha(XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA) --could possibly lead to taint issues, blizzard doesn't like addons setting the alpha
@@ -1988,7 +2126,7 @@ end
 function addon:EnableAddon()
 
 	local currentPlayer = UnitName("player") or "Unknown"
-	local currentRealm = select(2, UnitFullName("player")) --get shortend realm name with no spaces and dashes
+	local currentRealm = (UnitFullName and select(2, UnitFullName("player"))) or select(2, UnitName("player")) or GetRealmName() or "Unknown" --get shortend realm name with no spaces and dashes
 
 	--do the DB stuff
 	if not XCHT_DB then XCHT_DB = {} end
@@ -2021,11 +2159,7 @@ function addon:EnableAddon()
 		pageBufferLimit = 0, --set how many pages to display in CopyChat (0 for no limit)
 		debugWrapper = false,
 	}
-	for key, value in pairs(defaults) do
-		if XCHT_DB[key] == nil then
-			XCHT_DB[key] = value
-		end
-	end
+	ApplyDefaults(XCHT_DB, defaults)
 	addon.wrapperDebug = XCHT_DB.debugWrapper
 
 	local ver = (addon.GetAddOnMetadata and addon.GetAddOnMetadata(ADDON_NAME, "Version")) or "1.0"
@@ -2041,9 +2175,13 @@ function addon:EnableAddon()
 
 	--iniate playerInfo events
 	initPlayerInfo()
-    if IsInGuild() then
-      C_GuildInfo.GuildRoster()
-    end
+	if IsInGuild() then
+		if C_GuildInfo and C_GuildInfo.GuildRoster then
+			C_GuildInfo.GuildRoster()
+		elseif GuildRoster then
+			GuildRoster()
+		end
+	end
 	initUpdateCurrentPlayer()
 
 	--turn off profanity filter
@@ -2058,13 +2196,15 @@ function addon:EnableAddon()
 	addon:setDisableChatEnterLeaveNotice()
 
 	--toggle class colors
-	for i,v in pairs(CHAT_CONFIG_CHAT_LEFT) do
-		ToggleChatColorNamesByClassGroup(true, v.type)
-	end
+	if ToggleChatColorNamesByClassGroup then
+		for i, v in pairs(CHAT_CONFIG_CHAT_LEFT) do
+			ToggleChatColorNamesByClassGroup(true, v.type)
+		end
 
-	--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
-	for iCh = 1, 15 do
-		ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
+		--this is to toggle class colors for all the global channels that is not listed under CHAT_CONFIG_CHAT_LEFT
+		for iCh = 1, 15 do
+			ToggleChatColorNamesByClassGroup(true, "CHANNEL"..iCh)
+		end
 	end
 
 	--do the custom outgoing whisper color
@@ -2077,18 +2217,24 @@ function addon:EnableAddon()
 
 	--show/hide the chat social buttons
 	if addon.IsRetail and XCHT_DB.hideSocial then
-		QuickJoinToastButton:Hide()
-		QuickJoinToastButton:SetScript("OnShow", dummy)
+		if QuickJoinToastButton then
+			QuickJoinToastButton:Hide()
+			QuickJoinToastButton:SetScript("OnShow", dummy)
+		end
 	end
 
 	if addon.IsRetail and XCHT_DB.moveSocialButtonToBottom then
-		ChatAlertFrame:ClearAllPoints()
-		ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -60)
+		if ChatAlertFrame then
+			ChatAlertFrame:ClearAllPoints()
+			ChatAlertFrame:SetPoint("TOPLEFT",  ChatFrame1, "BOTTOMLEFT",  -33, -60)
+		end
 	end
 
 	if XCHT_DB.hideChatMenuButton then
-		ChatFrameMenuButton:Hide()
-		ChatFrameMenuButton:SetScript("OnShow", dummy)
+		if ChatFrameMenuButton then
+			ChatFrameMenuButton:Hide()
+			ChatFrameMenuButton:SetScript("OnShow", dummy)
+		end
 	end
 
 	--enable short channel names for globals
@@ -2173,7 +2319,15 @@ function addon:EnableAddon()
 		end
 
 		if Settings then
-			Settings.OpenToCategory("xanChat")
+			local categoryID = addon.settingsCategoryID
+			if not categoryID and addon.settingsCategory and addon.settingsCategory.GetID then
+				categoryID = addon.settingsCategory:GetID()
+			end
+			if categoryID then
+				Settings.OpenToCategory(categoryID)
+			else
+				Settings.OpenToCategory(ADDON_NAME)
+			end
 		elseif InterfaceOptionsFrame_OpenToCategory then
 
 			if not addon.IsRetail and InterfaceOptionsFrame then
@@ -2232,8 +2386,12 @@ end
 
 --this is for temporary Whisper windows.  They are NUM_CHAT_WINDOWS + 1 and so forth
 local old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
-FCF_OpenTemporaryWindow = function(...)
-	local frame = old_OpenTemporaryWindow(...)
-	SetupChatFrame(frame:GetID())
-	return frame
+if old_OpenTemporaryWindow then
+	FCF_OpenTemporaryWindow = function(...)
+		local frame = old_OpenTemporaryWindow(...)
+		if frame and frame.GetID then
+			SetupChatFrame(frame:GetID())
+		end
+		return frame
+	end
 end

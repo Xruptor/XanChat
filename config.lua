@@ -10,6 +10,7 @@ addon.configFrame = CreateFrame("frame", ADDON_NAME.."_config_eventFrame", UIPar
 local configFrame = addon.configFrame
 
 local L = addon.L
+local floor = math.floor
 local configObjList = {}
 
 local lastObject = {}
@@ -45,7 +46,10 @@ local function createCheckbutton(parentFrame, displayText)
 	chkBoxIndex = chkBoxIndex + 1
 
 	local checkbutton = CreateFrame("CheckButton", ADDON_NAME.."_config_chkbtn_" .. chkBoxIndex, parentFrame, "ChatConfigCheckButtonTemplate")
-	getglobal(checkbutton:GetName() .. 'Text'):SetText(" "..displayText)
+	local label = _G[checkbutton:GetName() .. "Text"]
+	if label then
+		label:SetText(" "..displayText)
+	end
 
 	return checkbutton
 end
@@ -121,8 +125,13 @@ local function createColorPicker(parentFrame, dbObj, objName, displayText)
 
 	local function Update(self, value)
 		local r, g, b, a
-		if(type(value) == 'table' and r.GetRGB) then
-			r, g, b, a = value:GetRGBA()
+		if type(value) == "table" then
+			if value.GetRGBA then
+				r, g, b, a = value:GetRGBA()
+			elseif value.GetRGB then
+				r, g, b = value:GetRGB()
+				a = 1
+			end
 		else
 			r, g, b, a = ToRGBA(value)
 		end
@@ -174,12 +183,40 @@ end
 local function setEnabled(objType, obj, switch)
 	if objType == "checkbox" then
 		obj:SetEnabled(switch)
-		if switch then
-			obj.Text:SetTextColor(1, 1, 1) --white
-		else
-			obj.Text:SetTextColor(128/255, 128/255, 128/255) --gray
+		if obj.Text then
+			if switch then
+				obj.Text:SetTextColor(1, 1, 1) --white
+			else
+				obj.Text:SetTextColor(128/255, 128/255, 128/255) --gray
+			end
 		end
 	end
+end
+
+local function showReloadPopup()
+	if not addon.xanChatReloadPopup then
+		StaticPopup_Show("XANCHAT_APPLYCHANGES")
+	end
+end
+
+local function bindToggle(btn, key, opts)
+	opts = opts or {}
+	btn:SetScript("OnShow", function()
+		btn:SetChecked(XCHT_DB[key])
+		if opts.onShow then opts.onShow(btn) end
+	end)
+	btn.func = function()
+		local newValue = not XCHT_DB[key]
+		XCHT_DB[key] = newValue
+		if opts.onToggle then opts.onToggle(newValue, btn) end
+		if opts.messageOn or opts.messageOff then
+			DEFAULT_CHAT_FRAME:AddMessage(newValue and opts.messageOn or opts.messageOff)
+		end
+		if opts.showReload then
+			showReloadPopup()
+		end
+	end
+	btn:SetScript("OnClick", btn.func)
 end
 
 local function LoadAboutFrame()
@@ -190,7 +227,8 @@ local function LoadAboutFrame()
 	about:Hide()
 
     local fields = {"Version", "Author"}
-	local notes = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Notes")
+	local getMetadata = addon.GetAddOnMetadata or (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+	local notes = getMetadata and getMetadata(ADDON_NAME, "Notes") or ""
 
     local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 
@@ -208,7 +246,7 @@ local function LoadAboutFrame()
 
 	local anchor
 	for _,field in pairs(fields) do
-		local val = C_AddOns.GetAddOnMetadata(ADDON_NAME, field)
+		local val = getMetadata and getMetadata(ADDON_NAME, field)
 		if val then
 			local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 			title:SetWidth(75)
@@ -233,6 +271,9 @@ local function LoadAboutFrame()
 		local category, layout = _G.Settings.RegisterCanvasLayoutCategory(about, about.name);
 		_G.Settings.RegisterAddOnCategory(category);
 		addon.settingsCategory = category
+		if category and category.GetID then
+			addon.settingsCategoryID = category:GetID()
+		end
 	end
 
 	return about
@@ -288,65 +329,34 @@ function configFrame:EnableConfig()
 	addon.aboutPanel.btnStickyChannelsList = btnStickyChannelsList
 
 	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.LockChatSettingsInfo.."|r")
-	btnLockChatSettings:SetScript("OnShow", function() btnLockChatSettings:SetChecked(XCHT_DB.lockChatSettings) end)
-	btnLockChatSettings.func = function()
-		local value = XCHT_DB.lockChatSettings
-
-		if value then
-			XCHT_DB.lockChatSettings = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.LockChatSettingsOff)
-		else
-			XCHT_DB.lockChatSettings = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.LockChatSettingsOn)
-		end
-		configFrame:DoLock()
-	end
-	btnLockChatSettings:SetScript("OnClick", btnLockChatSettings.func)
+	bindToggle(btnLockChatSettings, "lockChatSettings", {
+		messageOn = L.LockChatSettingsOn,
+		messageOff = L.LockChatSettingsOff,
+		onToggle = function()
+			configFrame:DoLock()
+		end,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnLockChatSettings, 20, -110, true, true)
 	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
 
 	if addon.IsRetail then
 		local btnSocial = createCheckbutton(addon.aboutPanel, L.SocialInfo)
-		btnSocial:SetScript("OnShow", function() btnSocial:SetChecked(XCHT_DB.hideSocial) end)
-		btnSocial.func = function()
-			local value = XCHT_DB.hideSocial
-
-			if value then
-				XCHT_DB.hideSocial = false
-				DEFAULT_CHAT_FRAME:AddMessage(L.SocialOn)
-			else
-				XCHT_DB.hideSocial = true
-				DEFAULT_CHAT_FRAME:AddMessage(L.SocialOff)
-			end
-
-			if not addon.xanChatReloadPopup then
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
-			end
-		end
-		btnSocial:SetScript("OnClick", btnSocial.func)
+		bindToggle(btnSocial, "hideSocial", {
+			messageOn = L.SocialOff,
+			messageOff = L.SocialOn,
+			showReload = true,
+		})
 
 		addConfigEntry(addon.aboutPanel.name, btnSocial, 20, -22)
 		addon.aboutPanel.btnSocial = btnSocial
 
 		local btnMoveSocialButton = createCheckbutton(addon.aboutPanel, L.MoveSocialButtonInfo)
-		btnMoveSocialButton:SetScript("OnShow", function() btnMoveSocialButton:SetChecked(XCHT_DB.moveSocialButtonToBottom) end)
-		btnMoveSocialButton.func = function()
-			local value = XCHT_DB.moveSocialButtonToBottom
-
-			if value then
-				XCHT_DB.moveSocialButtonToBottom = false
-				DEFAULT_CHAT_FRAME:AddMessage(L.MoveSocialButtonOff)
-			else
-				XCHT_DB.moveSocialButtonToBottom = true
-				DEFAULT_CHAT_FRAME:AddMessage(L.MoveSocialButtonOn)
-			end
-
-			if not addon.xanChatReloadPopup then
-				StaticPopup_Show("XANCHAT_APPLYCHANGES")
-			end
-		end
-		btnMoveSocialButton:SetScript("OnClick", btnMoveSocialButton.func)
+		bindToggle(btnMoveSocialButton, "moveSocialButtonToBottom", {
+			messageOn = L.MoveSocialButtonOn,
+			messageOff = L.MoveSocialButtonOff,
+			showReload = true,
+		})
 
 		addConfigEntry(addon.aboutPanel.name, btnMoveSocialButton, 45, -22)
 		addon.aboutPanel.btnMoveSocialButton = btnMoveSocialButton
@@ -354,393 +364,187 @@ function configFrame:EnableConfig()
 	end
 
 	local btnChatMenu = createCheckbutton(addon.aboutPanel, L.ChatMenuButtonInfo)
-	btnChatMenu:SetScript("OnShow", function() btnChatMenu:SetChecked(XCHT_DB.hideChatMenuButton) end)
-	btnChatMenu.func = function()
-		local value = XCHT_DB.hideChatMenuButton
-
-		if value then
-			XCHT_DB.hideChatMenuButton = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.ChatMenuButtonOn)
-		else
-			XCHT_DB.hideChatMenuButton = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.ChatMenuButtonOff)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnChatMenu:SetScript("OnClick", btnChatMenu.func)
+	bindToggle(btnChatMenu, "hideChatMenuButton", {
+		messageOn = L.ChatMenuButtonOff,
+		messageOff = L.ChatMenuButtonOn,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnChatMenu, 20, -22)
 	addon.aboutPanel.btnChatMenu = btnChatMenu
 
 	local btnScroll = createCheckbutton(addon.aboutPanel, L.ScrollInfo)
-	btnScroll:SetScript("OnShow", function() btnScroll:SetChecked(XCHT_DB.hideScroll) end)
-	btnScroll.func = function()
-		local value = XCHT_DB.hideScroll
-
-		if value then
-			XCHT_DB.hideScroll = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.ScrollOn)
-		else
-			XCHT_DB.hideScroll = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.ScrollOff)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnScroll:SetScript("OnClick", btnScroll.func)
+	bindToggle(btnScroll, "hideScroll", {
+		messageOn = L.ScrollOff,
+		messageOff = L.ScrollOn,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnScroll, 20, -22)
 	addon.aboutPanel.btnScroll = btnScroll
 
 	local btnHideSideBars = createCheckbutton(addon.aboutPanel, L.HideScrollBarsInfo)
-	btnHideSideBars:SetScript("OnShow", function() btnHideSideBars:SetChecked(XCHT_DB.hideSideButtonBars) end)
-	btnHideSideBars.func = function()
-		local value = XCHT_DB.hideSideButtonBars
-	
-		if value then
-			XCHT_DB.hideSideButtonBars = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.HideScrollBarsOn)
-		else
-			XCHT_DB.hideSideButtonBars = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.HideScrollBarsOff)
-		end
-	
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnHideSideBars:SetScript("OnClick", btnHideSideBars.func)
+	bindToggle(btnHideSideBars, "hideSideButtonBars", {
+		messageOn = L.HideScrollBarsOn,
+		messageOff = L.HideScrollBarsOff,
+		showReload = true,
+	})
 	
 	addConfigEntry(addon.aboutPanel.name, btnHideSideBars, 20, -22)
 	addon.aboutPanel.btnHideSideBars = btnHideSideBars
 
 	local btnShortNames = createCheckbutton(addon.aboutPanel, L.ShortNamesInfo)
-	btnShortNames:SetScript("OnShow", function() btnShortNames:SetChecked(XCHT_DB.shortNames) end)
-	btnShortNames.func = function()
-		local value = XCHT_DB.shortNames
-
-		if value then
-			XCHT_DB.shortNames = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.ShortNamesOff)
-		else
-			XCHT_DB.shortNames = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.ShortNamesOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnShortNames:SetScript("OnClick", btnShortNames.func)
+	bindToggle(btnShortNames, "shortNames", {
+		messageOn = L.ShortNamesOn,
+		messageOff = L.ShortNamesOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnShortNames, 20, -22)
 	addon.aboutPanel.btnShortNames = btnShortNames
 
 	local btnEditBox = createCheckbutton(addon.aboutPanel, L.EditBoxInfo)
-	btnEditBox:SetScript("OnShow", function() btnEditBox:SetChecked(XCHT_DB.editBoxTop) end)
-	btnEditBox.func = function()
-		local value = XCHT_DB.editBoxTop
-
-		if value then
-			XCHT_DB.editBoxTop = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxBottom)
-		else
-			XCHT_DB.editBoxTop = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxTop)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnEditBox:SetScript("OnClick", btnEditBox.func)
+	bindToggle(btnEditBox, "editBoxTop", {
+		messageOn = L.EditBoxTop,
+		messageOff = L.EditBoxBottom,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnEditBox, 20, -22)
 	addon.aboutPanel.btnEditBox = btnEditBox
 
 	local btnTabs = createCheckbutton(addon.aboutPanel, L.TabsInfo)
-	btnTabs:SetScript("OnShow", function() btnTabs:SetChecked(XCHT_DB.hideTabs) end)
-	btnTabs.func = function()
-		local value = XCHT_DB.hideTabs
-
-		if value then
-			XCHT_DB.hideTabs = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.TabsOn)
-		else
-			XCHT_DB.hideTabs = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.TabsOff)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnTabs:SetScript("OnClick", btnTabs.func)
+	bindToggle(btnTabs, "hideTabs", {
+		messageOn = L.TabsOff,
+		messageOff = L.TabsOn,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnTabs, 20, -22)
 	addon.aboutPanel.btnTabs = btnTabs
 
 	local btnFontOutline = createCheckbutton(addon.aboutPanel, L.OutlineInfo)
-	btnFontOutline:SetScript("OnShow", function()
-		btnFontOutline:SetChecked(XCHT_DB.addFontOutline)
-	end)
-	btnFontOutline.func = function()
-		local value = XCHT_DB.addFontOutline
-
-		if value then
-			XCHT_DB.addFontOutline = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.OutlineOff)
-		else
-			XCHT_DB.addFontOutline = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.OutlineOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnFontOutline:SetScript("OnClick", btnFontOutline.func)
+	bindToggle(btnFontOutline, "addFontOutline", {
+		messageOn = L.OutlineOn,
+		messageOff = L.OutlineOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnFontOutline, 20, -22)
 	addon.aboutPanel.btnFontOutline = btnFontOutline
 
 	local btnShadow = createCheckbutton(addon.aboutPanel, L.ShadowInfo)
-	btnShadow:SetScript("OnShow", function() btnShadow:SetChecked(XCHT_DB.addFontShadow) end)
-	btnShadow.func = function()
-		local value = XCHT_DB.addFontShadow
-
-		if value then
-			XCHT_DB.addFontShadow = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.ShadowOff)
-		else
-			XCHT_DB.addFontShadow = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.ShadowOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnShadow:SetScript("OnClick", btnShadow.func)
+	bindToggle(btnShadow, "addFontShadow", {
+		messageOn = L.ShadowOn,
+		messageOff = L.ShadowOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnShadow, 45, -22)
 	addon.aboutPanel.btnShadow = btnShadow
 
 	local btnVoice = createCheckbutton(addon.aboutPanel, L.VoiceInfo)
-	btnVoice:SetScript("OnShow", function() btnVoice:SetChecked(XCHT_DB.hideVoice) end)
-	btnVoice.func = function()
-		local value = XCHT_DB.hideVoice
-
-		if value then
-			XCHT_DB.hideVoice = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.VoiceOn)
-		else
-			XCHT_DB.hideVoice = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.VoiceOff)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnVoice:SetScript("OnClick", btnVoice.func)
+	bindToggle(btnVoice, "hideVoice", {
+		messageOn = L.VoiceOff,
+		messageOff = L.VoiceOn,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnVoice, 20, -22)
 	addon.aboutPanel.btnVoice = btnVoice
 
 	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.EditBoxBorderInfo)
-	btnEditBoxBorder:SetScript("OnShow", function() btnEditBoxBorder:SetChecked(XCHT_DB.hideEditboxBorder) end)
-	btnEditBoxBorder.func = function()
-		local value = XCHT_DB.hideEditboxBorder
-
-		if value then
-			XCHT_DB.hideEditboxBorder = false
+	bindToggle(btnEditBoxBorder, "hideEditboxBorder", {
+		messageOn = L.EditBoxBorderOff,
+		messageOff = L.EditBoxBorderOn,
+		showReload = true,
+		onToggle = function()
 			XCHT_DB.enableSimpleEditbox = false --turn this off
-			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxBorderOn)
-		else
-			XCHT_DB.hideEditboxBorder = true
-			XCHT_DB.enableSimpleEditbox = false --turn this off
-			DEFAULT_CHAT_FRAME:AddMessage(L.EditBoxBorderOff)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnEditBoxBorder:SetScript("OnClick", btnEditBoxBorder.func)
+		end,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnEditBoxBorder, 20, -22)
 	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
 
 	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SimpleEditBoxInfo)
-	btnSimpleEditBox:SetScript("OnShow", function()
-		btnSimpleEditBox:SetChecked(XCHT_DB.enableSimpleEditbox)
-		setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
-	end)
-	btnSimpleEditBox.func = function()
-		local value = XCHT_DB.enableSimpleEditbox
-
-		if value then
-			XCHT_DB.enableSimpleEditbox = false
-			XCHT_DB.hideEditboxBorder = false --turn this off
+	bindToggle(btnSimpleEditBox, "enableSimpleEditbox", {
+		messageOn = L.SimpleEditBoxOn,
+		messageOff = L.SimpleEditBoxOff,
+		showReload = true,
+		onShow = function()
 			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
-			DEFAULT_CHAT_FRAME:AddMessage(L.SimpleEditBoxOff)
-		else
-			XCHT_DB.enableSimpleEditbox = true
+		end,
+		onToggle = function(value)
 			XCHT_DB.hideEditboxBorder = false --turn this off
-			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
-			DEFAULT_CHAT_FRAME:AddMessage(L.SimpleEditBoxOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnSimpleEditBox:SetScript("OnClick", btnSimpleEditBox.func)
+			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, value)
+		end,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnSimpleEditBox, 20, -22)
 	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
 
 	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SEBDesignInfo)
-	btnSEBDesign:SetScript("OnShow", function() btnSEBDesign:SetChecked(XCHT_DB.enableSEBDesign) end)
-	btnSEBDesign.func = function()
-		local value = XCHT_DB.enableSEBDesign
-
-		if value then
-			XCHT_DB.enableSEBDesign = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.SEBDesignOff)
-		else
-			XCHT_DB.enableSEBDesign = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.SEBDesignOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnSEBDesign:SetScript("OnClick", btnSEBDesign.func)
+	bindToggle(btnSEBDesign, "enableSEBDesign", {
+		messageOn = L.SEBDesignOn,
+		messageOff = L.SEBDesignOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnSEBDesign, 45, -22)
 	addon.aboutPanel.btnSEBDesign = btnSEBDesign
 
 	local btnAdjustedEditbox = createCheckbutton(addon.aboutPanel, L.AdjustedEditboxInfo)
-	btnAdjustedEditbox:SetScript("OnShow", function()
-		btnAdjustedEditbox:SetChecked(XCHT_DB.enableEditboxAdjusted)
-	end)
-	btnAdjustedEditbox.func = function()
-		local value = XCHT_DB.enableEditboxAdjusted
-
-		if value then
-			XCHT_DB.enableEditboxAdjusted = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.AdjustedEditboxOff)
-		else
-			XCHT_DB.enableEditboxAdjusted = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.AdjustedEditboxOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnAdjustedEditbox:SetScript("OnClick", btnAdjustedEditbox.func)
+	bindToggle(btnAdjustedEditbox, "enableEditboxAdjusted", {
+		messageOn = L.AdjustedEditboxOn,
+		messageOff = L.AdjustedEditboxOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnAdjustedEditbox, 20, -22)
 	addon.aboutPanel.btnAdjustedEditbox = btnAdjustedEditbox
 
 	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.CopyPasteInfo)
-	btnCopyPaste:SetScript("OnShow", function()
-		btnCopyPaste:SetChecked(XCHT_DB.enableCopyButton)
-		setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
-	end)
-	btnCopyPaste.func = function()
-		local value = XCHT_DB.enableCopyButton
-
-		if value then
-			XCHT_DB.enableCopyButton = false
+	bindToggle(btnCopyPaste, "enableCopyButton", {
+		messageOn = L.CopyPasteOn,
+		messageOff = L.CopyPasteOff,
+		showReload = true,
+		onShow = function()
 			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
-			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteOff)
-		else
-			XCHT_DB.enableCopyButton = true
-			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
-			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnCopyPaste:SetScript("OnClick", btnCopyPaste.func)
+		end,
+		onToggle = function(value)
+			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, value)
+		end,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnCopyPaste, 20, -22)
 	addon.aboutPanel.btnCopyPaste = btnCopyPaste
 
 	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.CopyPasteLeftInfo)
-	btnCopyPasteLeft:SetScript("OnShow", function() btnCopyPasteLeft:SetChecked(XCHT_DB.enableCopyButtonLeft) end)
-	btnCopyPasteLeft.func = function()
-		local value = XCHT_DB.enableCopyButtonLeft
-
-		if value then
-			XCHT_DB.enableCopyButtonLeft = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteLeftOff)
-		else
-			XCHT_DB.enableCopyButtonLeft = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.CopyPasteLeftOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnCopyPasteLeft:SetScript("OnClick", btnCopyPasteLeft.func)
+	bindToggle(btnCopyPasteLeft, "enableCopyButtonLeft", {
+		messageOn = L.CopyPasteLeftOn,
+		messageOff = L.CopyPasteLeftOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnCopyPasteLeft, 45, -22)
 	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
 
 	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.ChatTextFadeInfo)
-	btnChatTextFade:SetScript("OnShow", function() btnChatTextFade:SetChecked(XCHT_DB.enableChatTextFade) end)
-	btnChatTextFade.func = function()
-		local value = XCHT_DB.enableChatTextFade
-
-		if value then
-			XCHT_DB.enableChatTextFade = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.ChatTextFadeOff)
-		else
-			XCHT_DB.enableChatTextFade = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.ChatTextFadeOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnChatTextFade:SetScript("OnClick", btnChatTextFade.func)
+	bindToggle(btnChatTextFade, "enableChatTextFade", {
+		messageOn = L.ChatTextFadeOn,
+		messageOff = L.ChatTextFadeOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnChatTextFade, 20, -22)
 	addon.aboutPanel.btnChatTextFade = btnChatTextFade
 
 	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.ChatFrameFadeInfo)
-	btnChatFrameFade:SetScript("OnShow", function() btnChatFrameFade:SetChecked(XCHT_DB.disableChatFrameFade) end)
-	btnChatFrameFade.func = function()
-		local value = XCHT_DB.disableChatFrameFade
-
-		if value then
-			XCHT_DB.disableChatFrameFade = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.ChatFrameFadeOff)
-		else
-			XCHT_DB.disableChatFrameFade = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.ChatFrameFadeOn)
-		end
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnChatFrameFade:SetScript("OnClick", btnChatFrameFade.func)
+	bindToggle(btnChatFrameFade, "disableChatFrameFade", {
+		messageOn = L.ChatFrameFadeOn,
+		messageOff = L.ChatFrameFadeOff,
+		showReload = true,
+	})
 
 	addConfigEntry(addon.aboutPanel.name, btnChatFrameFade, 20, -22)
 	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
@@ -794,23 +598,12 @@ function configFrame:EnableConfig()
 	addon.additionalSettings.btnFilterList = btnFilterList
 
 	local btnOutWhisperColor = createCheckbutton(addon.additionalSettings, L.EnableOutWhisperColor)
-	btnOutWhisperColor:SetScript("OnShow", function() btnOutWhisperColor:SetChecked(XCHT_DB.enableOutWhisperColor) end)
-	btnOutWhisperColor.func = function()
-		local value = XCHT_DB.enableOutWhisperColor
-
-		if value then
-			XCHT_DB.enableOutWhisperColor = false
-		else
-			XCHT_DB.enableOutWhisperColor = true
-		end
-
-		addon:setOutWhisperColor()
-
-		if not addon.xanChatReloadPopup then
-			StaticPopup_Show("XANCHAT_APPLYCHANGES")
-		end
-	end
-	btnOutWhisperColor:SetScript("OnClick", btnOutWhisperColor.func)
+	bindToggle(btnOutWhisperColor, "enableOutWhisperColor", {
+		showReload = true,
+		onToggle = function()
+			addon:setOutWhisperColor()
+		end,
+	})
 
 	addConfigEntry(addon.additionalSettings.name, btnOutWhisperColor, 20, -22, nil, nil, -70)
 	addon.additionalSettings.btnOutWhisperColor = btnOutWhisperColor
@@ -821,38 +614,20 @@ function configFrame:EnableConfig()
 	addon.additionalSettings.btnOutWhisperColorPicker = btnOutWhisperColorPicker
 
 	local btnDisableChatEnterLeaveNotice = createCheckbutton(addon.additionalSettings, L.DisableChatEnterLeaveNotice)
-	btnDisableChatEnterLeaveNotice:SetScript("OnShow", function() btnDisableChatEnterLeaveNotice:SetChecked(XCHT_DB.disableChatEnterLeaveNotice) end)
-	btnDisableChatEnterLeaveNotice.func = function()
-		local value = XCHT_DB.disableChatEnterLeaveNotice
-
-		if value then
-			XCHT_DB.disableChatEnterLeaveNotice = false
-		else
-			XCHT_DB.disableChatEnterLeaveNotice = true
-		end
-
-		addon:setDisableChatEnterLeaveNotice()
-	end
-	btnDisableChatEnterLeaveNotice:SetScript("OnClick", btnDisableChatEnterLeaveNotice.func)
+	bindToggle(btnDisableChatEnterLeaveNotice, "disableChatEnterLeaveNotice", {
+		onToggle = function()
+			addon:setDisableChatEnterLeaveNotice()
+		end,
+	})
 
 	addConfigEntry(addon.additionalSettings.name, btnDisableChatEnterLeaveNotice, 20, -30)
 	addon.additionalSettings.btnDisableChatEnterLeaveNotice = btnDisableChatEnterLeaveNotice
 
 	local btnPlayerChatStyle = createCheckbutton(addon.additionalSettings, L.PlayerChatStyleInfo)
-	btnPlayerChatStyle:SetScript("OnShow", function() btnPlayerChatStyle:SetChecked(XCHT_DB.enablePlayerChatStyle) end)
-	btnPlayerChatStyle.func = function()
-		local value = XCHT_DB.enablePlayerChatStyle
-
-		if value then
-			XCHT_DB.enablePlayerChatStyle = false
-			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOff)
-		else
-			XCHT_DB.enablePlayerChatStyle = true
-			DEFAULT_CHAT_FRAME:AddMessage(L.PlayerChatStyleOn)
-		end
-
-	end
-	btnPlayerChatStyle:SetScript("OnClick", btnPlayerChatStyle.func)
+	bindToggle(btnPlayerChatStyle, "enablePlayerChatStyle", {
+		messageOn = L.PlayerChatStyleOn,
+		messageOff = L.PlayerChatStyleOff,
+	})
 
 	addConfigEntry(addon.additionalSettings.name, btnPlayerChatStyle, 20, -30)
 	addon.additionalSettings.btnPlayerChatStyle = btnPlayerChatStyle
@@ -891,13 +666,8 @@ function configFrame:EnableConfig()
 end
 
 function configFrame:DoLock()
-	if XCHT_DB and XCHT_DB.lockChatSettings then
-		for i=1, #configObjList do
-			configObjList[i]:SetEnabled(false)
-		end
-	else
-		for i=1, #configObjList do
-			configObjList[i]:SetEnabled(true)
-		end
+	local enabled = not (XCHT_DB and XCHT_DB.lockChatSettings)
+	for i=1, #configObjList do
+		configObjList[i]:SetEnabled(enabled)
 	end
 end

@@ -8,6 +8,7 @@ if not addon then
 	addon = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
 	_G[ADDON_NAME] = addon
 end
+local unpack = unpack or table.unpack
 
 addon.private = private
 addon.wrapper = addon
@@ -78,6 +79,11 @@ function addon:RegisterEvent(event, handler)
 		list = {}
 		state.events[event] = list
 	end
+	for i = 1, #list do
+		if list[i] == handler then
+			return
+		end
+	end
 	list[#list + 1] = handler
 
 	if not state.registered[event] then
@@ -129,6 +135,12 @@ function addon:RegisterCallback(name, func, owner)
 	if not list then
 		list = {}
 		state.callbacks[name] = list
+	end
+	for i = 1, #list do
+		local entry = list[i]
+		if entry.func == func and entry.owner == owner then
+			return
+		end
 	end
 	list[#list + 1] = { func = func, owner = owner }
 end

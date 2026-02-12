@@ -7,6 +7,7 @@ addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
 
 local L = addon.L
+local chatTypeInfo = ChatTypeInfo
 
 addon.stickyChannelsList = CreateFrame("frame", ADDON_NAME.."_stickyChannelsList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 
@@ -68,19 +69,26 @@ function addon:EnableStickyChannelsList()
 	if not XCHT_DB.stickyChannelsList then XCHT_DB.stickyChannelsList = {} end
 
 	--update the list in case anything was added in future updates
-	for k, v in pairs(StickyTypeChannels) do
-		if k and XCHT_DB.stickyChannelsList[k] == nil then
-			XCHT_DB.stickyChannelsList[k] = v --set defaults
+	if addon.ApplyDefaults then
+		addon.ApplyDefaults(XCHT_DB.stickyChannelsList, StickyTypeChannels)
+	else
+		for k, v in pairs(StickyTypeChannels) do
+			if k and XCHT_DB.stickyChannelsList[k] == nil then
+				XCHT_DB.stickyChannelsList[k] = v --set defaults
+			end
 		end
 	end
 
-	addon.stickyChannelsList:HookScript("OnShow", function(self)
-		if not addon.stickyChannelsList.ListLoaded then
-			--populate scroll list
-			addon:DoStickyChannelsList()
-			addon.stickyChannelsList.ListLoaded = true
-		end
-	end)
+	if not addon.stickyChannelsList._xanHooked then
+		addon.stickyChannelsList:HookScript("OnShow", function(self)
+			if not addon.stickyChannelsList.ListLoaded then
+				--populate scroll list
+				addon:DoStickyChannelsList()
+				addon.stickyChannelsList.ListLoaded = true
+			end
+		end)
+		addon.stickyChannelsList._xanHooked = true
+	end
 
 	addon:UpdateStickyChannels()
 end
@@ -94,7 +102,7 @@ function addon:DoStickyChannelsList()
 	local buildList = {}
 
 	for k, v in pairs(XCHT_DB.stickyChannelsList) do
-		table.insert(buildList, { name=k, val=v } )
+		buildList[#buildList + 1] = { name=k, val=v }
 	end
 
 	--sort it
@@ -165,7 +173,10 @@ function addon:DoStickyChannelsList()
 end
 
 function addon:UpdateStickyChannels()
+	if not chatTypeInfo or not XCHT_DB.stickyChannelsList then return end
 	for k, v in pairs(XCHT_DB.stickyChannelsList) do
-		ChatTypeInfo[k].sticky = v
+		if chatTypeInfo[k] then
+			chatTypeInfo[k].sticky = v and 1 or 0
+		end
 	end
 end

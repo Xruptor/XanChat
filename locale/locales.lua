@@ -36,7 +36,11 @@ function private:GetLocale()
 	local store = private._locales
 	local L = store.locales[store.current] or store.default or {}
 	if store.default and L ~= store.default then
-		return setmetatable(L, { __index = store.default })
+		if store._activeLocale ~= L then
+			store._activeLocale = L
+			store._activeLocaleWithDefault = setmetatable(L, { __index = store.default })
+		end
+		return store._activeLocaleWithDefault
 	end
 	return L
 end

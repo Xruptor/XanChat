@@ -2,3 +2,5 @@
 xanChat.code-workspace
 
 .vscode/settings.json
+.github/workflows/release.yml
+AGENTS.md
