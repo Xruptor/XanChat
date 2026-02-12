@@ -26,6 +26,30 @@ local gsub = string.gsub
 local strlen = string.len
 local tinsert = table.insert
 local tremove = table.remove
+local function isSecretValue(v)
+	local fn = _G.issecretvalue
+	if type(fn) == "function" then
+		local ok, res = pcall(fn, v)
+		if ok then return not not res end
+	end
+	return false
+end
+
+local function canAccessValue(v)
+	local fn = _G.canaccessvalue
+	if type(fn) == "function" then
+		local ok, res = pcall(fn, v)
+		if ok then return not not res end
+	end
+	return true
+end
+
+local function isSafeString(v)
+	if type(v) ~= "string" then return false end
+	if isSecretValue(v) then return false end
+	if not canAccessValue(v) then return false end
+	return true
+end
 
 local function ApplyDefaults(target, defaults)
 	if not target or not defaults then return end
@@ -141,7 +165,7 @@ local function chatMessageFilter(self, event, msg, author, ...)
 		lastMsgEvent.messageIndex = messageIndex
 	end
 
-	if type(msg) == "string" then
+	if type(msg) == "string" and isSafeString(msg) then
 		for i = 1, #URL_PATTERNS do
 			local pattern, replacement = URL_PATTERNS[i][1], URL_PATTERNS[i][2]
 			if strfind(msg, pattern) then
@@ -167,7 +191,7 @@ StaticPopupDialogs["LINKME"] = {
 local SetHyperlink = _G.ItemRefTooltip.SetHyperlink
 function _G.ItemRefTooltip:SetHyperlink(link, ...)
 
-	if type(link) ~= "string" then return end
+	if type(link) ~= "string" or not isSafeString(link) then return end
 
 	if link and (strsub(link, 1, 3) == "url") then
 		local url = strsub(link, 5)
@@ -652,6 +676,9 @@ local AddMessage = function(frame, text, ...)
 	if not hook or not hook.AddMessage then return end
 
 	if type(text) ~= "string" then
+		return hook.AddMessage(frame, text, ...)
+	end
+	if not isSafeString(text) then
 		return hook.AddMessage(frame, text, ...)
 	end
 
