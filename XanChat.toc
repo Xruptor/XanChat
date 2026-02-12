@@ -3,7 +3,7 @@
 ## Notes: A very minimalistic chat modification addon.
 ## Notes-zhCN: 一个非常简约的聊天修改插件。
 ## Author: Xruptor
-## Version: 11.5
+## Version: 11.6
 ## IconTexture: 2056011
 ## X-Curse-Project-ID: 28603
 ## X-WoWI-ID: 18787

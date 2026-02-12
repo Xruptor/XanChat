@@ -51,6 +51,33 @@ local function isSafeString(v)
 	return true
 end
 
+local function isInAnyInstance()
+	if not IsInInstance then return false end
+	return select(1, IsInInstance())
+end
+
+local function areSafeArgs(...)
+	local count = select("#", ...)
+	if count == 0 then return true end
+	for i = 1, count do
+		local v = select(i, ...)
+		if type(v) == "string" then
+			if isSecretValue(v) or not canAccessValue(v) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+local function safePairs(t)
+	local ok, iter, state, var = pcall(pairs, t)
+	if ok then
+		return iter, state, var
+	end
+	return function() return nil, nil end, nil, nil
+end
+
 local function ApplyDefaults(target, defaults)
 	if not target or not defaults then return end
 	for key, value in pairs(defaults) do
@@ -85,7 +112,7 @@ local SHORT_CHANNEL_REPLACEMENTS = {
 }
 
 local function RegisterChatFilters(filterFunc)
-	for group, values in pairs(ChatTypeGroup) do
+	for group, values in safePairs(ChatTypeGroup) do
 		for _, value in pairs(values) do
 			ChatFrame_AddMessageEventFilter(value, filterFunc)
 		end
@@ -159,6 +186,7 @@ local messageIndex = 0
 local lastMsgEvent = {}
 
 local function chatMessageFilter(self, event, msg, author, ...)
+	if isInAnyInstance() then return end
 	if addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle then
 		messageIndex = messageIndex + 1
 		lastMsgEvent.event = event
@@ -169,6 +197,7 @@ local function chatMessageFilter(self, event, msg, author, ...)
 		for i = 1, #URL_PATTERNS do
 			local pattern, replacement = URL_PATTERNS[i][1], URL_PATTERNS[i][2]
 			if strfind(msg, pattern) then
+				if not areSafeArgs(author, ...) then return end
 				return false, gsub(msg, pattern, doColor(replacement)), author, ...
 			end
 		end
@@ -190,6 +219,10 @@ StaticPopupDialogs["LINKME"] = {
 
 local SetHyperlink = _G.ItemRefTooltip.SetHyperlink
 function _G.ItemRefTooltip:SetHyperlink(link, ...)
+
+	if isInAnyInstance() then
+		return SetHyperlink(self, link, ...)
+	end
 
 	if type(link) ~= "string" or not isSafeString(link) then return end
 
@@ -627,18 +660,48 @@ end
 local function initPlayerInfo()
 	if not XCHT_DB.enablePlayerChatStyle then return end
 
-	addon:RegisterEvent("GUILD_ROSTER_UPDATE", doGuildUpdate)
-	addon:RegisterEvent("FRIENDLIST_UPDATE", doFriendUpdate)
-	addon:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", doFriendUpdate)
-	addon:RegisterEvent("RAID_ROSTER_UPDATE", doRosterUpdate)
-	addon:RegisterEvent("PLAYER_ENTERING_WORLD", handleRosterEvent)
-	addon:RegisterEvent("UPDATE_INSTANCE_INFO", handleRosterEvent)
-	addon:RegisterEvent("ZONE_CHANGED_NEW_AREA", handleRosterEvent)
-	addon:RegisterEvent("UNIT_NAME_UPDATE", doRosterUpdate)
-	addon:RegisterEvent("UNIT_PORTRAIT_UPDATE", doRosterUpdate)
-	addon:RegisterEvent("GROUP_ROSTER_UPDATE", doRosterUpdate)
+	local function SafeRegisterEvent(event, handler)
+		if not event or not handler then return end
+		if not addon.RegisterEvent then return end
+		pcall(addon.RegisterEvent, addon, event, handler)
+	end
 
-	addon:RegisterEvent("PLAYER_LEVEL_UP", initUpdateCurrentPlayer)
+	local throttlePending = {}
+	local function ThrottleUpdate(key, delay, fn)
+		if throttlePending[key] then return end
+		throttlePending[key] = true
+		if C_Timer and C_Timer.After then
+			C_Timer.After(delay, function()
+				throttlePending[key] = nil
+				fn()
+			end)
+		else
+			--fallback: run immediately and keep a short lockout
+			fn()
+			throttlePending[key] = nil
+		end
+	end
+
+	SafeRegisterEvent("GUILD_ROSTER_UPDATE", function() ThrottleUpdate("guild", 0.5, doGuildUpdate) end)
+	SafeRegisterEvent("PLAYER_GUILD_UPDATE", function() ThrottleUpdate("guild", 0.5, doGuildUpdate) end)
+	SafeRegisterEvent("FRIENDLIST_UPDATE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+
+	if C_BattleNet or BNGetNumFriends then
+		SafeRegisterEvent("BN_CONNECTED", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+		SafeRegisterEvent("BN_DISCONNECTED", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+		SafeRegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+		SafeRegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+	end
+
+	SafeRegisterEvent("RAID_ROSTER_UPDATE", function() ThrottleUpdate("roster", 0.3, doRosterUpdate) end)
+	SafeRegisterEvent("GROUP_ROSTER_UPDATE", function() ThrottleUpdate("roster", 0.3, doRosterUpdate) end)
+	SafeRegisterEvent("PLAYER_ENTERING_WORLD", handleRosterEvent)
+	SafeRegisterEvent("UPDATE_INSTANCE_INFO", handleRosterEvent)
+	SafeRegisterEvent("ZONE_CHANGED_NEW_AREA", handleRosterEvent)
+	SafeRegisterEvent("UNIT_NAME_UPDATE", function() ThrottleUpdate("roster", 0.3, doRosterUpdate) end)
+	SafeRegisterEvent("UNIT_PORTRAIT_UPDATE", function() ThrottleUpdate("roster", 0.3, doRosterUpdate) end)
+
+	SafeRegisterEvent("PLAYER_LEVEL_UP", initUpdateCurrentPlayer)
 end
 
 --[[------------------------
@@ -674,6 +737,10 @@ local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
 	local hook = msgHooks[frame:GetName()]
 	if not hook or not hook.AddMessage then return end
+
+	if isInAnyInstance() then
+		return hook.AddMessage(frame, text, ...)
+	end
 
 	if type(text) ~= "string" then
 		return hook.AddMessage(frame, text, ...)
@@ -1853,10 +1920,13 @@ end
 --------------------------]]
 
 local function checkNoticeFilter(self, event, msg, author, ...)
+	if isInAnyInstance() then
+		return false
+	end
 	if XCHT_DB.disableChatEnterLeaveNotice then
 		return true
 	end
-	return false, msg, author, ...
+	return false
 end
 
 function addon:setDisableChatEnterLeaveNotice()
