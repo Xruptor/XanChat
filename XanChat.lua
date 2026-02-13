@@ -78,6 +78,12 @@ local function safePairs(t)
 	return function() return nil, nil end, nil, nil
 end
 
+local function SafeRegisterEvent(event, handler)
+	if not event or not handler then return end
+	if not addon or not addon.RegisterEvent then return end
+	pcall(addon.RegisterEvent, addon, event, handler)
+end
+
 local function ApplyDefaults(target, defaults)
 	if not target or not defaults then return end
 	for key, value in pairs(defaults) do
@@ -219,7 +225,6 @@ StaticPopupDialogs["LINKME"] = {
 
 local SetHyperlink = _G.ItemRefTooltip.SetHyperlink
 function _G.ItemRefTooltip:SetHyperlink(link, ...)
-
 	if isInAnyInstance() then
 		return SetHyperlink(self, link, ...)
 	end
@@ -241,9 +246,9 @@ function _G.ItemRefTooltip:SetHyperlink(link, ...)
 		button:SetPoint("CENTER", editbox, "CENTER", 0, -30)
 
 		return
-     end
+	end
 
-	 SetHyperlink(self, link, ...)
+	SetHyperlink(self, link, ...)
 end
 
 --register them all
@@ -660,12 +665,6 @@ end
 local function initPlayerInfo()
 	if not XCHT_DB.enablePlayerChatStyle then return end
 
-	local function SafeRegisterEvent(event, handler)
-		if not event or not handler then return end
-		if not addon.RegisterEvent then return end
-		pcall(addon.RegisterEvent, addon, event, handler)
-	end
-
 	local throttlePending = {}
 	local function ThrottleUpdate(key, delay, fn)
 		if throttlePending[key] then return end
@@ -689,8 +688,8 @@ local function initPlayerInfo()
 	if C_BattleNet or BNGetNumFriends then
 		SafeRegisterEvent("BN_CONNECTED", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
 		SafeRegisterEvent("BN_DISCONNECTED", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
-		SafeRegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
-		SafeRegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+	SafeRegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+	SafeRegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
 	end
 
 	SafeRegisterEvent("RAID_ROSTER_UPDATE", function() ThrottleUpdate("roster", 0.3, doRosterUpdate) end)
@@ -711,6 +710,7 @@ end
 local dummy = function(self) self:Hide() end
 local msgHooks = {}
 local HistoryDB
+local old_OpenTemporaryWindow
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 	text = L.ApplyChanges,
@@ -2482,7 +2482,7 @@ function addon:UI_SCALE_CHANGED()
 end
 
 --this is for temporary Whisper windows.  They are NUM_CHAT_WINDOWS + 1 and so forth
-local old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
+old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
 if old_OpenTemporaryWindow then
 	FCF_OpenTemporaryWindow = function(...)
 		local frame = old_OpenTemporaryWindow(...)
