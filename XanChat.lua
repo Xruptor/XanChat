@@ -56,6 +56,37 @@ local function isInAnyInstance()
 	return select(1, IsInInstance())
 end
 
+local function isChatLockdown()
+	local api = _G.C_ChatInfo
+	if api and api.InChatMessagingLockdown then
+		local ok, locked = pcall(api.InChatMessagingLockdown)
+		if ok then return not not locked end
+	end
+	return false
+end
+
+function addon:IsRestricted()
+	return isInAnyInstance() or isChatLockdown()
+end
+
+function addon:IsConfigLocked()
+	if XCHT_DB and XCHT_DB.lockChatSettings then return true end
+	return self:IsRestricted()
+end
+
+function addon:CanModifyChat()
+	if self._featuresSuppressed then return false end
+	if isInAnyInstance() then return false end
+	if isChatLockdown() then
+		self:NotifyRestriction("lockdown")
+		return false
+	end
+	if self._restrictionState == "lockdown" then
+		self:NotifyRestrictionCleared()
+	end
+	return true
+end
+
 local function areSafeArgs(...)
 	local count = select("#", ...)
 	if count == 0 then return true end
@@ -78,12 +109,6 @@ local function safePairs(t)
 	return function() return nil, nil end, nil, nil
 end
 
-local function SafeRegisterEvent(event, handler)
-	if not event or not handler then return end
-	if not addon or not addon.RegisterEvent then return end
-	pcall(addon.RegisterEvent, addon, event, handler)
-end
-
 local function ApplyDefaults(target, defaults)
 	if not target or not defaults then return end
 	for key, value in pairs(defaults) do
@@ -95,7 +120,42 @@ end
 
 addon.ApplyDefaults = ApplyDefaults
 
+local function printNotice(msg)
+	if not msg then return end
+	if DEFAULT_CHAT_FRAME then
+		DEFAULT_CHAT_FRAME:AddMessage(msg)
+	end
+end
+
+function addon:NotifyRestriction(reason)
+	if reason == "instance" then
+		if self._restrictionState == "instance" then return end
+		self._restrictionState = "instance"
+		printNotice(L.ChatFeaturesDisabledInstance or "xanChat: Chat features are disabled in instances.")
+	elseif reason == "lockdown" then
+		if self._restrictionState == "lockdown" then return end
+		self._restrictionState = "lockdown"
+		printNotice(L.ChatFeaturesDisabledLockdown or "xanChat: Chat features are disabled during encounter restrictions.")
+	end
+end
+
+function addon:NotifyRestrictionCleared()
+	if not self._restrictionState then return end
+	self._restrictionState = nil
+	printNotice(L.ChatFeaturesEnabled or "xanChat: Chat features re-enabled.")
+end
+
+function addon:NotifyConfigLocked()
+	local now = GetTime and GetTime() or 0
+	if self._lastConfigNotice and (now - self._lastConfigNotice) < 2 then return end
+	self._lastConfigNotice = now
+	printNotice(L.ChatSettingsLockedRestricted or L.LockChatSettingsAlert or "xanChat: Settings are locked in this area.")
+end
+
 local EXTRA_CHAT_FILTER_EVENTS = {
+	"GUILD_MOTD",
+	"CHAT_MSG_COMMUNITIES_CHANNEL",
+	"CHAT_MSG_COMMUNITIES_CHANNEL_NOTICE",
 	"CHAT_MSG_ADDON",
 	"CHAT_MSG_ADDON_LOGGED",
 	"CHAT_MSG_BATTLEGROUND",
@@ -118,13 +178,20 @@ local SHORT_CHANNEL_REPLACEMENTS = {
 }
 
 local function RegisterChatFilters(filterFunc)
+	local seen = {}
 	for group, values in safePairs(ChatTypeGroup) do
 		for _, value in pairs(values) do
-			ChatFrame_AddMessageEventFilter(value, filterFunc)
+			if not seen[value] then
+				ChatFrame_AddMessageEventFilter(value, filterFunc)
+				seen[value] = true
+			end
 		end
 	end
 	for _, eventName in ipairs(EXTRA_CHAT_FILTER_EVENTS) do
-		ChatFrame_AddMessageEventFilter(eventName, filterFunc)
+		if not seen[eventName] then
+			ChatFrame_AddMessageEventFilter(eventName, filterFunc)
+			seen[eventName] = true
+		end
 	end
 end
 
@@ -134,7 +201,7 @@ local URL_PATTERNS = {
 	{ "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?", "%1@%2%3%4" },
 	{ "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?", "%1.%2.%3.%4:%5" },
 	{ "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?", "%1.%2.%3.%4" },
-	{ "[wWhH][wWtT][wWtT][\46pP]%S+[^%p%s]", "%1" },
+	{ "([wWhH][wWtT][wWtT][%.pP]%S+[^%p%s])", "%1" },
 }
 
 local PLAYERLIST_MAX = 500
@@ -188,24 +255,148 @@ local function doColor(url)
 	return url
 end
 
+local function hasUrlLink(msg)
+	return type(msg) == "string" and strfind(msg, "|Hurl:", 1, true) ~= nil
+end
+
+local function mayContainUrl(msg)
+	if type(msg) ~= "string" then return false end
+	if strfind(msg, "://", 1, true) then return true end
+	if strfind(msg, "www.", 1, true) then return true end
+	if strfind(msg, "http", 1, true) then return true end
+	if strfind(msg, "@", 1, true) then return true end
+	if strfind(msg, "%d+%.%d+%.%d+%.%d+:%d+") then return true end
+	if strfind(msg, "%d+%.%d+%.%d+%.%d+") then return true end
+	return false
+end
+
+local function findNextUrlMatch(segment, startPos)
+	local bestS, bestE, bestRepl
+	for i = 1, #URL_PATTERNS do
+		local pat = URL_PATTERNS[i][1]
+		local repl = URL_PATTERNS[i][2]
+		local s, e = strfind(segment, pat, startPos)
+		if s and (not bestS or s < bestS) then
+			local matched = strsub(segment, s, e)
+			local url = gsub(matched, pat, repl)
+			bestS, bestE, bestRepl = s, e, url
+		end
+	end
+	return bestS, bestE, bestRepl
+end
+
+local function linkifySegment(segment)
+	if not segment or segment == "" then return segment, false end
+	local out = {}
+	local changed = false
+	local pos = 1
+	while true do
+		local s, e, url = findNextUrlMatch(segment, pos)
+		if not s then
+			out[#out + 1] = strsub(segment, pos)
+			break
+		end
+		if s > pos then
+			out[#out + 1] = strsub(segment, pos, s - 1)
+		end
+		out[#out + 1] = doColor(url)
+		changed = true
+		pos = e + 1
+	end
+	if not changed then
+		return segment, false
+	end
+	return table.concat(out), true
+end
+
+local function linkifyUrls(msg)
+	if not mayContainUrl(msg) then return msg, false end
+	if hasUrlLink(msg) then return msg, false end
+
+	local out = {}
+	local changed = false
+	local pos = 1
+	while true do
+		local hs, he = strfind(msg, "|H", pos, true)
+		if not hs then
+			local seg = strsub(msg, pos)
+			local newSeg, segChanged = linkifySegment(seg)
+			if segChanged then changed = true end
+			out[#out + 1] = newSeg
+			break
+		end
+
+		local seg = strsub(msg, pos, hs - 1)
+		local newSeg, segChanged = linkifySegment(seg)
+		if segChanged then changed = true end
+		out[#out + 1] = newSeg
+
+		local h1s, h1e = strfind(msg, "|h", he + 1, true)
+		if not h1s then
+			out[#out + 1] = strsub(msg, hs)
+			break
+		end
+		local h2s, h2e = strfind(msg, "|h", h1e + 1, true)
+		if not h2s then
+			out[#out + 1] = strsub(msg, hs)
+			break
+		end
+
+		out[#out + 1] = strsub(msg, hs, h2e)
+		pos = h2e + 1
+	end
+
+	if not changed then
+		return msg, false
+	end
+	return table.concat(out), true
+end
+
 local messageIndex = 0
 local lastMsgEvent = {}
+local lastMsgIndexByFrame = {}
+
+local function isSensitiveChatEvent(event)
+	if not event then return false end
+	return event == "GUILD_MOTD"
+		or event == "CHAT_MSG_COMMUNITIES_CHANNEL"
+		or event == "CHAT_MSG_COMMUNITIES_CHANNEL_NOTICE"
+end
+
+local function hasCommunityLink(text)
+	if type(text) ~= "string" then return false end
+	if strfind(text, "|HBNplayerCommunity:", 1, true) then return true end
+	if strfind(text, "|HplayerCommunity:", 1, true) then return true end
+	return false
+end
 
 local function chatMessageFilter(self, event, msg, author, ...)
-	if isInAnyInstance() then return end
+	if isSensitiveChatEvent(event) then
+		if self then
+			self._xanSkipNextAddMessage = true
+		end
+		return
+	end
+	if not addon:CanModifyChat() then return end
 	if addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle then
 		messageIndex = messageIndex + 1
+		lastMsgEvent.frame = self
 		lastMsgEvent.event = event
 		lastMsgEvent.messageIndex = messageIndex
+		if isSafeString(author) then
+			lastMsgEvent.author = author
+		else
+			lastMsgEvent.author = nil
+		end
 	end
 
 	if type(msg) == "string" and isSafeString(msg) then
-		for i = 1, #URL_PATTERNS do
-			local pattern, replacement = URL_PATTERNS[i][1], URL_PATTERNS[i][2]
-			if strfind(msg, pattern) then
-				if not areSafeArgs(author, ...) then return end
-				return false, gsub(msg, pattern, doColor(replacement)), author, ...
-			end
+		if hasUrlLink(msg) then return end
+		if not mayContainUrl(msg) then return end
+		if not areSafeArgs(author, ...) then return end
+		local newMsg, changed = linkifyUrls(msg)
+		if changed then
+			return false, newMsg, author, ...
 		end
 	end
 end
@@ -223,13 +414,18 @@ StaticPopupDialogs["LINKME"] = {
 	maxLetters = 255,
 }
 
-local SetHyperlink = _G.ItemRefTooltip.SetHyperlink
-function _G.ItemRefTooltip:SetHyperlink(link, ...)
-	if isInAnyInstance() then
-		return SetHyperlink(self, link, ...)
+local SetHyperlink = _G.ItemRefTooltip and _G.ItemRefTooltip.SetHyperlink
+local function XanChat_SetHyperlink(self, link, ...)
+	local orig = addon._prevSetHyperlink or SetHyperlink
+	if not orig then return end
+
+	if not addon:CanModifyChat() then
+		return orig(self, link, ...)
 	end
 
-	if type(link) ~= "string" or not isSafeString(link) then return end
+	if type(link) ~= "string" or not isSafeString(link) then
+		return orig(self, link, ...)
+	end
 
 	if link and (strsub(link, 1, 3) == "url") then
 		local url = strsub(link, 5)
@@ -248,11 +444,16 @@ function _G.ItemRefTooltip:SetHyperlink(link, ...)
 		return
 	end
 
-	SetHyperlink(self, link, ...)
+	return orig(self, link, ...)
 end
 
---register them all
-RegisterChatFilters(chatMessageFilter)
+function addon:ApplyHyperlinkHook()
+	if self._hyperlinkHooked then return end
+	if not _G.ItemRefTooltip or not _G.ItemRefTooltip.SetHyperlink then return end
+	self._prevSetHyperlink = _G.ItemRefTooltip.SetHyperlink
+	_G.ItemRefTooltip.SetHyperlink = XanChat_SetHyperlink
+	self._hyperlinkHooked = true
+end
 
 --[[------------------------
 	Stylized Player Names
@@ -339,6 +540,54 @@ local function stripNameKey(text)
 	return text
 end
 
+local function getPlayerInfoByName(name)
+	if not name or not addon.playerListByName then return nil end
+	local byName = addon.playerListByName
+	return byName[name] or byName[strlower(name)] or byName[stripNameKey(name)]
+end
+
+local function replaceText(source, findStr, replaceStr, wholeword)
+	if wholeword then
+		--findStr = '%f[%a]'..findStr..'%f[%A]'  --does not properly escape certain characters like : and /
+		findStr = "%f[^%z%s]"..findStr.."%f[%z%s]"
+	end
+	return (source:gsub(findStr, replaceStr))
+end
+
+local function applyPlayerColorToName(text, playerInfo)
+	if not text or not playerInfo or not playerInfo.name or not playerInfo.class then
+		return text, false
+	end
+	local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[playerInfo.class] or RAID_CLASS_COLORS[playerInfo.class]
+	if not color then return text, false end
+
+	local colorCode = ToHex(color.r, color.g, color.b, 1)
+	local playerName = playerInfo.name
+	local replaced = false
+
+	if playerInfo.realm and playerInfo.stripRealm then
+		local fullName = playerName.."-"..playerInfo.realm
+		if strfind(text, fullName, 1, true) then
+			text, replaced = plainTextReplace(text, fullName, "|c"..colorCode..fullName.."|r")
+			if replaced then return text, true end
+		end
+		local shortName = playerName.."-"..playerInfo.stripRealm
+		if strfind(text, shortName, 1, true) then
+			text, replaced = plainTextReplace(text, shortName, "|c"..colorCode..shortName.."|r")
+			if replaced then return text, true end
+		end
+	end
+
+	if strfind(text, playerName, 1, true) then
+		local updated = replaceText(text, playerName, "|c"..colorCode..playerName.."|r", true)
+		if updated ~= text then
+			return updated, true
+		end
+	end
+
+	return text, false
+end
+
 local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
 	if not key or not entry then return end
 
@@ -379,14 +628,6 @@ local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
 	local sig = addon.playerListSig
 	entry._sig = sig
 	ring[pos] = { key = key, sig = sig, name = name, lowerName = lowerName, cleanName = cleanName }
-end
-
-local function replaceText(source, findStr, replaceStr, wholeword)
-	if wholeword then
-		--findStr = '%f[%a]'..findStr..'%f[%A]'  --does not properly escape certain characters like : and /
-		findStr = "%f[^%z%s]"..findStr.."%f[%z%s]"
-	end
-	return (source:gsub(findStr, replaceStr))
 end
 
 local function parsePlayerInfo(frame, text, ...)
@@ -665,6 +906,12 @@ end
 local function initPlayerInfo()
 	if not XCHT_DB.enablePlayerChatStyle then return end
 
+	local function SafeRegisterEvent(event, handler)
+		if not event or not handler then return end
+		if not addon.RegisterEvent then return end
+		pcall(addon.RegisterEvent, addon, event, handler)
+	end
+
 	local throttlePending = {}
 	local function ThrottleUpdate(key, delay, fn)
 		if throttlePending[key] then return end
@@ -688,8 +935,8 @@ local function initPlayerInfo()
 	if C_BattleNet or BNGetNumFriends then
 		SafeRegisterEvent("BN_CONNECTED", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
 		SafeRegisterEvent("BN_DISCONNECTED", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
-	SafeRegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
-	SafeRegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+		SafeRegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
+		SafeRegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", function() ThrottleUpdate("friends", 0.5, doFriendUpdate) end)
 	end
 
 	SafeRegisterEvent("RAID_ROSTER_UPDATE", function() ThrottleUpdate("roster", 0.3, doRosterUpdate) end)
@@ -710,7 +957,6 @@ end
 local dummy = function(self) self:Hide() end
 local msgHooks = {}
 local HistoryDB
-local old_OpenTemporaryWindow
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 	text = L.ApplyChanges,
@@ -733,12 +979,16 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 	hideOnEscape = true,
 }
 
-local lastMsgIndex = 0
 local AddMessage = function(frame, text, ...)
 	local hook = msgHooks[frame:GetName()]
 	if not hook or not hook.AddMessage then return end
 
-	if isInAnyInstance() then
+	if frame._xanSkipNextAddMessage then
+		frame._xanSkipNextAddMessage = nil
+		return hook.AddMessage(frame, text, ...)
+	end
+
+	if not addon:CanModifyChat() then
 		return hook.AddMessage(frame, text, ...)
 	end
 
@@ -746,6 +996,12 @@ local AddMessage = function(frame, text, ...)
 		return hook.AddMessage(frame, text, ...)
 	end
 	if not isSafeString(text) then
+		return hook.AddMessage(frame, text, ...)
+	end
+	if not areSafeArgs(...) then
+		return hook.AddMessage(frame, text, ...)
+	end
+	if hasCommunityLink(text) then
 		return hook.AddMessage(frame, text, ...)
 	end
 
@@ -774,52 +1030,41 @@ local AddMessage = function(frame, text, ...)
 		end
 
 		--ChatFrame_MessageEventHandler
-		if lastMsgEvent and lastMsgEvent.event then
+		if lastMsgEvent and lastMsgEvent.event and lastMsgEvent.frame == frame then
 			--Debug(lastMsgEvent, lastMsgEvent.event, lastMsgEvent.messageIndex, text)
 
 			--lastMsgEvent = {event=event, msg=msg, author=author, messageIndex=messageIndex, arg1=arg1, arg2=arg2, arg3=arg3}
-			if lastMsgEvent and lastMsgEvent.messageIndex and lastMsgEvent.messageIndex ~= lastMsgIndex then
-				lastMsgIndex = lastMsgEvent.messageIndex
+			local frameName = frame:GetName()
+			local lastIdx = frameName and lastMsgIndexByFrame[frameName] or nil
+			if lastMsgEvent and lastMsgEvent.messageIndex and lastMsgEvent.messageIndex ~= lastIdx then
+				if frameName then
+					lastMsgIndexByFrame[frameName] = lastMsgEvent.messageIndex
+				end
 				--Debug(lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
 
 				--don't do this on strings with player links and we have a positive filter
 				local hasBNPlayerLink = hasPlayerLink or (strfind(text, "|HBNplayer:", 1, true) ~= nil)
 				if not hasPlayerLink and not hasBNPlayerLink and addon:searchFilterList(lastMsgEvent.event, text) then
 					--Debug('system', lastMsgEvent.event, lastMsgEvent.msg, lastMsgEvent.author, lastMsgEvent.messageIndex, lastMsgEvent.arg1, lastMsgEvent.arg2, lastMsgEvent.arg3)
-					local playerList = addon.playerList
+					local replaced = false
 
-					--check for names
-					if playerList then
-						for _, v in pairs(playerList) do
-							if v and v.name and v.class and strfind(text, v.name, 1, true) then
-								--do the replace here
-								local color = CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class] or RAID_CLASS_COLORS[v.class]
-								if color then
-									local colorCode = ToHex(color.r, color.g, color.b, 1)
-									local passChk = false
-									local hasReplaced = false
-									local playerName = v.name
+					local author = lastMsgEvent.author
+					if author then
+						local info = getPlayerInfoByName(author)
+						if info then
+							text, replaced = applyPlayerColorToName(text, info)
+						end
+					end
 
-									--only do this for system messages that don't have a player link in it, otherwise it will ruin the player link
-									if v.realm and v.stripRealm then
-										text, passChk = plainTextReplace(text, playerName.."-"..v.realm, "|c"..colorCode..playerName.."-"..v.realm.."|r")
-										if not passChk then
-											text, passChk = plainTextReplace(text, playerName.."-"..v.stripRealm, "|c"..colorCode..playerName.."-"..v.stripRealm.."|r")
-										end
-										if passChk then
-											hasReplaced = true
-										end
-									end
-									if not hasReplaced then
-										--replace only whole words
-										text = replaceText(text, playerName, "|c"..colorCode..playerName.."|r", true)
-									end
-
+					if not replaced then
+						local playerList = addon.playerList
+						--check for names
+						if playerList then
+							for _, v in pairs(playerList) do
+								if v and v.name and v.class and strfind(text, v.name, 1, true) then
+									text, replaced = applyPlayerColorToName(text, v)
 									--exit out of loop
-									break
-								else
-									--something went wrong, exit the loop
-									break
+									if replaced then break end
 								end
 							end
 						end
@@ -836,11 +1081,134 @@ local AddMessage = function(frame, text, ...)
 	hook.AddMessage(frame, text, ...)
 end
 
+local function HookChatFrameAddMessage(frame)
+	if not frame or frame == COMBATLOG then return end
+	local name = frame:GetName()
+	if not name then return end
+	msgHooks[name] = msgHooks[name] or {}
+	if not msgHooks[name].AddMessage then
+		msgHooks[name].AddMessage = frame.AddMessage
+	end
+	if frame.AddMessage ~= AddMessage then
+		frame.AddMessage = AddMessage
+	end
+end
+
+local function ApplyShortChannelFormats(enable)
+	if not XCHT_DB or not XCHT_DB.shortNames then return end
+	addon._origChatFormat = addon._origChatFormat or {}
+
+	local function set(key, value)
+		if addon._origChatFormat[key] == nil then
+			addon._origChatFormat[key] = _G[key]
+		end
+		_G[key] = value
+	end
+
+	if enable then
+		set("CHAT_WHISPER_GET", L.CHAT_WHISPER_GET)
+		set("CHAT_WHISPER_INFORM_GET", L.CHAT_WHISPER_INFORM_GET)
+		set("CHAT_BN_WHISPER_GET", L.CHAT_WHISPER_GET)
+		set("CHAT_BN_WHISPER_INFORM_GET", L.CHAT_WHISPER_INFORM_GET)
+		set("CHAT_YELL_GET", L.CHAT_YELL_GET)
+		set("CHAT_SAY_GET", L.CHAT_SAY_GET)
+		set("CHAT_BATTLEGROUND_GET", L.CHAT_BATTLEGROUND_GET)
+		set("CHAT_BATTLEGROUND_LEADER_GET", L.CHAT_BATTLEGROUND_LEADER_GET)
+		set("CHAT_INSTANCE_CHAT_GET", L.CHAT_BATTLEGROUND_GET)
+		set("CHAT_INSTANCE_CHAT_LEADER_GET", L.CHAT_BATTLEGROUND_LEADER_GET)
+		set("CHAT_GUILD_GET", L.CHAT_GUILD_GET)
+		set("CHAT_OFFICER_GET", L.CHAT_OFFICER_GET)
+		set("CHAT_PARTY_GET", L.CHAT_PARTY_GET)
+		set("CHAT_PARTY_LEADER_GET", L.CHAT_PARTY_LEADER_GET)
+		set("CHAT_PARTY_GUIDE_GET", L.CHAT_PARTY_GUIDE_GET)
+		set("CHAT_RAID_GET", L.CHAT_RAID_GET)
+		set("CHAT_RAID_LEADER_GET", L.CHAT_RAID_LEADER_GET)
+		set("CHAT_RAID_WARNING_GET", L.CHAT_RAID_WARNING_GET)
+
+		set("CHAT_MONSTER_PARTY_GET", CHAT_PARTY_GET)
+		set("CHAT_MONSTER_SAY_GET", CHAT_SAY_GET)
+		set("CHAT_MONSTER_WHISPER_GET", CHAT_WHISPER_GET)
+		set("CHAT_MONSTER_YELL_GET", CHAT_YELL_GET)
+	else
+		for key, value in pairs(addon._origChatFormat) do
+			_G[key] = value
+		end
+	end
+end
+
+function addon:InstallChatHooks()
+	if self.chatHooksEnabled then return end
+	self.chatHooksEnabled = true
+
+	if ChatFrame_AddMessageEventFilter then
+		RegisterChatFilters(chatMessageFilter)
+	end
+
+	self:ApplyHyperlinkHook()
+
+	if CHAT_FRAMES and #CHAT_FRAMES > 0 then
+		for i = 1, #CHAT_FRAMES do
+			local f = _G[CHAT_FRAMES[i]]
+			if f then
+				HookChatFrameAddMessage(f)
+			end
+		end
+	else
+		for i = 1, NUM_CHAT_WINDOWS do
+			local f = _G["ChatFrame"..i]
+			if f then
+				HookChatFrameAddMessage(f)
+			end
+		end
+	end
+end
+
+function addon:EnableChatFeatures()
+	if self._featuresSuppressed == false then return end
+	self._featuresSuppressed = false
+	ApplyShortChannelFormats(true)
+	self:setDisableChatEnterLeaveNotice()
+end
+
+function addon:DisableChatFeatures()
+	if self._featuresSuppressed == true then return end
+	self._featuresSuppressed = true
+	self:UnregisterNoticeFilter()
+	ApplyShortChannelFormats(false)
+end
+
+function addon:UpdateRestrictionState()
+	local inInstance = isInAnyInstance()
+	local locked = isChatLockdown()
+	local restricted = inInstance or locked
+
+	if restricted ~= self._restrictedActive then
+		self._restrictedActive = restricted
+		if restricted then
+			self:DisableChatFeatures()
+		else
+			self:EnableChatFeatures()
+		end
+	end
+
+	if inInstance then
+		self:NotifyRestriction("instance")
+	elseif locked then
+		self:NotifyRestriction("lockdown")
+	else
+		self:NotifyRestrictionCleared()
+	end
+
+	if self.configFrame and self.configFrame.DoLock then
+		self.configFrame:DoLock()
+	end
+end
+
 --save and restore layout functions
 local function SaveLayout(chatFrame)
 	if not addonLoaded then return end
 	if not chatFrame then return end
-	if XCHT_DB.lockChatSettings then return end
+	if addon:IsConfigLocked() then return end
 
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
@@ -939,7 +1307,7 @@ end
 local function SaveSettings(chatFrame)
 	if not addonLoaded then return end
 	if not chatFrame then return end
-	if XCHT_DB.lockChatSettings then return end
+	if addon:IsConfigLocked() then return end
 
 	if not XCHT_DB then return end
 	if not XCHT_DB.frames then XCHT_DB.frames = {} end
@@ -1077,7 +1445,7 @@ end
 
 local function SaveChannelColors()
 	if not addonLoaded then return end
-	if XCHT_DB.lockChatSettings then return end
+	if addon:IsConfigLocked() then return end
 	if not XCHT_DB.channelColors then XCHT_DB.channelColors = {} end
 
 	local channelData = { GetChannelList() }
@@ -1100,6 +1468,7 @@ end
 local function SaveDebugInfo(chatFrame)
 	if not addonLoaded then return end
 	if not chatFrame then return end
+	if addon:IsConfigLocked() then return end
 	if not XCHT_DB then return end
 	local frameID = chatFrame:GetID()
 	if not frameID then return end
@@ -1162,6 +1531,7 @@ local function SaveDebugInfo(chatFrame)
 end
 
 local function saveChatSettings(f)
+	if addon:IsConfigLocked() then return end
 	SaveLayout(f)
 	SaveSettings(f)
 	SaveDebugInfo(f)
@@ -1169,6 +1539,7 @@ local function saveChatSettings(f)
 end
 
 local function restoreChatSettings(f)
+	if addon:IsConfigLocked() then return end
 	RestoreSettings(f)
 	RestoreLayout(f)
 end
@@ -1920,7 +2291,7 @@ end
 --------------------------]]
 
 local function checkNoticeFilter(self, event, msg, author, ...)
-	if isInAnyInstance() then
+	if not addon:CanModifyChat() then
 		return false
 	end
 	if XCHT_DB.disableChatEnterLeaveNotice then
@@ -1929,14 +2300,36 @@ local function checkNoticeFilter(self, event, msg, author, ...)
 	return false
 end
 
-function addon:setDisableChatEnterLeaveNotice()
-	if addon._noticeFilterRegistered then return end
+function addon:RegisterNoticeFilter()
+	if self._noticeFilterRegistered then return end
 	if ChatFrame_AddMessageEventFilter then
 		ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", checkNoticeFilter)
 		ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", checkNoticeFilter)
 		ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", checkNoticeFilter)
 	end
-	addon._noticeFilterRegistered = true
+	self._noticeFilterRegistered = true
+end
+
+function addon:UnregisterNoticeFilter()
+	if not self._noticeFilterRegistered then return end
+	if ChatFrame_RemoveMessageEventFilter then
+		ChatFrame_RemoveMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", checkNoticeFilter)
+		ChatFrame_RemoveMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", checkNoticeFilter)
+		ChatFrame_RemoveMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", checkNoticeFilter)
+	end
+	self._noticeFilterRegistered = false
+end
+
+function addon:setDisableChatEnterLeaveNotice()
+	if not XCHT_DB or not XCHT_DB.disableChatEnterLeaveNotice then
+		self:UnregisterNoticeFilter()
+		return
+	end
+	if self:IsRestricted() then
+		self:UnregisterNoticeFilter()
+		return
+	end
+	self:RegisterNoticeFilter()
 end
 
 for i = 1, NUM_CHAT_WINDOWS do
@@ -2209,10 +2602,8 @@ local function SetupChatFrame(chatID, chatFrame)
 		end
 
 		--enable/disable short channel names by hooking into AddMessage (ignore the combatlog)
-		if f ~= COMBATLOG and not msgHooks[n] then
-			msgHooks[n] = {}
-			msgHooks[n].AddMessage = f.AddMessage
-			f.AddMessage = AddMessage
+		if f ~= COMBATLOG then
+			HookChatFrameAddMessage(f)
 		end
 
 		processedFrames[n] = true
@@ -2289,9 +2680,6 @@ function addon:EnableAddon()
 	--do the sticky channels list
 	addon:EnableStickyChannelsList()
 
-	--do we disable enter/leaving/changed channel notifications?
-	addon:setDisableChatEnterLeaveNotice()
-
 	--toggle class colors
 	if ToggleChatColorNamesByClassGroup then
 		for i, v in pairs(CHAT_CONFIG_CHAT_LEFT) do
@@ -2334,33 +2722,6 @@ function addon:EnableAddon()
 		end
 	end
 
-	--enable short channel names for globals
-	if XCHT_DB.shortNames then
-        CHAT_WHISPER_GET 				= L.CHAT_WHISPER_GET
-        CHAT_WHISPER_INFORM_GET 		= L.CHAT_WHISPER_INFORM_GET
-		CHAT_BN_WHISPER_GET           	= L.CHAT_WHISPER_GET
-		CHAT_BN_WHISPER_INFORM_GET    	= L.CHAT_WHISPER_INFORM_GET
-        CHAT_YELL_GET 					= L.CHAT_YELL_GET
-        CHAT_SAY_GET 					= L.CHAT_SAY_GET
-        CHAT_BATTLEGROUND_GET			= L.CHAT_BATTLEGROUND_GET
-        CHAT_BATTLEGROUND_LEADER_GET 	= L.CHAT_BATTLEGROUND_LEADER_GET
-		CHAT_INSTANCE_CHAT_GET        	= L.CHAT_BATTLEGROUND_GET
-		CHAT_INSTANCE_CHAT_LEADER_GET 	= L.CHAT_BATTLEGROUND_LEADER_GET
-        CHAT_GUILD_GET   				= L.CHAT_GUILD_GET
-        CHAT_OFFICER_GET 				= L.CHAT_OFFICER_GET
-        CHAT_PARTY_GET        			= L.CHAT_PARTY_GET
-        CHAT_PARTY_LEADER_GET 			= L.CHAT_PARTY_LEADER_GET
-        CHAT_PARTY_GUIDE_GET  			= L.CHAT_PARTY_GUIDE_GET
-        CHAT_RAID_GET         			= L.CHAT_RAID_GET
-        CHAT_RAID_LEADER_GET  			= L.CHAT_RAID_LEADER_GET
-        CHAT_RAID_WARNING_GET 			= L.CHAT_RAID_WARNING_GET
-
-        CHAT_MONSTER_PARTY_GET   		= CHAT_PARTY_GET
-        CHAT_MONSTER_SAY_GET     		= CHAT_SAY_GET
-        CHAT_MONSTER_WHISPER_GET 		= CHAT_WHISPER_GET
-        CHAT_MONSTER_YELL_GET    		= CHAT_YELL_GET
-	end
-
 	--do the settings for the tabs
 	--https://github.com/tomrus88/BlizzardInterfaceCode/blob/e2b884c714b3e751a9ec84b89a5fda964f35da05/Interface/FrameXML/FloatingChatFrame.lua
 
@@ -2401,10 +2762,24 @@ function addon:EnableAddon()
 		SetupChatFrame(i)
 	end
 
+	--chat hook lifecycle (always-on hooks, feature gating via restrictions)
+	self.chatHooksEnabled = false
+	self:InstallChatHooks()
+
+	--keep restrictions in sync (instances / encounter chat lockdowns)
+	self:RegisterEvent("PLAYER_ENTERING_WORLD", "UpdateRestrictionState")
+	self:RegisterEvent("UPDATE_INSTANCE_INFO", "UpdateRestrictionState")
+	self:RegisterEvent("ZONE_CHANGED_NEW_AREA", "UpdateRestrictionState")
+	self:UpdateRestrictionState()
+
 	--DO SLASH COMMANDS
 	SLASH_XANCHAT1 = "/xanchat"
 	SlashCmdList["XANCHAT"] = function(msg)
 		local cmd = msg and msg:lower():match("^%s*(%S+)") or ""
+		if addon:IsRestricted() then
+			addon:NotifyConfigLocked()
+			return
+		end
 		if cmd == "debug" then
 			XCHT_DB.debugWrapper = not XCHT_DB.debugWrapper
 			addon.wrapperDebug = XCHT_DB.debugWrapper
@@ -2447,6 +2822,8 @@ function addon:EnableAddon()
 	addon:RegisterEvent("UI_SCALE_CHANGED")
 	addonLoaded = true
 
+	self:UpdateRestrictionState()
+
 	--once everything is loaded updated the settings for the chat, only do this once per updated version
 	if XCHT_DB.dbVer == nil or XCHT_DB.dbVer ~= ver then
 		for i = 1, NUM_CHAT_WINDOWS do
@@ -2467,6 +2844,7 @@ end
 
 --this is the fix for alt-tabbing resizing our chatboxes
 function addon:UI_SCALE_CHANGED()
+	if addon:IsConfigLocked() then return end
 	for i = 1, NUM_CHAT_WINDOWS do
 		local n = ("ChatFrame%d"):format(i)
 		local f = _G[n]
@@ -2482,7 +2860,7 @@ function addon:UI_SCALE_CHANGED()
 end
 
 --this is for temporary Whisper windows.  They are NUM_CHAT_WINDOWS + 1 and so forth
-old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
+local old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
 if old_OpenTemporaryWindow then
 	FCF_OpenTemporaryWindow = function(...)
 		local frame = old_OpenTemporaryWindow(...)
