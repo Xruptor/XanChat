@@ -26,11 +26,15 @@ local gsub = string.gsub
 local strlen = string.len
 local tinsert = table.insert
 local tremove = table.remove
+local unpack = table.unpack or unpack
+
 local function isSecretValue(v)
 	local fn = _G.issecretvalue
 	if type(fn) == "function" then
 		local ok, res = pcall(fn, v)
 		if ok then return not not res end
+		-- Be conservative if the API errors (taint/forbidden)
+		return true
 	end
 	return false
 end
@@ -40,6 +44,8 @@ local function canAccessValue(v)
 	if type(fn) == "function" then
 		local ok, res = pcall(fn, v)
 		if ok then return not not res end
+		-- If access checks error, treat as inaccessible
+		return false
 	end
 	return true
 end
@@ -61,6 +67,8 @@ local function isChatLockdown()
 	if api and api.InChatMessagingLockdown then
 		local ok, locked = pcall(api.InChatMessagingLockdown)
 		if ok then return not not locked end
+		-- If the API errors, fail closed
+		return true
 	end
 	return false
 end
@@ -352,7 +360,7 @@ local function hasCommunityLink(text)
 	return false
 end
 
--- Event-driven chat processing (replaces ChatFrame_AddMessageEventFilter usage)
+-- Proxy-based hook into ChatFrame_MessageEventHandler (replaces message filters)
 local function isChatMessageEvent(event)
 	return type(event) == "string" and strsub(event, 1, 8) == "CHAT_MSG"
 end
@@ -375,10 +383,95 @@ local function setFrameLastEvent(frame, event, author)
 	last.messageIndex = frame._xanMessageIndex
 end
 
--- Centralized, safe mutation path for chat messages before Blizzard formats output
+-- Proxy-based message capture to avoid mutating Blizzard chat history
+local proxyFieldBlacklist = {
+	historyBuffer = true,
+	isLayoutDirty = true,
+	isDisplayDirty = true,
+	onDisplayRefreshedCallback = true,
+	onScrollChangedCallback = true,
+	onTextCopiedCallback = true,
+	scrollOffset = true,
+	visibleLines = true,
+	highlightTexturePool = true,
+	fontStringPool = true,
+}
+
+local function getProxyFrame()
+	if addon._xanProxyFrame then return addon._xanProxyFrame end
+	local proxy = CreateFrame("ScrollingMessageFrame")
+	if Mixin and ChatFrameMixin then
+		Mixin(proxy, ChatFrameMixin)
+	end
+	proxy.IsShown = function() return true end
+	proxy._xanOrigAddMessage = proxy.AddMessage
+	proxy.AddMessage = function(self, text, r, g, b, id, ...)
+		if self._xanCaptureActive then
+			local extraCount = select("#", ...)
+			self._xanCaptured = {
+				text = text,
+				r = r,
+				g = g,
+				b = b,
+				id = id,
+				extra = (extraCount > 0 and { ... } or nil),
+				extraCount = extraCount,
+			}
+			return
+		end
+		if self._xanOrigAddMessage then
+			return self._xanOrigAddMessage(self, text, r, g, b, id, ...)
+		end
+	end
+	addon._xanProxyFrame = proxy
+	addon._xanProxySaved = {}
+	return proxy
+end
+
+local function applyProxyFrame(realFrame)
+	local proxy = getProxyFrame()
+	local saved = addon._xanProxySaved
+	for k in pairs(saved) do
+		saved[k] = nil
+	end
+	for k, v in pairs(realFrame) do
+		if type(v) ~= "function" and not proxyFieldBlacklist[k] then
+			if proxy[k] ~= v then
+				if saved[k] == nil then
+					saved[k] = proxy[k]
+				end
+				proxy[k] = v
+			end
+		end
+	end
+	return proxy, saved
+end
+
+local function restoreProxyFrame(proxy, saved)
+	for k, v in pairs(saved) do
+		proxy[k] = v
+	end
+end
+
+local function getChatTypeInfoForEvent(event, channelNumber)
+	local chatType = event and strsub(event, 10)
+	if not chatType then return ChatTypeInfo["SYSTEM"] end
+	if chatType == "CHANNEL" or chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
+		if channelNumber then
+			local info = ChatTypeInfo["CHANNEL"..tostring(channelNumber)]
+			if info then return info end
+		end
+	end
+	return ChatTypeInfo[chatType] or ChatTypeInfo["SYSTEM"]
+end
+
 local function handleChatMessageEvent(orig, frame, event, ...)
 	if not orig then return end
 	if not isChatMessageEvent(event) then
+		return orig(frame, event, ...)
+	end
+
+	if frame and frame.IsForbidden and frame:IsForbidden() then
 		return orig(frame, event, ...)
 	end
 
@@ -388,32 +481,48 @@ local function handleChatMessageEvent(orig, frame, event, ...)
 	end
 
 	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17 = ...
+	-- Treat any secret/inaccessible string arg as unsafe for Blizzard formatting
+	local isSecret = not areSafeArgs(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
 
 	-- Capture context for stylized names (only on safe events)
-	if addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle and not isSensitiveChatEvent(event) then
+	if addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle and not isSensitiveChatEvent(event) and not isSecret then
 		local safeAuthor = isSafeString(arg2) and arg2 or nil
 		setFrameLastEvent(frame, event, safeAuthor)
 	end
 
-	-- Never mutate during restrictions or sensitive event types
+	-- Secret values: avoid Blizzard formatting entirely
+	if isSecret then
+		local info = getChatTypeInfoForEvent(event, arg8)
+		local hook = msgHooks[frame:GetName()]
+		local rawAdd = hook and hook.AddMessage or frame.AddMessage
+		if rawAdd then
+			return rawAdd(frame, arg1, info.r, info.g, info.b, info.id)
+		end
+		return
+	end
+
+	-- Respect restrictions and sensitive events: no mutation, let Blizzard handle
 	if not addon:CanModifyChat() or isSensitiveChatEvent(event) then
 		return orig(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
 	end
 
-	-- URL linkification occurs pre-format to mimic legacy filter behavior safely
-	if type(arg1) == "string" and isSafeString(arg1) then
-		if not areSafeArgs(arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17) then
-			return orig(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
-		end
-		if not hasUrlLink(arg1) and mayContainUrl(arg1) then
-			local newMsg, changed = linkifyUrls(arg1)
-			if changed then
-				arg1 = newMsg
-			end
-		end
+	-- Proxy the real frame into a dummy, run Blizzard formatting on the proxy, then post-process
+	local proxy, saved = applyProxyFrame(frame)
+	proxy._xanCaptured = nil
+	proxy._xanCaptureActive = true
+	orig(proxy, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
+	proxy._xanCaptureActive = false
+	local captured = proxy._xanCaptured
+	restoreProxyFrame(proxy, saved)
+
+	if not captured or captured.text == nil then
+		return true
 	end
 
-	return orig(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
+	if captured.extraCount and captured.extraCount > 0 then
+		return frame:AddMessage(captured.text, captured.r, captured.g, captured.b, captured.id, unpack(captured.extra, 1, captured.extraCount))
+	end
+	return frame:AddMessage(captured.text, captured.r, captured.g, captured.b, captured.id)
 end
 
 -- Wrapper entrypoint for both global and per-frame message handlers
@@ -467,6 +576,8 @@ function addon:InstallChatEventHook()
 		end
 	end
 end
+
+-- (uninstall hook removed; proxy pipeline relies on always-on event handler)
 
 StaticPopupDialogs["LINKME"] = {
 	text = L.URLCopy,
@@ -1054,6 +1165,10 @@ local AddMessage = function(frame, text, ...)
 		return hook.AddMessage(frame, text, ...)
 	end
 
+	if frame.IsForbidden and frame:IsForbidden() then
+		return hook.AddMessage(frame, text, ...)
+	end
+
 	if type(text) ~= "string" then
 		return hook.AddMessage(frame, text, ...)
 	end
@@ -1065,6 +1180,12 @@ local AddMessage = function(frame, text, ...)
 	end
 	if hasCommunityLink(text) then
 		return hook.AddMessage(frame, text, ...)
+	end
+
+	-- URL linkification now happens on final output (post-Blizzard formatting)
+	local newText, changed = linkifyUrls(text)
+	if changed then
+		text = newText
 	end
 
 	if XCHT_DB.shortNames then
