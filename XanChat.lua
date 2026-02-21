@@ -67,32 +67,17 @@ local function isChatLockdown()
 	if api and api.InChatMessagingLockdown then
 		local ok, locked = pcall(api.InChatMessagingLockdown)
 		if ok then return not not locked end
-		-- If the API errors, fail closed
-		return true
 	end
 	return false
 end
 
 function addon:IsRestricted()
-	return isInAnyInstance() or isChatLockdown()
+	return isInAnyInstance()
 end
 
 function addon:IsConfigLocked()
 	if XCHT_DB and XCHT_DB.lockChatSettings then return true end
 	return self:IsRestricted()
-end
-
-function addon:CanModifyChat()
-	if self._featuresSuppressed then return false end
-	if isInAnyInstance() then return false end
-	if isChatLockdown() then
-		self:NotifyRestriction("lockdown")
-		return false
-	end
-	if self._restrictionState == "lockdown" then
-		self:NotifyRestrictionCleared()
-	end
-	return true
 end
 
 local function areSafeArgs(...)
@@ -133,24 +118,6 @@ local function printNotice(msg)
 	if DEFAULT_CHAT_FRAME then
 		DEFAULT_CHAT_FRAME:AddMessage(msg)
 	end
-end
-
-function addon:NotifyRestriction(reason)
-	if reason == "instance" then
-		if self._restrictionState == "instance" then return end
-		self._restrictionState = "instance"
-		printNotice(L.ChatFeaturesDisabledInstance or "xanChat: Chat features are disabled in instances.")
-	elseif reason == "lockdown" then
-		if self._restrictionState == "lockdown" then return end
-		self._restrictionState = "lockdown"
-		printNotice(L.ChatFeaturesDisabledLockdown or "xanChat: Chat features are disabled during encounter restrictions.")
-	end
-end
-
-function addon:NotifyRestrictionCleared()
-	if not self._restrictionState then return end
-	self._restrictionState = nil
-	printNotice(L.ChatFeaturesEnabled or "xanChat: Chat features re-enabled.")
 end
 
 function addon:NotifyConfigLocked()
@@ -453,6 +420,8 @@ local function restoreProxyFrame(proxy, saved)
 	end
 end
 
+local msgHooks = {}
+
 local function getChatTypeInfoForEvent(event, channelNumber)
 	local chatType = event and strsub(event, 10)
 	if not chatType then return ChatTypeInfo["SYSTEM"] end
@@ -465,6 +434,16 @@ local function getChatTypeInfoForEvent(event, channelNumber)
 	return ChatTypeInfo[chatType] or ChatTypeInfo["SYSTEM"]
 end
 
+local function sanitizeChatArg(v)
+	if type(v) == "string" then
+		if isSecretValue(v) or not canAccessValue(v) then
+			return ""
+		end
+	end
+	return v
+end
+
+
 local function handleChatMessageEvent(orig, frame, event, ...)
 	if not orig then return end
 	if not isChatMessageEvent(event) then
@@ -476,7 +455,7 @@ local function handleChatMessageEvent(orig, frame, event, ...)
 	end
 
 	-- Suppress enter/leave/changed notices without filters
-	if XCHT_DB and XCHT_DB.disableChatEnterLeaveNotice and shouldSuppressNoticeEvent(event) and not addon:IsRestricted() then
+	if XCHT_DB and XCHT_DB.disableChatEnterLeaveNotice and shouldSuppressNoticeEvent(event) then
 		return true
 	end
 
@@ -490,8 +469,59 @@ local function handleChatMessageEvent(orig, frame, event, ...)
 		setFrameLastEvent(frame, event, safeAuthor)
 	end
 
+	-- Respect sensitive events: no mutation, let Blizzard handle (even if args are secret)
+	if isSensitiveChatEvent(event) then
+		if not isSecret then
+			return orig(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
+		end
+		-- If the message itself is safe, try sanitized args to preserve prefixes without secret values
+		if isSafeString(arg1) then
+			return orig(frame, event,
+				arg1,
+				sanitizeChatArg(arg2),
+				sanitizeChatArg(arg3),
+				sanitizeChatArg(arg4),
+				sanitizeChatArg(arg5),
+				sanitizeChatArg(arg6),
+				sanitizeChatArg(arg7),
+				sanitizeChatArg(arg8),
+				sanitizeChatArg(arg9),
+				sanitizeChatArg(arg10),
+				sanitizeChatArg(arg11),
+				sanitizeChatArg(arg12),
+				sanitizeChatArg(arg13),
+				sanitizeChatArg(arg14),
+				sanitizeChatArg(arg15),
+				sanitizeChatArg(arg16),
+				sanitizeChatArg(arg17)
+			)
+		end
+	end
+
 	-- Secret values: avoid Blizzard formatting entirely
 	if isSecret then
+		-- If the message itself is safe, try sanitized args to preserve prefixes without secret values
+		if isSafeString(arg1) then
+			return orig(frame, event,
+				arg1,
+				sanitizeChatArg(arg2),
+				sanitizeChatArg(arg3),
+				sanitizeChatArg(arg4),
+				sanitizeChatArg(arg5),
+				sanitizeChatArg(arg6),
+				sanitizeChatArg(arg7),
+				sanitizeChatArg(arg8),
+				sanitizeChatArg(arg9),
+				sanitizeChatArg(arg10),
+				sanitizeChatArg(arg11),
+				sanitizeChatArg(arg12),
+				sanitizeChatArg(arg13),
+				sanitizeChatArg(arg14),
+				sanitizeChatArg(arg15),
+				sanitizeChatArg(arg16),
+				sanitizeChatArg(arg17)
+			)
+		end
 		local info = getChatTypeInfoForEvent(event, arg8)
 		local hook = msgHooks[frame:GetName()]
 		local rawAdd = hook and hook.AddMessage or frame.AddMessage
@@ -499,11 +529,6 @@ local function handleChatMessageEvent(orig, frame, event, ...)
 			return rawAdd(frame, arg1, info.r, info.g, info.b, info.id)
 		end
 		return
-	end
-
-	-- Respect restrictions and sensitive events: no mutation, let Blizzard handle
-	if not addon:CanModifyChat() or isSensitiveChatEvent(event) then
-		return orig(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17)
 	end
 
 	-- Proxy the real frame into a dummy, run Blizzard formatting on the proxy, then post-process
@@ -596,10 +621,6 @@ local SetHyperlink = _G.ItemRefTooltip and _G.ItemRefTooltip.SetHyperlink
 local function XanChat_SetHyperlink(self, link, ...)
 	local orig = addon._prevSetHyperlink or SetHyperlink
 	if not orig then return end
-
-	if not addon:CanModifyChat() then
-		return orig(self, link, ...)
-	end
 
 	if type(link) ~= "string" or not isSafeString(link) then
 		return orig(self, link, ...)
@@ -1133,7 +1154,6 @@ end
 --------------------------]]
 
 local dummy = function(self) self:Hide() end
-local msgHooks = {}
 local HistoryDB
 
 StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
@@ -1160,10 +1180,6 @@ StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = {
 local AddMessage = function(frame, text, ...)
 	local hook = msgHooks[frame:GetName()]
 	if not hook or not hook.AddMessage then return end
-
-	if not addon:CanModifyChat() then
-		return hook.AddMessage(frame, text, ...)
-	end
 
 	if frame.IsForbidden and frame:IsForbidden() then
 		return hook.AddMessage(frame, text, ...)
@@ -1344,48 +1360,14 @@ function addon:InstallChatHooks()
 	end
 end
 
-function addon:EnableChatFeatures()
-	if self._featuresSuppressed == false then return end
-	self._featuresSuppressed = false
-	-- Purely visual changes; logic is handled in the event handler
-	ApplyShortChannelFormats(true)
-end
-
-function addon:DisableChatFeatures()
-	if self._featuresSuppressed == true then return end
-	self._featuresSuppressed = true
-	-- Purely visual changes; logic is handled in the event handler
-	ApplyShortChannelFormats(false)
-end
-
 function addon:UpdateRestrictionState()
 	local inInstance = isInAnyInstance()
-	local locked = isChatLockdown()
-	local restricted = inInstance or locked
-
-	-- Toggle feature gating on restriction transitions
-	if restricted ~= self._restrictedActive then
-		self._restrictedActive = restricted
-		if restricted then
-			self:DisableChatFeatures()
-		else
-			self:EnableChatFeatures()
-		end
+	if inInstance and not self._wasInInstance then
+		-- Check chat lockdown status when entering; message is the same either way.
+		local _ = isChatLockdown()
+		printNotice(L.ChatFeaturesDisabledInstance or "xanChat: Some features disabled due to restrictions while in instances.")
 	end
-
-	-- If hooks were deferred during reload, install them once restrictions clear
-	if not restricted and self._hooksDeferred and not self.chatHooksEnabled then
-		self._hooksDeferred = false
-		self:InstallChatHooks()
-	end
-
-	if inInstance then
-		self:NotifyRestriction("instance")
-	elseif locked then
-		self:NotifyRestriction("lockdown")
-	else
-		self:NotifyRestrictionCleared()
-	end
+	self._wasInInstance = inInstance
 
 	if self.configFrame and self.configFrame.DoLock then
 		self.configFrame:DoLock()
@@ -2795,6 +2777,11 @@ function addon:EnableAddon()
 	ApplyDefaults(XCHT_DB, defaults)
 	addon.wrapperDebug = XCHT_DB.debugWrapper
 
+	-- Apply chat format strings when short channel names are enabled
+	if XCHT_DB.shortNames then
+		ApplyShortChannelFormats(true)
+	end
+
 	local ver = (addon.GetAddOnMetadata and addon.GetAddOnMetadata(ADDON_NAME, "Version")) or "1.0"
 
 	--setup the history DB
@@ -2907,23 +2894,11 @@ function addon:EnableAddon()
 		SetupChatFrame(i)
 	end
 
-	--chat hook lifecycle (always-on hooks, feature gating via restrictions)
+	--chat hook lifecycle (always-on hooks)
 	self.chatHooksEnabled = false
-	if self:IsRestricted() then
-		-- Defer hook installation if we reload during a restricted state (BG/instance/lockdown)
-		self._hooksDeferred = true
-		local inInstance = isInAnyInstance()
-		local locked = isChatLockdown()
-		if inInstance then
-			self:NotifyRestriction("instance")
-		elseif locked then
-			self:NotifyRestriction("lockdown")
-		end
-	else
-		self:InstallChatHooks()
-	end
+	self:InstallChatHooks()
 
-	--keep restrictions in sync (instances / encounter chat lockdowns)
+	--keep config lock in sync with instance state
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", "UpdateRestrictionState")
 	self:RegisterEvent("UPDATE_INSTANCE_INFO", "UpdateRestrictionState")
 	self:RegisterEvent("ZONE_CHANGED_NEW_AREA", "UpdateRestrictionState")
