@@ -21,6 +21,11 @@ L.DisableChatEnterLeaveNotice = "Désactiver les notifications de canal (|cFF99C
 
 L.ProtectedChannel = " |cFFDF2B2B(Canal protégé par Blizzard. Accès addon interdit.)|r."
 
+L.ChatFeaturesDisabledInstance = "xanChat : Certaines fonctions sont désactivées en instance en raison de restrictions."
+L.ChatFeaturesDisabledLockdown = "xanChat : Certaines fonctions du chat sont désactivées en raison des restrictions de rencontre."
+L.ChatFeaturesEnabled = "xanChat : Fonctions de chat réactivées."
+L.ChatSettingsLockedRestricted = "xanChat : Les paramètres sont verrouillés pendant les restrictions de rencontre/instance."
+
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 --trailing dash is to check for things like [WorldDefense - Alterac Mountains] so it will remove location
 L.ChannelGeneral = "(%[%d+%. )Général.-%]"

@@ -1,12 +1,13 @@
 --[[
-	This is a standalone implementation of the secure hooking mechanism inspired by AceHook-3.0,
-	as used by addons like Prat. It is designed to provide taint-free post-hooks that can be
-	deactivated on demand.
+	This is a standalone implementation of the secure hooking mechanism.
+	It is designed to provide taint-free post-hooks that can be	deactivated on demand.
 ]]
 
-local XanChat = select(2, ...) or XanChat
+local ADDON_NAME, private = ...
+local XanChat = _G[ADDON_NAME]
 if not XanChat then
-	return
+	XanChat = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	_G[ADDON_NAME] = XanChat
 end
 local Util = XanChat.Util or {}
 XanChat.Util = Util
@@ -64,7 +65,8 @@ function Util:SecureHook(object, method, handler)
 
 	-- Prevent re-hooking the same function with this system
 	local hookMap = object and registry[object] or registry
-	if hookMap[method] then
+	local existingUid = hookMap[method]
+	if existingUid and actives[existingUid] then
 		error(format("Hook for '%s' already exists.", method), 2)
 	end
 

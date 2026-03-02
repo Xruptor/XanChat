@@ -9,6 +9,20 @@ addon.L = (private and private.L) or addon.L or {}
 local L = addon.L
 local chatTypeInfo = ChatTypeInfo
 
+local function isRestricted()
+	return addon.IsRestricted and addon:IsRestricted()
+end
+
+local function guardRestricted()
+	if isRestricted() then
+		if addon.NotifyConfigLocked then
+			addon:NotifyConfigLocked()
+		end
+		return true
+	end
+	return false
+end
+
 addon.stickyChannelsList = CreateFrame("frame", ADDON_NAME.."_stickyChannelsList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 
 local stickyChannelsList = addon.stickyChannelsList
@@ -73,7 +87,7 @@ function addon:EnableStickyChannelsList()
 		addon.ApplyDefaults(XCHT_DB.stickyChannelsList, StickyTypeChannels)
 	else
 		for k, v in pairs(StickyTypeChannels) do
-			if k and XCHT_DB.stickyChannelsList[k] == nil then
+			if XCHT_DB.stickyChannelsList[k] == nil then
 				XCHT_DB.stickyChannelsList[k] = v --set defaults
 			end
 		end
@@ -81,6 +95,7 @@ function addon:EnableStickyChannelsList()
 
 	if not addon.stickyChannelsList._xanHooked then
 		addon.stickyChannelsList:HookScript("OnShow", function(self)
+			guardRestricted()
 			if not addon.stickyChannelsList.ListLoaded then
 				--populate scroll list
 				addon:DoStickyChannelsList()
@@ -148,8 +163,15 @@ function addon:DoStickyChannelsList()
 			bar_chk:SetChecked(false)
 		end
 		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
+		bar_chk:SetEnabled(not isRestricted())
 
 		bar_chk:SetScript("OnClick", function(self)
+			if guardRestricted() then
+				if self.xData and self.xData.name then
+					self:SetChecked(XCHT_DB.stickyChannelsList[self.xData.name] == 1)
+				end
+				return
+			end
 			local checked = self:GetChecked()
 
 			--update the DB

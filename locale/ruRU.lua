@@ -21,6 +21,11 @@ L.DisableChatEnterLeaveNotice = "Отключить уведомления о в
 
 L.ProtectedChannel = " |cFFDF2B2B(Канал защищен Blizzard. Доступ аддона запрещен.)|r."
 
+L.ChatFeaturesDisabledInstance = "xanChat: Некоторые функции отключены в подземельях из-за ограничений."
+L.ChatFeaturesDisabledLockdown = "xanChat: Некоторые функции чата отключены из-за ограничений боя."
+L.ChatFeaturesEnabled = "xanChat: Функции чата снова включены."
+L.ChatSettingsLockedRestricted = "xanChat: Настройки заблокированы во время ограничений боя/инстанса."
+
 --Channel Config (Only change the actual english word, leave the characters.  It's case sensitive!)
 --trailing dash is to check for things like [WorldDefense - Alterac Mountains] so it will remove location
 L.ChannelGeneral = "(%[%d+%. )Общий.-%]"

@@ -9,6 +9,20 @@ addon.L = (private and private.L) or addon.L or {}
 local L = addon.L
 local strfind = string.find
 
+local function isRestricted()
+	return addon.IsRestricted and addon:IsRestricted()
+end
+
+local function guardRestricted()
+	if isRestricted() then
+		if addon.NotifyConfigLocked then
+			addon:NotifyConfigLocked()
+		end
+		return true
+	end
+	return false
+end
+
 addon.filterList = CreateFrame("frame", ADDON_NAME.."_filterList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 
 local filterList = addon.filterList
@@ -52,35 +66,68 @@ scrollFrame:SetScrollChild(scrollFrame_Child)
 scrollFrame:Hide()
 filterList:Hide()
 
---https://raw.githubusercontent.com/Gethe/wow-ui-source/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/FrameXML/ChatFrame.lua
---https://github.com/Gethe/wow-ui-source/blob/356d028f9d245f6e75dc8a806deb3c38aa0aa77f/AddOns/Blizzard_APIDocumentation/PartyInfoDocumentation.lua
-
---https://wowwiki.fandom.com/wiki/Events_A-Z_(full_list)
-
 local coreList = {
-	["CHAT_MSG_SYSTEM"] = true,
-	["TIME_PLAYED_MSG"] = true,
-	["PLAYER_LEVEL_UP"] = true,
-	["UNIT_LEVEL"] = true,
-	["CHARACTER_POINTS_CHANGED"] = true,
-	["CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE"] = true,
-	["QUEST_TURNED_IN"] = true,
-	["CHAT_MSG_EMOTE"] = true,
-	["CHAT_MSG_TEXT_EMOTE"] = true,
-	["CHAT_MSG_SKILL"] = true,
-	["CHAT_MSG_CURRENCY"] = true,
-	["CHAT_MSG_MONEY"] = true,
-	["CHAT_MSG_WHISPER"] = true,
+	["CHAT_MSG_ACHIEVEMENT"] = true,
+	["CHAT_MSG_ADDON"] = true,
+	["CHAT_MSG_AFK"] = true,
+	["CHAT_MSG_BN_CONVERSATION"] = true,
+	["CHAT_MSG_BN_CONVERSATION_NOTICE"] = true,
+	["CHAT_MSG_BN_INLINE_TOAST_ALERT"] = true,
+	["CHAT_MSG_BN_INLINE_TOAST_BROADCAST"] = true,
+	["CHAT_MSG_BN_INLINE_TOAST_BROADCAST_INFORM"] = true,
+	["CHAT_MSG_BN_INLINE_TOAST_CONVERSATION"] = true,
+	["CHAT_MSG_BN_WHISPER"] = true,
 	["CHAT_MSG_BN_WHISPER_INFORM"] = true,
-	["CHAT_MSG_OPENING"] = true,
-	["CHAT_MSG_TRADESKILLS"] = true,
-	["CHAT_MSG_PET_INFO"] = true,
+	["CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE"] = true,
+	["CHAT_MSG_CHANNEL"] = true,
+	["CHAT_MSG_CHANNEL_JOIN"] = true,
+	["CHAT_MSG_CHANNEL_LEAVE"] = true,
+	["CHAT_MSG_CHANNEL_LIST"] = true,
+	["CHAT_MSG_CHANNEL_NOTICE"] = true,
+	["CHAT_MSG_CHANNEL_NOTICE_USER"] = true,
+	["CHAT_MSG_COMBAT_FACTION_CHANGE"] = true,
+	["CHAT_MSG_COMBAT_HONOR_GAIN"] = true,
+	["CHAT_MSG_COMBAT_MISC_INFO"] = true,
+	["CHAT_MSG_COMBAT_XP_GAIN"] = true,
+	["CHAT_MSG_CURRENCY"] = true,
+	["CHAT_MSG_DND"] = true,
+	["CHAT_MSG_EMOTE"] = true,
+	["CHAT_MSG_GUILD"] = true,
+	["CHAT_MSG_IGNORED"] = true,
+	["CHAT_MSG_INSTANCE_CHAT"] = true,
 	["CHAT_MSG_LOOT"] = true,
+	["CHAT_MSG_MONEY"] = true,
+	["CHAT_MSG_MONSTER_EMOTE"] = true,
+	["CHAT_MSG_MONSTER_PARTY"] = true,
+	["CHAT_MSG_MONSTER_RAID"] = true,
+	["CHAT_MSG_MONSTER_SAY"] = true,
+	["CHAT_MSG_MONSTER_WHISPER"] = true,
+	["CHAT_MSG_MONSTER_YELL"] = true,
 	["CHAT_MSG_NOTICE"] = true,
+	["CHAT_MSG_OFFICER"] = true,
+	["CHAT_MSG_OPENING"] = true,
+	["CHAT_MSG_PARTY"] = true,
+	["CHAT_MSG_PARTY_LEADER"] = true,
+	["CHAT_MSG_PET_INFO"] = true,
+	["CHAT_MSG_RAID"] = true,
+	["CHAT_MSG_RAID_LEADER"] = true,
+	["CHAT_MSG_RAID_WARNING"] = true,
+	["CHAT_MSG_SAY"] = true,
+	["CHAT_MSG_SKILL"] = true,
+	["CHAT_MSG_SYSTEM"] = true,
+	["CHAT_MSG_TEXT_EMOTE"] = true,
+	["CHAT_MSG_TRADESKILLS"] = true,
+	["CHAT_MSG_WHISPER"] = true,
+	["CHAT_MSG_YELL"] = true,
+	["CHARACTER_POINTS_CHANGED"] = true,
 	["PARTY_LEADER_CHANGED"] = true,
+	["PLAYER_LEVEL_UP"] = true,
 	["PLAYER_ROLES_ASSIGNED"] = true,
+	["QUEST_TURNED_IN"] = true,
 	["READY_CHECK"] = true,
 	["READY_CHECK_FINISHED"] = true,
+	["TIME_PLAYED_MSG"] = true,
+	["UNIT_LEVEL"] = true,
 }
 
 local customList = {
@@ -102,12 +149,12 @@ function addon:EnableFilterList()
 		addon.ApplyDefaults(XCHT_DB.filterList.custom, customList)
 	else
 		for k, v in pairs(coreList) do
-			if k and XCHT_DB.filterList.core[k] == nil then
+			if XCHT_DB.filterList.core[k] == nil then
 				XCHT_DB.filterList.core[k] = v
 			end
 		end
 		for k, v in pairs(customList) do
-			if k and XCHT_DB.filterList.custom[k] == nil then
+			if XCHT_DB.filterList.custom[k] == nil then
 				XCHT_DB.filterList.custom[k] = v
 			end
 		end
@@ -115,6 +162,7 @@ function addon:EnableFilterList()
 
 	if not addon.filterList._xanHooked then
 		addon.filterList:HookScript("OnShow", function(self)
+			guardRestricted()
 			if not addon.filterList.ListLoaded then
 				--populate scroll list
 				addon:DoFilterList()
@@ -206,8 +254,19 @@ function addon:DoFilterList()
 			end
 		end
 		_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
+		bar_chk:SetEnabled(not isRestricted())
 
 		bar_chk:SetScript("OnClick", function(self)
+			if guardRestricted() then
+				if self.xData and self.xData.name then
+					if self.xData.val == 1 then
+						self:SetChecked(XCHT_DB.filterList.core[self.xData.name])
+					else
+						self:SetChecked(XCHT_DB.filterList.custom[self.xData.name])
+					end
+				end
+				return
+			end
 			local checked = self:GetChecked()
 
 			--update the DB
@@ -236,17 +295,25 @@ function addon:searchFilterList(event, text)
 	local filterList = XCHT_DB.filterList
 	if not filterList then return false end
 	if not event then return false end
+	if addon.DebugPrint then
+		local textDump = addon.DebugValue and addon.DebugValue(text) or "<text>"
+		addon.DebugPrint("searchFilterList: event=" .. tostring(event) .. " text=" .. textDump)
+	end
 
 	--first lets check the core
-	if filterList.core[event] then return true end
+	if filterList.core[event] then
+		if addon.DebugPrint then addon.DebugPrint("searchFilterList: core match") end
+		return true
+	end
 
 	--if not lets check custom
 	for k, v in pairs(filterList.custom) do
 		--if it's enabled then check the string
 		if v and strfind(event, k, 1, true) then
+			if addon.DebugPrint then addon.DebugPrint("searchFilterList: custom match key=" .. tostring(k)) end
 			return true
 		end
 	end
-
+	if addon.DebugPrint then addon.DebugPrint("searchFilterList: no match") end
 	return false
 end

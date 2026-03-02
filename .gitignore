@@ -4,3 +4,9 @@ xanChat.code-workspace
 .vscode/settings.json
 .github/workflows/release.yml
 AGENTS.md
+COPILOT.md
+TODO.md
+NOTES.md
+GEMINI.md
+GEMINI-AGT.md
+resource
