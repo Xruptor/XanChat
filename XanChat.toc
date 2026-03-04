@@ -11,9 +11,16 @@
 ## OptionalDeps: tekDebug
 ## SavedVariables: XCHT_DB, XCHT_HISTORY
 
-locale\locales.lua
-util.lua
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+libs\AceHook-3.0\AceHook-3.0.lua
+
 wrapper.lua
+filter.lua
+config.lua
+stickychannels.lua
+
+locale\locales.lua
 locale\enUS.lua
 locale\deDE.lua
 locale\esES.lua
@@ -27,6 +34,3 @@ locale\zhCN.lua
 locale\zhTW.lua
 
 XanChat.lua
-config.lua
-filter.lua
-stickychannels.lua
