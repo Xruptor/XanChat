@@ -55,8 +55,25 @@ local function dbg(msg)
 	end
 end
 
-local isSecretValue
-local canAccessValue
+local isSecretValue = function(v)
+	local fn = _G.issecretvalue
+	if type(fn) == "function" then
+		local ok, res = pcall(fn, v)
+		if ok then return not not res end
+		return true
+	end
+	return false
+end
+
+local canAccessValue = function(v)
+	local fn = _G.canaccessvalue
+	if type(fn) == "function" then
+		local ok, res = pcall(fn, v)
+		if ok then return not not res end
+		return false
+	end
+	return true
+end
 
 local function dbgValue(v)
 	local t = type(v)
@@ -93,25 +110,6 @@ end
 addon.ApplyDefaults = ApplyDefaults
 
 -- Secret Value Protection Functions
-isSecretValue = function(v)
-	local fn = _G.issecretvalue
-	if type(fn) == "function" then
-		local ok, res = pcall(fn, v)
-		if ok then return not not res end
-		return true
-	end
-	return false
-end
-
-canAccessValue = function(v)
-	local fn = _G.canaccessvalue
-	if type(fn) == "function" then
-		local ok, res = pcall(fn, v)
-		if ok then return not not res end
-		return false
-	end
-	return true
-end
 
 local function isSafeString(v)
 	if isSecretValue(v) then return false end
@@ -366,65 +364,46 @@ addon.AddMessage = function(self, frame, text, r, g, b, id, ...)
 end
 
 -- ============================================================================
--- CHAT SECTIONS SYSTEM
+-- CHAT COMPOSITION SYSTEM (Descriptive Templates)
 -- ============================================================================
 
-dbg("chat_sections_system_init")
+dbg("chat_composition_system_init")
 
--- Parse a space-separated section token specification into an ordered token list
-local function parseSectionLayout(spec)
-	dbg("parseSectionLayout: parsing spec")
-	local out = {}
-	for token in string.gmatch(spec, "%S+") do
-		out[#out + 1] = token
-	end
-	dbg("parseSectionLayout: parsed " .. #out .. " tokens")
-	return out
-end
+-- Defines the main structure of a chat line.
+local CHAT_MASTER_TEMPLATE = "{{prefix}} {{player}} {{postfix}}: {{message_body}}"
 
--- Chat line composition stages (logical grouping of section tokens)
--- These layouts define the structure of how Blizzard chat lines are assembled
-local CHAT_LAYOUT_PREFIX = parseSectionLayout([[
-PRE nN CHANLINK NN cC CHANNELNUM CC CHANNEL Cc TYPEPREFIX Nn
-]])
+-- Defines the components that make up the chat line.
+-- These can be customized to change the look of the chat.
+local CHAT_COMPONENT_TEMPLATES = {
+    prefix  = "{{channel_display}} {{type_prefix}}",
+    player  = "{{player_flag}} {{styled_player_name_or_link}}",
+    postfix = "[{{language}}] {{mobile_icon}}",
 
-local CHAT_LAYOUT_PLAYER = parseSectionLayout([[
-fF FLAG Ff pP TIMERUNNER lL PLAYERLINK PLAYERLINKDATA LL PLAYER
-NONPLAYER sS SERVER Ss Ll Pp
-]])
+    -- Sub-components for more granular control
+    channel_display = "[{{channel_number}}. {{channel_name}}]",
+    styled_player_name_level = "[{{level_text}}:{{name_text}}]",
+    styled_player_name_simple = "[{{name_text}}]",
+}
 
-local CHAT_LAYOUT_POST_PLAYER = parseSectionLayout([[
-TYPEPOSTFIX mM gG LANGUAGE Gg MOBILE
-]])
+-- All possible data keys that can be populated from a chat event.
+local CHAT_DATA_KEYS = {
+    "prefix_text", "type_prefix", "channel_link", "channel_number", "channel_name", "zone_name",
+    "player_flag", "timerunner", "player_link", "player_name", "non_player_name", "server_name", "server_separator",
+    "type_postfix", "language", "mobile_icon", "message_text", "postfix_text", "styled_player_name", "PRE", "POST"
+}
 
-local CHAT_LAYOUT_SUFFIX = parseSectionLayout([[
-Mm POST
-]])
-
--- Complete section token registry for buffer initialization
--- This contains all possible section tokens that may appear in chat messages
-local CHAT_SECTION_REGISTRY = parseSectionLayout([[
-PRE nN CHANLINK NN cC CHANNELNUM CC CHANNEL zZ ZONE Zz Cc TYPEPREFIX Nn
-fF FLAG Ff pP TIMERUNNER lL PLAYERLINK PLAYERLINKDATA LL PLAYER NONPLAYER sS
-SERVER Ss Ll Pp TYPEPOSTFIX mM gG LANGUAGE Gg MOBILE MESSAGE Mm POST
-]])
-
--- Pooled section buffers to avoid frequent table allocations
+-- Buffers for composition. 'sectionOriginal' and 'sectionWorking' are used to maintain compatibility
+-- with other parts of the addon that expect these names.
 local sectionOriginal = {}
 local sectionWorking = { ORG = sectionOriginal }
-local buildPartsPrefix = {}
-local buildPartsPlayer = {}
-local buildPartsPostPlayer = {}
-local buildPartsSuffix = {}
 
--- Initialize all section tokens in a buffer with empty string defaults
 local function resetSectionBuffer(buffer)
 	dbg("resetSectionBuffer: clearing buffer")
 	for k in pairs(buffer) do
 		buffer[k] = nil
 	end
-	for i = 1, #CHAT_SECTION_REGISTRY do
-		buffer[CHAT_SECTION_REGISTRY[i]] = ""
+	for i = 1, #CHAT_DATA_KEYS do
+		buffer[CHAT_DATA_KEYS[i]] = ""
 	end
 end
 
@@ -438,46 +417,33 @@ local function prepareWorkingSections()
 	sectionWorking.ORG = sectionOriginal
 end
 
--- Clear a pooled build list for reuse
-local function clearBuildList(list)
-	for i = #list, 1, -1 do
-		list[i] = nil
-	end
-end
-
--- Append layout tokens from a message to a build list
-local function appendLayout(list, msg, layout)
-	for i = 1, #layout do
-		list[#list + 1] = msg[layout[i]] or ""
-	end
-end
-
--- Build complete chat text from parsed message sections
--- Assembles the message in Blizzard-standard format: prefix + player + post-player + message + suffix
 function addon:BuildChatText(message)
-	dbg("BuildChatText: building chat text")
-	local msg = message or sectionWorking
+	dbg("BuildChatText: building chat text from descriptive templates")
+	local m = message or sectionWorking
 
-	-- Clear pooled build lists for reuse
-	clearBuildList(buildPartsPrefix)
-	clearBuildList(buildPartsPlayer)
-	clearBuildList(buildPartsPostPlayer)
-	clearBuildList(buildPartsSuffix)
+    -- Create some composite fields for easier templating
+    if m.channel_number and m.channel_number ~= "" then
+        m.channel_display = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.channel_display, m)
+    else
+        m.channel_display = ""
+    end
+    m.styled_player_name_or_link = m.styled_player_name or m.player_link or m.player_name
 
-	-- Build each section stage
-	appendLayout(buildPartsPrefix, msg, CHAT_LAYOUT_PREFIX)
-	appendLayout(buildPartsPlayer, msg, CHAT_LAYOUT_PLAYER)
-	appendLayout(buildPartsPostPlayer, msg, CHAT_LAYOUT_POST_PLAYER)
-	appendLayout(buildPartsSuffix, msg, CHAT_LAYOUT_SUFFIX)
+	-- Build the main components
+    local prefix = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.prefix, m)
+    local player = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.player, m)
+    local postfix = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.postfix, m)
 
-	-- Assemble complete chat line
-	-- SPLAYER is inserted between player and post-player sections for custom player styling
-	local result = table.concat(buildPartsPrefix, "")
-		.. table.concat(buildPartsPlayer, "")
-		.. (msg.SPLAYER or "")
-		.. table.concat(buildPartsPostPlayer, "")
-		.. (msg.MESSAGE or "")
-		.. table.concat(buildPartsSuffix, "")
+    local composition = {
+        prefix = prefix,
+        player = player,
+        postfix = postfix,
+        message_body = m.message_text or "",
+    }
+
+	-- Assemble final chat line from master template, stripping extra whitespace
+	local result = addon.private.Template:Parse(CHAT_MASTER_TEMPLATE, composition)
+    result = result:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
 
 	if isSafeString(result) then
 		dbg("BuildChatText: result length=" .. #result)
@@ -490,7 +456,7 @@ end
 -- ============================================================================
 
 local PatternRegistry = { patterns = {}, sortedList = {}, sorted = true }
-local tokennum = 1
+local tokennum = 0
 local MatchTable = {}
 
 -- UUID generator for pattern IDs
@@ -553,7 +519,7 @@ end
 
 -- Remove matched strings and replace them with temporary tokens
 function addon:MatchPatterns(m, ptype)
-	local text = m.MESSAGE
+	local text = m.message_text
 
 	-- Secret value guard
 	if _G.issecretvalue and _G.issecretvalue(text) then
@@ -596,7 +562,7 @@ end
 
 -- Put tokenized matches back into the text
 function addon:ReplaceMatches(m, ptype)
-	local text = m.MESSAGE
+	local text = m.message_text
 
 	-- Secret value guard
 	if _G.issecretvalue and _G.issecretvalue(text) then
@@ -750,7 +716,7 @@ function addon:SplitChatMessage(frame, event, ...)
 	s.CHATTARGET = chatTarget
 
 	-- Message text
-	s.MESSAGE = isSecret and arg1 or (safestr(arg1) or ""):gsub("^%s*(.-)%s*$", "%1")
+	s.message_text = isSecret and arg1 or (safestr(arg1) or ""):gsub("^%s*(.-)%s*$", "%1")
 
 	-- Check if player name is a secret value (SEPARATE from message text secret check)
 	local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
@@ -758,9 +724,7 @@ function addon:SplitChatMessage(frame, event, ...)
 
 		-- Extract player information
 	if not isArg2Secret and type(arg2) == "string" and arg2 ~= "" then
-		-- Check if player name is a secret value (SEPARATE from message text secret check)
-		local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
-		local coloredName = arg2
+
 
 		-- Trim arg2 only if not secret
 		if not isArg2Secret then
@@ -792,88 +756,78 @@ function addon:SplitChatMessage(frame, event, ...)
 				playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", arg2, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
 			end
 
-			s.PLAYERLINK = playerLink
+			s.player_link = playerLink
 
 			-- Extract name and server
 			local plr, svr = arg2:match("([^%-]+)%-?(.*)")
 			if plr then
-				s.PLAYER = plr
+				s.player_name = plr
 			end
 			if svr and string.len(svr) > 0 then
-				s.sS = "-"
-				s.SERVER = svr
-				s.Ss = ""
+				s.server_separator = "-"
+				s.server_name = svr
 			end
 		end
 	end
 
 	-- Extract channel information
 	if type(arg3) == "string" and arg3 ~= "" and arg3 ~= "Universal" then
-		s.gG = "["
-		s.LANGUAGE = arg3
-		s.Gg = "] "
+		s.language = arg3
 	elseif type(arg3) == "string" and arg3 ~= "" then
 		s.LANGUAGE_NOSHOW = arg3
 	end
 
 	-- Extract channel name
 	if string.len(arg8 or "") > 0 or chatGroup == "BN_CONVERSATION" then
-		s.CC = "["
-
 		if chatGroup == "BN_CONVERSATION" then
-			s.CHANNELNUM = tostring((_G.MAX_WOW_CHAT_CHANNELS or 20) + (arg8 or 0))
+			s.channel_number = tostring((_G.MAX_WOW_CHAT_CHANNELS or 20) + (arg8 or 0))
 			if _G.CHAT_BN_CONVERSATION_SEND then
-				s.CHANNEL = string.match(_G.CHAT_BN_CONVERSATION_SEND or "", "%d%.%s+(.+)")
+				s.channel_name = string.match(_G.CHAT_BN_CONVERSATION_SEND or "", "%d%.%s+(.+)")
 			end
 		else
 			local channelNum = tonumber(arg8) or tonumber(arg7) or tonumber(arg9) or tonumber(arg10) or 0
 			if channelNum and channelNum > 0 then
-				s.CHANNELNUM = tostring(channelNum)
+				s.channel_number = tostring(channelNum)
 
 				-- Try to get channel name from arg9
 				local arg9Text = arg9 or ""
 				if string.len(arg9Text) > 0 then
-					s.CHANNEL = arg9Text
+					s.channel_name = arg9Text
 				end
 			end
 		end
-		s.cC = "] "
 	end
 
 	-- Extract flags
 	if type(arg6) == "string" and arg6 ~= "" then
-		s.fF = ""
-
 		if arg6 == "GM" or arg6 == "DEV" then
-			s.FLAG = "|TInterface\\ChatFrame\\UI-ChatIcon-Blizz:12:20:0:0:32:16:4:28:0:16|t "
+			s.player_flag = "|TInterface\\ChatFrame\\UI-ChatIcon-Blizz:12:20:0:0:32:16:4:28:0:16|t "
 		elseif arg6 == "GUIDE" and _G.ChatFrame_GetMentorChannelStatus then
 			if _G.Enum and _G.Enum.PlayerMentorshipStatus and _G.C_ChatInfo then
 				local mentorStatus = _G.ChatFrame_GetMentorChannelStatus(_G.Enum.PlayerMentorshipStatus.Mentor, _G.C_ChatInfo.GetChannelRulesetForChannelID(arg7))
 				if mentorStatus == _G.Enum.PlayerMentorshipStatus.Mentor then
-					s.FLAG = (_G.NPEV2_CHAT_USER_TAG_GUIDE or "[Guide]") .. " "
+					s.player_flag = (_G.NPEV2_CHAT_USER_TAG_GUIDE or "[Guide]") .. " "
 				elseif mentorStatus == _G.Enum.PlayerMentorshipStatus.Newcomer then
-					s.FLAG = _G.NPEV2_CHAT_USER_TAG_NEWCOMER or "[New]"
+					s.player_flag = _G.NPEV2_CHAT_USER_TAG_NEWCOMER or "[New]"
 				end
 			end
 		elseif arg6 == "NEWCOMER" and _G.ChatFrame_GetMentorChannelStatus then
 			if _G.Enum and _G.Enum.PlayerMentorshipStatus and _G.C_ChatInfo then
 				local mentorStatus = _G.ChatFrame_GetMentorChannelStatus(_G.Enum.PlayerMentorshipStatus.Newcomer, _G.C_ChatInfo.GetChannelRulesetForChannelID(arg7))
 				if mentorStatus == _G.Enum.PlayerMentorshipStatus.Newcomer then
-					s.FLAG = _G.NPEV2_CHAT_USER_TAG_NEWCOMER or "[New]"
+					s.player_flag = _G.NPEV2_CHAT_USER_TAG_NEWCOMER or "[New]"
 				end
 			end
 		elseif _G["CHAT_FLAG_" .. arg6] then
-			s.FLAG = _G["CHAT_FLAG_" .. arg6] or ""
+			s.player_flag = _G["CHAT_FLAG_" .. arg6] or ""
 		end
-
-		s.Ff = ""
 	end
 
 	-- Extract mobile texture
 	if arg15 and info then
 		local mobileFn = _G.ChatFrame_GetMobileEmbeddedTexture or (_G.ChatFrameUtil and _G.ChatFrameUtil.GetMobileEmbeddedTexture)
 		if mobileFn then
-			s.MOBILE = mobileFn(info.r or 1, info.g or 1, info.b or 1) or ""
+			s.mobile_icon = mobileFn(info.r or 1, info.g or 1, info.b or 1) or ""
 		end
 	end
 
@@ -882,14 +836,12 @@ function addon:SplitChatMessage(frame, event, ...)
 	return sectionWorking, info
 end
 
-local applyShortChannelNames
-local applyPlayerChatStyle
-local shouldSuppressJoinLeaveMessage
-
 local function callOriginalMessageHandler(self, frame, event, ...)
 	if self._chatEventHooked == "global" then
 		-- Use AceHook's stored original for global hook
-		return self.hooks and self.hooks.ChatFrame_MessageEventHandler and self.hooks.ChatFrame_MessageEventHandler(frame, event, ...)
+		if self.hooks and self.hooks._G and self.hooks._G.ChatFrame_MessageEventHandler then
+			return self.hooks._G.ChatFrame_MessageEventHandler(frame, event, ...)
+		end
 	elseif self._chatEventHooked == "frame" and frame then
 		local frameName = frame and frame.GetName and frame:GetName()
 		if frameName and self._hooks[frameName] then
@@ -918,6 +870,126 @@ local function runFrameMessageFilters(frame, event, a1, a2, a3, a4, a5, a6, a7, 
 	discard, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14 =
 		_G.ChatFrameUtil.ProcessMessageEventFilters(frame, event, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14)
 	return discard, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14
+end
+
+local function getPlayerInfoByName(name)
+	if not name or not addon.playerList then return nil end
+	local byName = addon.playerListByName
+	if byName then
+		local info = byName[name] or byName[string.lower(name)]
+		if info and info.name then
+			return info
+		end
+	end
+
+	local nameLower = string.lower(name)
+	for _, v in pairs(addon.playerList) do
+		if v and v.name and string.lower(v.name) == nameLower then
+			return v
+		end
+	end
+	return nil
+end
+
+local function FormatPlayerSection(m)
+	if not (XCHT_DB and XCHT_DB.enablePlayerChatStyle) then
+		return
+	end
+	if not m.player_name or m.player_name == "" then
+		return
+	end
+	local nameToLookup = m.player_link or m.player_name
+	if not nameToLookup then
+		return
+	end
+	local baseName = string.match(nameToLookup, "([^%-]+)") or nameToLookup
+	local playerInfo = getPlayerInfoByName(baseName)
+	if not playerInfo then
+		return
+	end
+
+	local levelText = ""
+	if playerInfo.level and playerInfo.level > 0 then
+		local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
+		if colorFunc then
+			local color = colorFunc(playerInfo.level)
+			if color then
+				local levelCode = RGBAToHex(color.r, color.g, color.b, 1)
+				levelText = "|c" .. levelCode .. playerInfo.level .. "|r"
+			end
+		end
+	end
+
+	local nameText = m.player_name
+	if playerInfo.class then
+		local colorInfo = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[playerInfo.class] or (_G.CUSTOM_CLASS_COLORS and _G.CUSTOM_CLASS_COLORS[playerInfo.class])
+		if colorInfo then
+			local colorCode = RGBAToHex(colorInfo.r, colorInfo.g, colorInfo.b, 1)
+			nameText = "|c" .. colorCode .. m.player_name .. "|r"
+		end
+	end
+
+	-- Overwrite styled_player_name to inject custom formatting
+    local template_data = { level_text = levelText, name_text = nameText }
+    if levelText ~= "" then
+	    m.styled_player_name = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.styled_player_name_level, template_data)
+    else
+        m.styled_player_name = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.styled_player_name_simple, template_data)
+    end
+	-- Clear other player fields that are now part of styled_player_name
+	m.player_name = ""
+	m.server_name = ""
+    m.server_separator = ""
+end
+
+local function shouldSuppressJoinLeaveMessage(event, text)
+	if not (XCHT_DB and XCHT_DB.disableChatEnterLeaveNotice) then
+		return false
+	end
+
+	dbg("shouldSuppressJoinLeaveMessage: checking event=" .. tostring(event))
+
+	if event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_JOIN" or event == "CHAT_MSG_CHANNEL_LEAVE" then
+		dbg("shouldSuppressJoinLeaveMessage: suppressing channel notice event")
+		return true
+	end
+
+	if event == "CHAT_MSG_SYSTEM" and type(text) == "string" then
+		if string.find(text, "|Hplayer:", 1, true) and (string.find(text, "has joined", 1, true) or string.find(text, "has left", 1, true)) then
+			dbg("shouldSuppressJoinLeaveMessage: suppressing system join/leave message")
+			return true
+		end
+	end
+
+	return false
+end
+
+local SHORT_CHANNEL_REPLACEMENTS = {
+	{ addon.L.ChannelGeneral or "General", addon.L.ShortGeneral or "Gen" },
+	{ addon.L.ChannelTradeServices or "Trade - Services", addon.L.ShortTradeServices or "Trade-S" },
+	{ addon.L.ChannelTrade or "Trade", addon.L.ShortTrade or "Trade" },
+	{ addon.L.ChannelWorldDefense or "WorldDefense", addon.L.ShortWorldDefense or "WDef" },
+	{ addon.L.ChannelLocalDefense or "LocalDefense", addon.L.ShortLocalDefense or "LDef" },
+	{ addon.L.ChannelLookingForGroup or "LookingForGroup", addon.L.ShortLookingForGroup or "LFG" },
+	{ addon.L.ChannelGuildRecruitment or "GuildRecruitment", addon.L.ShortGuildRecruitment or "Guild" },
+	{ addon.L.ChannelNewComerChat or "NewComers", addon.L.ShortNewComerChat or "New" },
+}
+
+local function applyShortChannelNamesToSections(m)
+	if not (XCHT_DB and XCHT_DB.shortNames) or not m.channel_name or m.channel_name == "" then
+		return
+	end
+
+	local longName = m.channel_name
+	local shortName = longName -- Default to long name
+	for i = 1, #SHORT_CHANNEL_REPLACEMENTS do
+		if SHORT_CHANNEL_REPLACEMENTS[i][1] == longName then
+			shortName = SHORT_CHANNEL_REPLACEMENTS[i][2]
+			break
+		end
+	end
+
+    m.channel_name = shortName
 end
 
 function addon:ChatFrame_MessageEventHandler(this, event, ...)
@@ -1011,8 +1083,8 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		return callOriginalMessageHandler(self, this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 	end
 
-	if type(m.MESSAGE) ~= "string" then
-		m.MESSAGE = m.MESSAGE and tostring(m.MESSAGE) or ""
+	if type(m.message_text) ~= "string" then
+		m.message_text = m.message_text and tostring(m.message_text) or ""
 	end
 
 	if type(m.OUTPUT) == "string" and not m.DONOTPROCESS then
@@ -1026,9 +1098,9 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		if applyPatterns then
 			dbg("ChatFrame_MessageEventHandler: running MatchPatterns")
-			m.MESSAGE = addon:MatchPatterns(m, "FRAME")
-			if type(m.MESSAGE) ~= "string" then
-				m.MESSAGE = m.MESSAGE and tostring(m.MESSAGE) or ""
+			m.message_text = addon:MatchPatterns(m, "FRAME")
+			if type(m.message_text) ~= "string" then
+				m.message_text = m.message_text and tostring(m.message_text) or ""
 			end
 		end
 
@@ -1039,28 +1111,22 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		if applyPatterns then
 			dbg("ChatFrame_MessageEventHandler: running ReplaceMatches")
-			m.MESSAGE = addon:ReplaceMatches(m, "FRAME")
+			m.message_text = addon:ReplaceMatches(m, "FRAME")
 		end
+
+		-- Apply xanChat-specific transformations on the message sections
+		FormatPlayerSection(m)
+		applyShortChannelNamesToSections(m)
 
 		if processMode == addon.EventProcessingType.Full then
 			dbg("ChatFrame_MessageEventHandler: using Full processing mode, building from sections")
 			textToDisplay = addon:BuildChatText(m) or ""
 		elseif processMode == addon.EventProcessingType.PatternsOnly then
 			dbg("ChatFrame_MessageEventHandler: using PatternsOnly processing mode")
-			textToDisplay = (m.PRE or "") .. (m.MESSAGE or "") .. (m.POST or "")
+			textToDisplay = (m.PRE or "") .. (m.message_text or "") .. (m.POST or "")
 		else
 			dbg("ChatFrame_MessageEventHandler: using output-only processing mode")
 			textToDisplay = (m.PRE or "") .. (m.OUTPUT or "") .. (m.POST or "")
-		end
-
-		-- Apply xanChat-specific transformations
-		if applyShortChannelNames then
-			dbg("ChatFrame_MessageEventHandler: applying short channel names")
-			textToDisplay = applyShortChannelNames(textToDisplay)
-		end
-		if applyPlayerChatStyle then
-			dbg("ChatFrame_MessageEventHandler: applying player chat style")
-			textToDisplay = applyPlayerChatStyle(this, resolvedEvent, textToDisplay)
 		end
 
 		-- Check for join/leave suppression
@@ -1127,9 +1193,9 @@ addon.playerListByName = addon.playerListByName or {}
 addon.playerListRing = addon.playerListRing or {}
 addon.playerListRingPos = addon.playerListRingPos or 0
 
-addon.isFilterListEnabled = true
+local URL_LINK_TEMPLATE = " |cff99FF33|Hurl:{{url}}|h[{{url}}]|h|r "
 local function buildUrlLink(url)
-	return " |cff99FF33|Hurl:" .. url .. "|h[" .. url .. "]|h|r "
+	return addon.private.Template:Parse(URL_LINK_TEMPLATE, { url = url })
 end
 
 local URL_PATTERNS = {
@@ -1242,61 +1308,7 @@ local function installUrlCopyHook()
 	addon._urlCopyHookInstalled = true
 end
 
-local SHORT_CHANNEL_REPLACEMENTS = {
-	{ addon.L.ChannelGeneral or "General", addon.L.ShortGeneral or "Gen" },
-	{ addon.L.ChannelTradeServices or "Trade - Services", addon.L.ShortTradeServices or "Trade-S" },
-	{ addon.L.ChannelTrade or "Trade", addon.L.ShortTrade or "Trade" },
-	{ addon.L.ChannelWorldDefense or "WorldDefense", addon.L.ShortWorldDefense or "WDef" },
-	{ addon.L.ChannelLocalDefense or "LocalDefense", addon.L.ShortLocalDefense or "LDef" },
-	{ addon.L.ChannelLookingForGroup or "LookingForGroup", addon.L.ShortLookingForGroup or "LFG" },
-	{ addon.L.ChannelGuildRecruitment or "GuildRecruitment", addon.L.ShortGuildRecruitment or "Guild" },
-	{ addon.L.ChannelNewComerChat or "NewComers", addon.L.ShortNewComerChat or "New" },
-}
-
-applyShortChannelNames = function(text)
-	if not (XCHT_DB and XCHT_DB.shortNames) or type(text) ~= "string" then
-		return text
-	end
-
-	dbg("applyShortChannelNames: processing text")
-	local chatNum = string.match(text, "%d+") or ""
-	if tonumber(chatNum) then
-		chatNum = chatNum .. ":"
-	else
-		chatNum = ""
-	end
-
-	for i = 1, #SHORT_CHANNEL_REPLACEMENTS do
-		local longName = SHORT_CHANNEL_REPLACEMENTS[i][1]
-		local shortName = SHORT_CHANNEL_REPLACEMENTS[i][2]
-		if longName and shortName then
-			text = string.gsub(text, longName, "[" .. chatNum .. shortName .. "]")
-		end
-	end
-	dbg("applyShortChannelNames: result=" .. text)
-	return text
-end
-
 local PLAYERLIST_MAX = 500
-
-local function plainTextReplace(text, old, new)
-	if type(text) ~= "string" or type(old) ~= "string" or old == "" then
-		return text, false
-	end
-	local b, e = string.find(text, old, 1, true)
-	if b == nil then
-		return text, false
-	end
-	return string.sub(text, 1, b - 1) .. new .. string.sub(text, e + 1), true
-end
-
-local function replaceText(source, findStr, replaceStr, wholeWord)
-	if type(source) ~= "string" then return source end
-	if wholeWord then
-		findStr = "%f[^%z%s]" .. findStr .. "%f[%z%s]"
-	end
-	return (source:gsub(findStr, replaceStr))
-end
 
 local function stripAndLowercase(text)
 	if not text then return "" end
@@ -1310,26 +1322,6 @@ local function stripNameKey(text)
 	text = string.lower(text)
 	text = string.gsub(text, "[^%a%d]", "")
 	return text
-end
-
-local function slowPlayerLinkStrip(msg)
-	if type(msg) ~= "string" then return end
-	local findStart, findEnd = string.find(msg, "|Hplayer:", 1, true)
-	if not findStart then return end
-
-	local newMsg = string.sub(msg, findEnd + 1)
-	local p2Start, p2End = string.find(newMsg, "|h[", 1, true)
-	if not p2Start then return end
-	local playerLink = string.sub(newMsg, 1, p2Start - 1)
-
-	newMsg = string.sub(newMsg, p2End + 1)
-	local p3Start = string.find(newMsg, "]|h", 1, true)
-	if not p3Start then return end
-	local player = string.sub(newMsg, 1, p3Start - 1)
-
-	if playerLink and player then
-		return playerLink, player
-	end
 end
 
 local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
@@ -1357,66 +1349,6 @@ local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
 	addon.playerListSig = (addon.playerListSig or 0) + 1
 	entry._sig = addon.playerListSig
 	ring[pos] = { key = key, sig = entry._sig, name = name, lowerName = lowerName, cleanName = cleanName }
-end
-
-local function getPlayerInfoByName(name)
-	if not name or not addon.playerList then return nil end
-	local byName = addon.playerListByName
-	if byName then
-		local info = byName[name] or byName[string.lower(name)]
-		if info and info.name then
-			return info
-		end
-	end
-
-	local nameLower = string.lower(name)
-	for _, v in pairs(addon.playerList) do
-		if v and v.name and string.lower(v.name) == nameLower then
-			return v
-		end
-	end
-	return nil
-end
-
-local function parsePlayerInfo(_, text)
-	dbg("parsePlayerInfo: parsing player info from text")
-	text = text or ""
-	local playerLink, player = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h(.+)")
-	if not playerLink or not player then
-		playerLink, player = slowPlayerLinkStrip(text)
-	end
-	if not playerLink or not player then
-		return
-	end
-
-	local linkName = string.match(playerLink, "([^:]+)")
-	if not linkName then return end
-	local playerName, playerServer = string.match(linkName, "([^%-]+)%-?(.*)")
-	if not playerName then return end
-	if not playerServer or playerServer == "" then
-		playerServer = GetRealmName()
-	end
-
-	local playerInfo = getPlayerInfoByName(playerName)
-	if not playerInfo then
-		dbg("parsePlayerInfo: player info not found for " .. playerName)
-		return
-	end
-
-	local playerLevel = playerInfo.level or 0
-	local decoratedLevel = playerLevel
-
-	if playerLevel and playerLevel > 0 then
-		local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
-		local color = colorFunc and colorFunc(playerLevel)
-		if color then
-			local levelCode = RGBAToHex(color.r, color.g, color.b, 1)
-			decoratedLevel = "|c" .. levelCode .. playerLevel .. "|r"
-			dbg("parsePlayerInfo: adding level " .. playerLevel .. " to " .. playerName)
-		end
-	end
-
-	return "|Hplayer:" .. playerLink .. "|h[" .. player .. "]|h", "|Hplayer:" .. playerLink .. "|h[" .. decoratedLevel .. ":" .. player .. "]|h"
 end
 
 local function addToPlayerList(name, realm, level, class, bnName, pin)
@@ -1606,68 +1538,6 @@ local function initPlayerInfo()
 	safeRegister("UNIT_NAME_UPDATE", function() throttle("roster", 0.3, doRosterUpdate) end)
 	safeRegister("UNIT_PORTRAIT_UPDATE", function() throttle("roster", 0.3, doRosterUpdate) end)
 	safeRegister("PLAYER_LEVEL_UP", initUpdateCurrentPlayer)
-end
-
-applyPlayerChatStyle = function(frame, event, text)
-	if not (addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle) then
-		return text
-	end
-	if type(text) ~= "string" then
-		return text
-	end
-
-	dbg("applyPlayerChatStyle: processing text for event=" .. tostring(event))
-
-	local hasPlayerLink = string.find(text, "|Hplayer:", 1, true) ~= nil
-	local hasBNPlayerLink = string.find(text, "|HBNplayer:", 1, true) ~= nil
-
-	if hasPlayerLink then
-		dbg("applyPlayerChatStyle: found player link, applying stylization")
-		local old, new = parsePlayerInfo(frame, text)
-		if old and new then
-			-- Check if old exists in text before replacing
-			if string.find(text, old, 1, true) then
-				text = plainTextReplace(text, old, new)
-			else
-				-- Try partial match if exact match fails
-				dbg("applyPlayerChatStyle: exact match failed, trying partial")
-				local playerLink, player = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h")
-				if playerLink and player then
-					local newPattern = "|Hplayer:" .. playerLink .. "|h"
-					local startPos, endPos = string.find(text, newPattern, 1, true)
-					if startPos and endPos then
-						local before = string.sub(text, 1, startPos - 1)
-						local after = string.sub(text, endPos)
-						text = before .. new .. after
-					end
-				end
-			end
-		end
-	end
-
-	return text
-end
-
-shouldSuppressJoinLeaveMessage = function(event, text)
-	if not (XCHT_DB and XCHT_DB.disableChatEnterLeaveNotice) then
-		return false
-	end
-
-	dbg("shouldSuppressJoinLeaveMessage: checking event=" .. tostring(event))
-
-	if event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_JOIN" or event == "CHAT_MSG_CHANNEL_LEAVE" then
-		dbg("shouldSuppressJoinLeaveMessage: suppressing channel notice event")
-		return true
-	end
-
-	if event == "CHAT_MSG_SYSTEM" and type(text) == "string" then
-		if string.find(text, "|Hplayer:", 1, true) and (string.find(text, "has joined", 1, true) or string.find(text, "has left", 1, true)) then
-			dbg("shouldSuppressJoinLeaveMessage: suppressing system join/leave message")
-			return true
-		end
-	end
-
-	return false
 end
 
 local DEFAULTS = {
@@ -2701,7 +2571,7 @@ function addon:OnLoad()
 	_G["SLASH_XANCHAT1"] = "/xanchat"
 	SlashCmdList = _G.SlashCmdList or {}
 	SlashCmdList["XANCHAT"] = function(msg)
-		local cmd = msg and string.lower(string.match(msg, "^%s*(%S+)")) or ""
+		local cmd = string.lower((msg and string.match(msg, "^%s*(%S+)")) or "")
 		if cmd == "debug" then
 			XCHT_DB.debugWrapper = not XCHT_DB.debugWrapper
 			addon.wrapperDebug = XCHT_DB.debugWrapper
@@ -3094,10 +2964,8 @@ function addon:SaveDebugInfo(chatFrame)
 
 	local debugDB = XCHT_DB.debugInfo[frameID]
 	local channelList = chatFrame.channelList
-	local zoneChannelList = chatFrame.zoneChannelList
 
 	if not channelList or #channelList < 1 then return end
-	if not zoneChannelList or #zoneChannelList < 1 then return end
 
 	local channelIndexByName = {}
 	for i = 1, #channelList do
@@ -3108,7 +2976,6 @@ function addon:SaveDebugInfo(chatFrame)
 	for i = 1, #channels, 3 do
 		local channelNum = channels[i]
 		local channelName = channels[i + 1]
-		local disabled = channels[i + 2]
 		if channelNum then
 			local tag = "CHANNEL"..channelNum
 			local index = channelIndexByName[channelName]
