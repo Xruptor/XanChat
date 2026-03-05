@@ -40,22 +40,8 @@ if not AceHook then
 	error("AceHook-3.0 not found in libs folder. Please ensure it is loaded.")
 end
 
--- Add AceHook methods to addon for direct use
-addon.RawHook = function(obj, method, handler, ...)
-	return AceHook:RawHook(obj, method, handler, ...)
-end
-
-addon.SecureHook = function(obj, method, handler, ...)
-	return AceHook:SecureHook(obj, method, handler, ...)
-end
-
-addon.Unhook = function(obj, method)
-	return AceHook:Unhook(obj, method)
-end
-
-addon.UnhookAll = function(obj)
-	return AceHook:UnhookAll(obj)
-end
+-- Embed AceHook into addon for self.hooks support (needed for AddMessage handler)
+AceHook:Embed(addon)
 
 -- ============================================================================
 -- DEBUG SYSTEM
@@ -128,16 +114,16 @@ canAccessValue = function(v)
 end
 
 local function isSafeString(v)
-	if type(v) ~= "string" then return false end
 	if isSecretValue(v) then return false end
 	if not canAccessValue(v) then return false end
+	if type(v) ~= "string" then return false end
 	return true
 end
 
 local function safestr(v)
-	if type(v) ~= "string" then return "" end
 	if isSecretValue(v) then return "<secret-string>" end
 	if not canAccessValue(v) then return "<inaccessible-string>" end
+	if type(v) ~= "string" then return "" end
 	return v
 end
 
@@ -274,21 +260,10 @@ local function ensureCaptureProxyFrame()
 		Mixin(captureProxyFrame, ChatFrameMixin)
 	end
 
-	-- Use RawHook for AddMessage capture (Prat pattern)
-	local uid = addon:RawHook(captureProxyFrame, "AddMessage", function(original, frame, text, r, g, b, id, ...)
-		if captureState.proxy == frame and captureState.text == nil then
-			captureState.text = text
-			captureState.color.r = r
-			captureState.color.g = g
-			captureState.color.b = b
-			captureState.color.id = id
-			dbg("capture proxy stored formatter output")
-			return
-		end
-		-- Call original AddMessage for non-capture calls
-		return original(frame, text, r, g, b, id, ...)
-	end)
-	captureProxyFrame._xanRawHookUid = uid
+	-- Use RawHook for AddMessage capture
+	-- hookSecure = true allows hooking secure functions on the proxy frame
+	-- The handler is addon:AddMessage which captures the formatted output
+	addon:RawHook(captureProxyFrame, "AddMessage", true)
 
 	return captureProxyFrame
 end
@@ -370,6 +345,24 @@ function addon:RestoreProxy()
 		end
 		proxyTransferState.originalIsShown = nil
 	end
+end
+
+-- ============================================================================
+-- ADDMESSAGE HANDLER (for AceHook RawHook)
+-- ============================================================================
+addon.AddMessage = function(self, frame, text, r, g, b, id, ...)
+	-- Capture text when called on the capture proxy frame
+	if captureState.proxy == frame and captureState.text == nil then
+		captureState.text = text
+		captureState.color.r = r
+		captureState.color.g = g
+		captureState.color.b = b
+		captureState.color.id = id
+		dbg("capture proxy stored formatter output")
+		return
+	end
+	-- Call original AddMessage for non-capture calls
+	return self.hooks[frame].AddMessage(frame, text, r, g, b, id, ...)
 end
 
 -- ============================================================================
@@ -486,7 +479,9 @@ function addon:BuildChatText(message)
 		.. (msg.MESSAGE or "")
 		.. table.concat(buildPartsSuffix, "")
 
-	dbg("BuildChatText: result length=" .. #result)
+	if isSafeString(result) then
+		dbg("BuildChatText: result length=" .. #result)
+	end
 	return result
 end
 
@@ -757,8 +752,12 @@ function addon:SplitChatMessage(frame, event, ...)
 	-- Message text
 	s.MESSAGE = isSecret and arg1 or (safestr(arg1) or ""):gsub("^%s*(.-)%s*$", "%1")
 
+	-- Check if player name is a secret value (SEPARATE from message text secret check)
+	local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
+	local coloredName = arg2
+
 		-- Extract player information
-	if type(arg2) == "string" and arg2 ~= "" then
+	if not isArg2Secret and type(arg2) == "string" and arg2 ~= "" then
 		-- Check if player name is a secret value (SEPARATE from message text secret check)
 		local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
 		local coloredName = arg2
@@ -1518,7 +1517,7 @@ end
 local function doFriendUpdate()
 	local realmName = GetRealmName()
 	if C_FriendList and C_FriendList.GetNumFriends then
-		for i = 1, C_FriendList.GetNumFriends() do
+		for i = 1, C_FriendList.GetNumFriends() or 0 do
 			local info = C_FriendList.GetFriendInfoByIndex(i)
 			if info and info.connected then
 				addToPlayerList(info.name, realmName, info.level, info.className, nil, true)
@@ -1713,6 +1712,14 @@ local function initializeDatabase()
 	end
 	ApplyDefaults(XCHT_DB, DEFAULTS)
 	addon.wrapperDebug = XCHT_DB.debugWrapper
+
+	-- Setup History DB
+	local currentPlayer = UnitName("player") or "Unknown"
+	local currentRealm = (UnitFullName and select(2, UnitFullName("player"))) or select(2, UnitName("player")) or GetRealmName() or "Unknown"
+	if not XCHT_HISTORY then XCHT_HISTORY = {} end
+	XCHT_HISTORY[currentRealm] = XCHT_HISTORY[currentRealm] or {}
+	XCHT_HISTORY[currentRealm][currentPlayer] = XCHT_HISTORY[currentRealm][currentPlayer] or {}
+	_G.HistoryDB = XCHT_HISTORY[currentRealm][currentPlayer]
 end
 
 function addon:IsRestricted()
@@ -2146,6 +2153,244 @@ end
 -- INITIALIZATION
 -- ============================================================================
 
+-- Table to track processed frames
+local processedFrames = {}
+
+-- ============================================================================
+-- SETUP CHAT FRAME
+-- ============================================================================
+
+function addon:SetupChatFrame(chatID)
+	if not chatID then return end
+
+	local n = "ChatFrame" .. chatID
+	local f = _G[n]
+	local fTab = _G[n .. "Tab"]
+	local editBox = _G[n .. "EditBox"]
+
+	if f and not processedFrames[n] then
+		-- Ensure new frames respect chat history size
+		if f.SetMaxLines then
+			local minLines = 2000
+			if C_CVar and C_CVar.GetCVar then
+				local cvar = tonumber(C_CVar.GetCVar("chatMaxLines"))
+				if cvar and cvar > minLines then
+					minLines = cvar
+				end
+			end
+			f:SetMaxLines(minLines)
+		end
+
+		-- Set alpha levels - NOTE: These are important, do not remove
+		if XCHT_DB.disableChatFrameFade and CHAT_FRAME_TEXTURES then
+			local alpha = XCHT_DB.userChatAlpha or DEFAULT_CHATFRAME_ALPHA or 0.25
+			for i = 1, #CHAT_FRAME_TEXTURES do
+				local object = _G[n .. CHAT_FRAME_TEXTURES[i]]
+				if object then
+					object:SetAlpha(alpha)
+				end
+			end
+		elseif CHAT_FRAME_TEXTURES then
+			for i = 1, #CHAT_FRAME_TEXTURES do
+				local object = _G[n .. CHAT_FRAME_TEXTURES[i]]
+				if object then
+					object:SetAlpha(0)
+				end
+			end
+		end
+
+		-- Enable/disable chat text fading (different from frame fade)
+		if XCHT_DB.enableChatTextFade then
+			f:SetFading(true)
+			f:SetTimeVisible(120)
+		else
+			f:SetFading(false)
+		end
+
+		-- Always lock the frames regardless
+		SetChatWindowLocked(chatID, true)
+		FCF_SetLocked(f, true)
+
+		-- Add font outlines or shadows
+		if XCHT_DB.addFontOutline or XCHT_DB.addFontShadow then
+			local font, size = f:GetFont()
+			if font then
+				f:SetFont(font, size, "THINOUTLINE")
+				-- Only apply this if we don't have shadows enabled
+				if not XCHT_DB.addFontShadow then
+					f:SetShadowColor(0, 0, 0, 0)
+				end
+			end
+		end
+
+		-- Few changes
+		f:EnableMouseWheel(true)
+		if self.scrollChat then
+			f:SetScript('OnMouseWheel', self.scrollChat)
+		end
+		f:SetClampRectInsets(0, 0, 0, 0)
+
+		-- EditBox setup
+		if editBox then
+			-- Remove alt keypress from EditBox (no longer need alt to move around)
+			editBox:SetAltArrowKeyMode(false)
+
+			-- Check for editbox history
+			local name = editBox:GetName()
+			if HistoryDB and HistoryDB[name] then
+				editBox.historyLines = HistoryDB[name]
+				editBox.historyIndex = 0
+
+				editBox:HookScript("OnShow", function(self)
+					self.historyIndex = 0
+				end)
+
+				local count = #HistoryDB[name]
+				if count > 0 then
+					for dX = count, 1, -1 do
+						if HistoryDB[name][dX] then
+							editBox:AddHistoryLine(HistoryDB[name][dX])
+						else
+							break
+						end
+					end
+				end
+
+				if self.AddEditBoxHistoryLine then
+					editBox:HookScript("OnEditFocusGained", self.AddEditBoxHistoryLine)
+				end
+				if self.ClearEditBoxHistory then
+					editBox:HookScript("OnEditFocusLost", self.ClearEditBoxHistory)
+				end
+			end
+
+			-- EditBox design changes
+			if not editBox.left then
+				editBox.left = _G[n .. "EditBoxLeft"]
+				editBox.right = _G[n .. "EditBoxRight"]
+				editBox.mid = _G[n .. "EditBoxMid"]
+			end
+
+			local editBoxBackdrop
+			if XCHT_DB.enableSEBDesign then
+				editBoxBackdrop = {
+					bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+					edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]],
+					tile = true,
+					tileSize = 16,
+					edgeSize = 12,
+					insets = { left = 3, right = 3, top = 3, bottom = 3 }
+				}
+			else
+				editBoxBackdrop = {
+					bgFile = [[Interface\Tooltips\UI-Tooltip-Background]],
+					edgeFile = [[Interface\Tooltips\UI-Tooltip-Border]], edgeSize = 16,
+					insets = { left = 3, right = 3, top = 3, bottom = 3 }
+				}
+			end
+
+			if XCHT_DB.enableSimpleEditbox then
+				editBox.left:SetAlpha(0)
+				editBox.right:SetAlpha(0)
+				editBox.mid:SetAlpha(0)
+
+				if not editBox.SetBackdrop and Mixin and BackdropTemplateMixin then
+					Mixin(editBox, BackdropTemplateMixin)
+				end
+
+				if editBox.focusLeft then editBox.focusLeft:SetTexture(nil) end
+				if editBox.focusRight then editBox.focusRight:SetTexture(nil) end
+				if editBox.focusMid then editBox.focusMid:SetTexture(nil) end
+
+				editBox:SetBackdrop(editBoxBackdrop)
+				editBox:SetBackdropColor(0, 0, 0, 0.6)
+				editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
+
+			elseif not XCHT_DB.hideEditboxBorder then
+				if editBox.focusLeft then editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]]) end
+				if editBox.focusRight then editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]]) end
+				if editBox.focusMid then editBox.focusMid:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Mid2]]) end
+			else
+				if editBox.focusLeft then editBox.focusLeft:SetTexture(nil) end
+				if editBox.focusRight then editBox.focusRight:SetTexture(nil) end
+				if editBox.focusMid then editBox.focusMid:SetTexture(nil) end
+
+				editBox.left:SetAlpha(0)
+				editBox.right:SetAlpha(0)
+				editBox.mid:SetAlpha(0)
+			end
+
+			-- Do editbox positioning
+			local spaceAdjusted = 0
+
+			if XCHT_DB.editBoxTop then
+				if XCHT_DB.enableEditboxAdjusted then
+					spaceAdjusted = 6
+				end
+				editBox:ClearAllPoints()
+				editBox:SetPoint("BOTTOMLEFT", f, "TOPLEFT", -5, spaceAdjusted)
+				editBox:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 5, spaceAdjusted)
+			else
+				if XCHT_DB.enableEditboxAdjusted then
+					spaceAdjusted = -9
+				end
+				editBox:ClearAllPoints()
+				editBox:SetPoint("TOPLEFT", f, "BOTTOMLEFT", -5, spaceAdjusted)
+				editBox:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 5, spaceAdjusted)
+			end
+
+			-- When editbox is on the top, complications occur because sometimes you are not allowed to click on tabs
+			-- To fix this we'll just make the tab close editbox
+			-- Also force the editbox to hide itself when it loses focus
+			if fTab then
+				fTab:HookScript("OnClick", function() editBox:Hide() end)
+			end
+			editBox:HookScript("OnEditFocusLost", function() editBox:Hide() end)
+		end
+
+		-- Hide scroll bars
+		if XCHT_DB.hideScroll then
+			if f.ScrollBar then
+				f.ScrollBar:Hide()
+				f.ScrollBar:SetScript("OnShow", function() end)
+			end
+			if f.buttonFrame and f.buttonFrame.Background then
+				f.buttonFrame.Background:SetTexture(nil)
+				f.buttonFrame.Background:SetAlpha(0)
+			end
+			if f.buttonFrame and f.buttonFrame.minimizeButton then
+				f.buttonFrame.minimizeButton:Hide()
+				f.buttonFrame.minimizeButton:SetScript("OnShow", function() end)
+			end
+			if f.ScrollToBottomButton then
+				f.ScrollToBottomButton:Hide()
+				f.ScrollToBottomButton:SetScript("OnShow", function() end)
+			end
+		end
+
+		if XCHT_DB.hideSideButtonBars then
+			if f.buttonFrame then
+				f.buttonFrame:Hide()
+				f.buttonFrame:SetScript("OnShow", function() end)
+			end
+		end
+
+		-- Force chat hide tabs on load
+		if XCHT_DB.hideTabs and fTab then
+			fTab.mouseOverAlpha = CHAT_FRAME_TAB_NORMAL_MOUSEOVER_ALPHA or 0.5
+			fTab.noMouseAlpha = CHAT_FRAME_TAB_NORMAL_NOMOUSE_ALPHA or 0.25
+			if f.hasBeenFaded then
+				fTab:SetAlpha(fTab.mouseOverAlpha)
+			else
+				fTab:SetAlpha(fTab.noMouseAlpha)
+			end
+		end
+
+		-- Mark frame as processed
+		processedFrames[n] = true
+	end
+end
+
 function addon:OnLoad()
 	dbg("OnLoad: START xanChat initialization")
 	initCallbacks()
@@ -2170,14 +2415,105 @@ function addon:OnLoad()
 	doFriendUpdate()
 	doGuildUpdate()
 
-	-- Initialize history DB
-	updateHistoryDB()
+	-- Turn off profanity filter
+	if C_CVar then
+		C_CVar.SetCVar("profanityFilter", "0")
+	elseif SetCVar then
+		SetCVar("profanityFilter", "0")
+	end
 
-	-- Setup all chat frames with customization features
-	if CHAT_FRAMES and #CHAT_FRAMES > 0 then
-		for i = 1, #CHAT_FRAMES do
-			SetupChatFrame(i, _G[CHAT_FRAMES[i]])
+	-- Toggle class colors for all channels
+	if ToggleChatColorNamesByClassGroup then
+		if CHAT_CONFIG_CHAT_LEFT then
+			for _, v in pairs(CHAT_CONFIG_CHAT_LEFT) do
+				ToggleChatColorNamesByClassGroup(true, v.type)
+			end
 		end
+		-- Toggle class colors for all global channels (CHANNEL1-15)
+		for iCh = 1, 15 do
+			ToggleChatColorNamesByClassGroup(true, "CHANNEL" .. iCh)
+		end
+	end
+
+	-- Check for chat box fading
+	if XCHT_DB.disableChatFrameFade then
+		self:setUserAlpha()
+	end
+
+	-- Show/hide chat social buttons
+	if addon.IsRetail and XCHT_DB.hideSocial then
+		if QuickJoinToastButton then
+			QuickJoinToastButton:Hide()
+			QuickJoinToastButton:SetScript("OnShow", function() end)
+		end
+	end
+
+	if addon.IsRetail and XCHT_DB.moveSocialButtonToBottom then
+		if ChatAlertFrame then
+			ChatAlertFrame:ClearAllPoints()
+			ChatAlertFrame:SetPoint("TOPLEFT", ChatFrame1, "BOTTOMLEFT", -33, -60)
+		end
+	end
+
+	if XCHT_DB.hideChatMenuButton then
+		if ChatFrameMenuButton then
+			ChatFrameMenuButton:Hide()
+			ChatFrameMenuButton:SetScript("OnShow", function() end)
+		end
+	end
+
+	-- Toggle voice chat buttons if disabled
+	if XCHT_DB.hideVoice then
+		if ChatFrameToggleVoiceDeafenButton then ChatFrameToggleVoiceDeafenButton:Hide() end
+		if ChatFrameToggleVoiceMuteButton then ChatFrameToggleVoiceMuteButton:Hide() end
+		if ChatFrameChannelButton then ChatFrameChannelButton:Hide() end
+	end
+
+	-- Remove annoying guild loot messages by replacing them with original ones
+	if YOU_LOOT_MONEY then
+		_G["YOU_LOOT_MONEY_GUILD"] = YOU_LOOT_MONEY
+	end
+	if LOOT_MONEY_SPLIT then
+		_G["LOOT_MONEY_SPLIT_GUILD"] = LOOT_MONEY_SPLIT
+	end
+
+	-- Setup all chat frames
+	if NUM_CHAT_WINDOWS then
+		for i = 1, NUM_CHAT_WINDOWS do
+			self:SetupChatFrame(i)
+		end
+	end
+
+	-- Hook FCF_OpenTemporaryWindow for temporary whisper windows
+	if FCF_OpenTemporaryWindow then
+		local old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
+		FCF_OpenTemporaryWindow = function(...)
+			local frame = old_OpenTemporaryWindow(...)
+			if frame and frame.GetID then
+				self:SetupChatFrame(frame:GetID())
+			end
+			return frame
+		end
+	end
+
+	-- Register UI_SCALE_CHANGED event
+	self:RegisterEvent("UI_SCALE_CHANGED")
+
+	-- Versioned settings update - lock frames when version changes
+	local ver = (addon.GetAddOnMetadata and addon.GetAddOnMetadata(ADDON_NAME, "Version")) or "1.0"
+	if XCHT_DB.dbVer == nil or XCHT_DB.dbVer ~= ver then
+		if NUM_CHAT_WINDOWS then
+			for i = 1, NUM_CHAT_WINDOWS do
+				local n = ("ChatFrame%d"):format(i)
+				local f = _G[n]
+				if f then
+					-- Always lock the frames regardless (using both calls just in case)
+					SetChatWindowLocked(i, true)
+					FCF_SetLocked(f, true)
+				end
+			end
+		end
+		XCHT_DB.dbVer = ver
 	end
 
 	-- Setup slash commands
@@ -2262,6 +2598,25 @@ function addon:OnLoad()
 	dbg("OnLoad: COMPLETE xanChat initialization")
 end
 
+-- ============================================================================
+-- UI_SCALE_CHANGED EVENT HANDLER
+-- ============================================================================
+
+function addon:UI_SCALE_CHANGED()
+	if XCHT_DB and XCHT_DB.lockChatSettings and isInAnyInstance() then return end
+	if NUM_CHAT_WINDOWS then
+		for i = 1, NUM_CHAT_WINDOWS do
+			local n = ("ChatFrame%d"):format(i)
+			local f = _G[n]
+			if f then
+				-- Always lock the frames regardless (using both calls just in case)
+				SetChatWindowLocked(i, true)
+				FCF_SetLocked(f, true)
+			end
+		end
+	end
+end
+
 function addon:OnEnable()
 	dbg("OnEnable: installing message hooks")
 	rebuildHookedFrames()
@@ -2294,7 +2649,7 @@ function addon:EnableAddon()
 	self._hooks = self._hooks or {}
 	self._rawHooks = self._rawHooks or {}
 
-	-- Create DummyFrame for proxy capture (like Prat's DummyFrame)
+	-- Create DummyFrame for proxy capture
 	ensureCaptureProxyFrame()
 
 	-- Hook ChatFrame_MessageEventHandler using RawHook (stores original, unsafe)
@@ -2306,13 +2661,13 @@ function addon:EnableAddon()
 		self._chatEventHooked = "global"
 		dbg("EnableAddon: global ChatFrame_MessageEventHandler RawHooked")
 	elseif _G.ChatFrameMixin and _G.ChatFrameMixin.MessageEventHandler then
-		-- Direct function assignment like Prat does for frame-based hooks
+		-- Direct function assignment
 		local hookCount = 0
 		for frameName, frame in pairs(addon.HookedFrames) do
 			if frame and frame.MessageEventHandler then
 				-- Store original for restoration
 				self._hooks[frameName] = frame.MessageEventHandler
-				-- Direct assignment like Prat
+				-- Direct assignment
 				frame.MessageEventHandler = function(this, event, ...)
 					return addon:ChatFrame_MessageEventHandler(this, event, ...)
 				end
