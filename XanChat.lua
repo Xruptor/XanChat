@@ -2431,10 +2431,17 @@ function addon:SetupChatFrame(chatID)
 				end
 
 				if self.AddEditBoxHistoryLine then
-					editBox:HookScript("OnEditFocusGained", self.AddEditBoxHistoryLine)
+					self:SecureHook(editBox, "AddHistoryLine", function(eb, text)
+						if eb then self:AddEditBoxHistoryLine(eb) end
+					end)
 				end
 				if self.ClearEditBoxHistory then
-					editBox:HookScript("OnEditFocusLost", self.ClearEditBoxHistory)
+					self:SecureHook(editBox, "ClearHistory", function(eb)
+						if eb then self:ClearEditBoxHistory(eb) end
+					end)
+				end
+				if self.OnArrowPressed then
+					editBox:HookScript("OnArrowPressed", function(self, key) addon:OnArrowPressed(self, key) end)
 				end
 			end
 
@@ -2770,6 +2777,9 @@ function addon:OnLoad()
 	self:setupCopyFrameFeature()
 
 	dbg("OnLoad: COMPLETE xanChat initialization")
+	if addon.configFrame then addon.configFrame:EnableConfig() end
+
+	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r [v|cFF20ff20%s|r] loaded:   /xanchat", ADDON_NAME, ver or "1.0"))
 end
 
 -- ============================================================================
@@ -2796,6 +2806,8 @@ function addon:OnEnable()
 	rebuildHookedFrames()
 	registerUrlPatterns()
 	self:EnableAddon()
+	-- Setup auto-save hooks for chat settings changes
+	self:hookupAutoSave()
 end
 
 function addon:OnDisable()
@@ -2809,6 +2821,461 @@ end
 
 -- ============================================================================
 -- HOOK INSTALLATION
+
+-- ============================================================================
+-- LEGACY SETTINGS SAVE/RESTORE FUNCTIONS
+-- ============================================================================
+
+function addon:SaveLayout(chatFrame)
+	if not addonLoaded then return end
+	if not chatFrame then return end
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then XCHT_DB.frames = {} end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+
+	--first check to see if we even store this chatFrame
+	if not XCHT_DB.frames[frameID] and (chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown()) then
+		XCHT_DB.frames[frameID] = {}
+	elseif not XCHT_DB.frames[frameID] then
+		return
+	end
+
+	local db = XCHT_DB.frames[frameID]
+
+	local point, relativeTo, relativePoint, xOffset, yOffset = chatFrame:GetPoint()
+
+	--error check for invalid object type for relativeTo
+	if relativeTo == nil then
+		relativeTo = "UIParent"
+	elseif type(relativeTo) == "table" then
+		relativeTo = relativeTo:GetName() or "UIParent"
+	end
+
+	db.point = point
+	--relativeTo returns the actual object, we just want the name
+	db.relativeTo = relativeTo
+	db.relativePoint = relativePoint
+	db.xOffset = xOffset
+	db.yOffset = yOffset
+	db.width = chatFrame:GetWidth()
+	db.height = chatFrame:GetHeight()
+end
+
+function addon:RestoreLayout(chatFrame)
+	if not chatFrame then return end
+
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then return end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+	if not XCHT_DB.frames[frameID] then return end
+
+	local db = XCHT_DB.frames[frameID]
+
+	if addon.IsRetail and chatFrame == DEFAULT_CHAT_FRAME then return end --don't set anything for the default chat frame in retail, it causes taints
+
+	if ( db.width and db.height ) then
+		if not addon.IsRetail then
+			chatFrame:SetSize(db.width, db.height) --causes a taint if you try to set the DEFAULT_CHAT_FRAME height and width in any way in retail due to edit mode
+		end
+		--force the sizing in blizzards settings
+		SetChatWindowSavedDimensions(chatFrame:GetID(), db.width, db.height)
+
+		if ( not chatFrame.isTemporary and not chatFrame.isDocked) then
+			FCF_RestorePositionAndDimensions(chatFrame)
+		end
+	end
+
+	local sSwitch = false
+
+	--check to see if we can even move the frame
+	if not chatFrame:IsMovable() then
+		chatFrame:SetMovable(true)
+		sSwitch = true
+	end
+	if not chatFrame:IsMouseEnabled() then
+		chatFrame:EnableMouse(true)
+	end
+
+	if ( chatFrame:IsMovable() and db.point and db.xOffset) then
+		chatFrame:SetUserPlaced(true)
+
+		--error check for invalid object type for relativeTo
+		if db.relativeTo == nil or type(db.relativeTo) == "table" then db.relativeTo = "UIParent" end --reset it if it's a table, we just want the name
+
+		--don't move docked chats
+		if chatFrame == DEFAULT_CHAT_FRAME or not chatFrame.isDocked or not db.windowInfo[9] then
+			chatFrame:ClearAllPoints()
+			chatFrame:SetPoint(db.point, _G[db.relativeTo], db.relativePoint, db.xOffset, db.yOffset)
+		else
+			FCF_DockFrame(chatFrame, db.windowInfo[9])
+		end
+
+	end
+
+	if sSwitch then
+		chatFrame:SetMovable(false)
+	end
+end
+
+function addon:SaveSettings(chatFrame)
+	if not addonLoaded then return end
+	if not chatFrame then return end
+
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then XCHT_DB.frames = {} end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+
+	--first check to see if we even store this chatFrame
+	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
+		if not XCHT_DB.frames[frameID] then XCHT_DB.frames[frameID] = {} end
+	else
+		--don't store it
+		if XCHT_DB.frames[frameID] then XCHT_DB.frames[frameID] = nil end
+		return
+	end
+
+	if chatFrame.isMoving or chatFrame.isDragging then return end
+
+	local db = XCHT_DB.frames[frameID]
+
+	local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = GetChatWindowInfo(frameID)
+	local windowMessages = { GetChatWindowMessages(frameID)}
+	local windowChannels = { GetChatWindowChannels(frameID)}
+	local windowMessageColors = {}
+
+	--lets save all the message type colors
+	for k=1, #windowMessages do
+		if windowMessages[k] and ChatTypeGroup[windowMessages[k]] then
+			local colorR, colorG, colorB, messageType = GetMessageTypeColor(windowMessages[k])
+			if colorR and colorG and colorB then
+				windowMessageColors[k] = {colorR, colorG, colorB, windowMessages[k]}
+			end
+		end
+	end
+
+	db.chatParent = chatFrame:GetParent():GetName()
+	db.windowInfo = {name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable}
+	db.windowMessages = windowMessages
+	db.windowChannels = windowChannels
+	db.windowMessageColors = windowMessageColors
+	db.windowChannelColors = nil --remove old db stuff
+	db.fadingDuration = chatFrame:GetTimeVisible() or 120
+	db.defaultFrameAlpha = DEFAULT_CHATFRAME_ALPHA
+end
+
+function addon:RestoreSettings(chatFrame)
+	if not chatFrame then return end
+
+	if not XCHT_DB then return end
+	if not XCHT_DB.frames then return end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+	if not XCHT_DB.frames[frameID] then return end
+
+	local db = XCHT_DB.frames[frameID]
+
+	if db.windowMessages then
+		--remove current window messages
+		local oldWindowMessages = { GetChatWindowMessages(frameID)}
+		for k=1, #oldWindowMessages do
+			RemoveChatWindowMessages(frameID, oldWindowMessages[k])
+		end
+		--add the stored ones
+		local newWindowMessages = db.windowMessages
+		for k=1, #newWindowMessages do
+			AddChatWindowMessages(frameID, newWindowMessages[k])
+		end
+	end
+
+	--lets set the windowMessageColors
+	if db.windowMessageColors then
+		--add the stored ones
+		local newWindowMessageColors = db.windowMessageColors
+		for k=1, #newWindowMessageColors do
+			if newWindowMessageColors[k] and newWindowMessageColors[k][4] then
+				ChangeChatColor(newWindowMessageColors[k][4], newWindowMessageColors[k][1], newWindowMessageColors[k][2], newWindowMessageColors[k][3])
+			end
+		end
+	end
+
+	if db.windowChannels then
+		--remove current window channels
+		local oldWindowChannels = { GetChatWindowChannels(frameID)}
+		for k=1, #oldWindowChannels do
+			RemoveChatWindowChannel(frameID, oldWindowChannels[k])
+		end
+		--add the stored ones
+		local newWindowChannels = db.windowChannels
+		for k=1, #newWindowChannels do
+			AddChatWindowChannel(frameID, newWindowChannels[k])
+		end
+	end
+
+	-- --lets set the windowChannelColors
+	if XCHT_DB.channelColors then
+		for k = 1, MAX_WOW_CHAT_CHANNELS do
+			if XCHT_DB.channelColors[k] then
+				local colorData = XCHT_DB.channelColors[k]
+				if colorData and colorData.channelNum then
+					ChangeChatColor("CHANNEL"..colorData.channelNum, colorData.r, colorData.g, colorData.b)
+				end
+			end
+		end
+	end
+
+	if db.windowInfo and db.windowInfo[1] then
+		SetChatWindowName(frameID, db.windowInfo[1])
+		SetChatWindowSize(frameID, db.windowInfo[2])
+		SetChatWindowColor(frameID, db.windowInfo[3], db.windowInfo[4], db.windowInfo[5])
+		SetChatWindowAlpha(frameID, db.windowInfo[6])
+		SetChatWindowShown(frameID, db.windowInfo[7])
+		SetChatWindowLocked(frameID, db.windowInfo[8])
+		SetChatWindowDocked(frameID, db.windowInfo[9])
+		SetChatWindowUninteractable(frameID, db.windowInfo[10])
+	end
+
+	if db.chatParent then
+		local checkParent = (type(db.chatParent) == "table" and db.chatParent) or _G[db.chatParent]
+		chatFrame:SetParent(checkParent)
+	end
+
+	--handling chat frame fading
+	if XCHT_DB then
+		if XCHT_DB.enableChatTextFade then
+			chatFrame:SetFading(true)
+			chatFrame:SetTimeVisible(db.fadingDuration or 120)
+		else
+			chatFrame:SetFading(false)
+		end
+	end
+end
+
+function addon:SaveChannelColors()
+	if not addonLoaded then return end
+	if not XCHT_DB.channelColors then XCHT_DB.channelColors = {} end
+
+	local channelData = { GetChannelList() }
+	local count = 1
+	for i = 1, #channelData, 3 do
+		local channelNum = channelData[i]
+		local channelName = channelData[i + 1]
+		local tag = "CHANNEL"..channelNum
+
+		if ChatTypeInfo[tag] then
+			local colorR, colorG, colorB = GetMessageTypeColor(tag)
+			if colorR and colorG and colorB then
+				XCHT_DB.channelColors[count] = {r=colorR, g=colorG, b=colorB, channelNum=channelNum, channelName=channelName, tag=tag}
+			end
+		end
+		count = count + 1
+	end
+end
+
+function addon:SaveDebugInfo(chatFrame)
+	if not addonLoaded then return end
+	if not chatFrame then return end
+	if not XCHT_DB then return end
+	local frameID = chatFrame:GetID()
+	if not frameID then return end
+
+	if XCHT_DB.debugChannels then XCHT_DB.debugChannels = nil end --remove old debug table
+	if not XCHT_DB.debugInfo then XCHT_DB.debugInfo = {} end
+
+	if chatFrame == DEFAULT_CHAT_FRAME or chatFrame.isDocked or chatFrame:IsShown() then
+		if not XCHT_DB.debugInfo[frameID] then XCHT_DB.debugInfo[frameID] = {} end
+	else
+		--don't store it
+		if XCHT_DB.debugInfo[frameID] then XCHT_DB.debugInfo[frameID] = nil end
+		return
+	end
+
+	local debugDB = XCHT_DB.debugInfo[frameID]
+	local channelList = chatFrame.channelList
+	local zoneChannelList = chatFrame.zoneChannelList
+
+	if not channelList or #channelList < 1 then return end
+	if not zoneChannelList or #zoneChannelList < 1 then return end
+
+	local channelIndexByName = {}
+	for i = 1, #channelList do
+		channelIndexByName[channelList[i]] = i
+	end
+
+	local channels = { GetChannelList() }
+	for i = 1, #channels, 3 do
+		local channelNum = channels[i]
+		local channelName = channels[i + 1]
+		local disabled = channels[i + 2]
+		if channelNum then
+			local tag = "CHANNEL"..channelNum
+			local index = channelIndexByName[channelName]
+			local checked = index ~= nil
+			debugDB[channelName] = {channelNum=channelNum, checked=checked}
+		end
+	end
+end
+
+function addon:saveChatSettings(f)
+	self:SaveLayout(f)
+	self:SaveSettings(f)
+	self:SaveDebugInfo(f)
+	self:SaveChannelColors()
+end
+
+function addon:restoreChatSettings(f)
+	self:RestoreSettings(f)
+	self:RestoreLayout(f)
+end
+
+function addon:doSaveCurrentChatFrame()
+	local chatFrame = FCF_GetCurrentChatFrame()
+	if chatFrame then
+		self:saveChatSettings(chatFrame)
+	end
+end
+
+function addon:doValueUpdate(checkBool, groupType)
+	self:saveChatSettings(FCF_GetCurrentChatFrame() or nil)
+end
+
+function addon:hookupAutoSave()
+	-- Hook multiple message-related functions with same handler
+	local messageToggleFuncs = {
+		"ToggleChatMessageGroup",
+		"ToggleMessageSource",
+		"ToggleMessageDest",
+		"ToggleMessageTypeGroup",
+		"ToggleMessageType",
+		"ToggleChatColorNamesByClassGroup",
+	}
+	for _, funcName in ipairs(messageToggleFuncs) do
+		if _G[funcName] then
+			self:SecureHook(funcName, function() self:doValueUpdate() end)
+		end
+	end
+
+	-- Hook frame-related functions
+	local frameFuncs = {
+		{"FCF_SavePositionAndDimensions", function(chatFrame) self:saveChatSettings(chatFrame) end},
+		{"FCF_RestorePositionAndDimensions", function(chatFrame) self:saveChatSettings(chatFrame) end},
+		{"FCF_Close", function(chatFrame) self:saveChatSettings(chatFrame) end},
+	}
+	for _, funcData in ipairs(frameFuncs) do
+		if _G[funcData[1]] then
+			self:SecureHook(funcData[1], funcData[2])
+		end
+	end
+
+	-- Hook functions with same doSaveCurrentChatFrame handler
+	local frameToggleFuncs = {
+		"FCF_ToggleLock",
+		"FCF_ToggleLockOnDockedFrame",
+		"FCF_ToggleUninteractable",
+	}
+	for _, funcName in ipairs(frameToggleFuncs) do
+		if _G[funcName] then
+			self:SecureHook(funcName, function() self:doSaveCurrentChatFrame() end)
+		end
+	end
+
+	-- Hook additional frame operations
+	if _G["FCF_DockFrame"] then
+		self:SecureHook("FCF_DockFrame", function(chatFrame, index, selected) self:saveChatSettings(chatFrame) end)
+	end
+	if _G["FCF_StopDragging"] then
+		self:SecureHook("FCF_StopDragging", function(chatFrame) self:saveChatSettings(chatFrame) end)
+	end
+	if _G["FCF_Tab_OnClick"] then
+		self:SecureHook("FCF_Tab_OnClick", function(self, button)
+			local chatFrame = _G["ChatFrame"..self:GetID()]
+			if chatFrame then
+				self:saveChatSettings(chatFrame)
+			end
+		end)
+	end
+
+	-- Hook ChatConfigFrame OnHide if available
+	if ChatConfigFrame and ChatConfigFrame.HookScript then
+		ChatConfigFrame:HookScript("OnHide", function(self)
+			for i = 1, NUM_CHAT_WINDOWS do
+				local n = ("ChatFrame%d"):format(i)
+				local f = _G[n]
+				if f then
+					self:saveChatSettings(f)
+				end
+			end
+		end)
+	end
+end
+
+function addon:OnArrowPressed(editBox, key)
+	if #editBox.historyLines == 0 then
+		return
+	end
+	if key == "DOWN" then
+		editBox.historyIndex = editBox.historyIndex + 1
+		if editBox.historyIndex > #editBox.historyLines then
+			editBox.historyIndex = 1
+		end
+	elseif key == "UP" then
+		editBox.historyIndex = editBox.historyIndex - 1
+		if editBox.historyIndex < 1 then
+			editBox.historyIndex = #editBox.historyLines
+		end
+	else
+		return
+	end
+	editBox:SetText(editBox.historyLines[editBox.historyIndex])
+end
+
+function addon:AddEditBoxHistoryLine(editBox)
+	if not HistoryDB then return end
+
+	local text = ""
+	local chatType = editBox:GetAttribute("chatType")
+	local header = chatType and _G["SLASH_" .. chatType .. "1"]
+
+	if (header) then
+		text = header
+	end
+
+	if (chatType == "WHISPER") then
+		text = text .. " " .. editBox:GetAttribute("tellTarget")
+	elseif (chatType == "CHANNEL") then
+		text = "/" .. editBox:GetAttribute("channelTarget")
+	end
+
+	local editBoxText = editBox:GetText()
+	if (strlen(editBoxText) > 0) then
+
+		text = text .. " " .. editBoxText
+		if not text or (text == "") then
+			return
+		end
+
+		local name = editBox:GetName()
+		HistoryDB[name] = HistoryDB[name] or {}
+
+		HistoryDB[name][#HistoryDB[name] + 1] = text
+		if #HistoryDB[name] > 40 then  --max number of lines we want 40 seems like a good number
+			tremove(HistoryDB[name], 1)
+		end
+	end
+end
+
+function addon:ClearEditBoxHistory(editBox)
+	if not HistoryDB then return end
+
+	local name = editBox:GetName()
+	if wipe and HistoryDB[name] then
+		wipe(HistoryDB[name])
+	else
+		HistoryDB[name] = {}
+	end
+end
 -- ============================================================================
 
 function addon:EnableAddon()

@@ -16,9 +16,6 @@ libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
 libs\AceHook-3.0\AceHook-3.0.lua
 
 wrapper.lua
-filter.lua
-config.lua
-stickychannels.lua
 
 locale\locales.lua
 locale\enUS.lua
@@ -32,5 +29,9 @@ locale\ptBR.lua
 locale\ruRU.lua
 locale\zhCN.lua
 locale\zhTW.lua
+
+filter.lua
+config.lua
+stickychannels.lua
 
 XanChat.lua
