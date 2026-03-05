@@ -1053,16 +1053,14 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			textToDisplay = (m.PRE or "") .. (m.OUTPUT or "") .. (m.POST or "")
 		end
 
-		-- Apply xanChat-specific transformations (non-secret only)
-		if not isSecretPayload then
-			if applyShortChannelNames then
-				dbg("ChatFrame_MessageEventHandler: applying short channel names")
-				textToDisplay = applyShortChannelNames(textToDisplay)
-			end
-			if applyPlayerChatStyle then
-				dbg("ChatFrame_MessageEventHandler: applying player chat style")
-				textToDisplay = applyPlayerChatStyle(this, resolvedEvent, textToDisplay)
-			end
+		-- Apply xanChat-specific transformations
+		if applyShortChannelNames then
+			dbg("ChatFrame_MessageEventHandler: applying short channel names")
+			textToDisplay = applyShortChannelNames(textToDisplay)
+		end
+		if applyPlayerChatStyle then
+			dbg("ChatFrame_MessageEventHandler: applying player chat style")
+			textToDisplay = applyPlayerChatStyle(this, resolvedEvent, textToDisplay)
 		end
 
 		-- Check for join/leave suppression
@@ -1129,6 +1127,7 @@ addon.playerListByName = addon.playerListByName or {}
 addon.playerListRing = addon.playerListRing or {}
 addon.playerListRingPos = addon.playerListRingPos or 0
 
+addon.isFilterListEnabled = true
 local function buildUrlLink(url)
 	return " |cff99FF33|Hurl:" .. url .. "|h[" .. url .. "]|h|r "
 end
@@ -1404,16 +1403,19 @@ local function parsePlayerInfo(_, text)
 		return
 	end
 
-	local playerLevel = playerInfo.level
-	local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
-	local color = colorFunc and colorFunc(playerLevel)
-	if not color or not playerInfo.level or playerInfo.level <= 0 then
-		return
+	local playerLevel = playerInfo.level or 0
+	local decoratedLevel = playerLevel
+
+	if playerLevel and playerLevel > 0 then
+		local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
+		local color = colorFunc and colorFunc(playerLevel)
+		if color then
+			local levelCode = RGBAToHex(color.r, color.g, color.b, 1)
+			decoratedLevel = "|c" .. levelCode .. playerLevel .. "|r"
+			dbg("parsePlayerInfo: adding level " .. playerLevel .. " to " .. playerName)
+		end
 	end
 
-	local levelCode = RGBAToHex(color.r, color.g, color.b, 1)
-	local decoratedLevel = "|c" .. levelCode .. playerLevel .. "|r"
-	dbg("parsePlayerInfo: adding level " .. playerLevel .. " to " .. playerName)
 	return "|Hplayer:" .. playerLink .. "|h[" .. player .. "]|h", "|Hplayer:" .. playerLink .. "|h[" .. decoratedLevel .. ":" .. player .. "]|h"
 end
 
@@ -1610,7 +1612,7 @@ applyPlayerChatStyle = function(frame, event, text)
 	if not (addon.isFilterListEnabled and XCHT_DB and XCHT_DB.enablePlayerChatStyle) then
 		return text
 	end
-	if type(text) ~= "string" or not isSafeString(text) then
+	if type(text) ~= "string" then
 		return text
 	end
 
@@ -1622,29 +1624,23 @@ applyPlayerChatStyle = function(frame, event, text)
 	if hasPlayerLink then
 		dbg("applyPlayerChatStyle: found player link, applying stylization")
 		local old, new = parsePlayerInfo(frame, text)
-		if old and new and string.find(text, old, 1, true) then
-			text = plainTextReplace(text, old, new)
-		end
-	elseif not hasBNPlayerLink and addon.searchFilterList and addon:searchFilterList(event, text) then
-		dbg("applyPlayerChatStyle: searching for player names in text")
-		for _, v in pairs(addon.playerList) do
-			if v and v.name and v.class and string.find(text, v.name, 1, true) then
-				local color = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[v.class]) or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[v.class])
-				if color then
-					dbg("applyPlayerChatStyle: applying class color to " .. v.name)
-					local colorCode = RGBAToHex(color.r, color.g, color.b, 1)
-					local hasReplaced = false
-					if v.realm and v.stripRealm then
-						text, hasReplaced = plainTextReplace(text, v.name .. "-" .. v.realm, "|c" .. colorCode .. v.name .. "-" .. v.realm .. "|r")
-						if not hasReplaced then
-							text, hasReplaced = plainTextReplace(text, v.name .. "-" .. v.stripRealm, "|c" .. colorCode .. v.name .. "-" .. v.stripRealm .. "|r")
-						end
-					end
-					if not hasReplaced then
-						text = replaceText(text, v.name, "|c" .. colorCode .. v.name .. "|r", true)
+		if old and new then
+			-- Check if old exists in text before replacing
+			if string.find(text, old, 1, true) then
+				text = plainTextReplace(text, old, new)
+			else
+				-- Try partial match if exact match fails
+				dbg("applyPlayerChatStyle: exact match failed, trying partial")
+				local playerLink, player = string.match(text, "|Hplayer:(.-)|h%[(.-)%]|h")
+				if playerLink and player then
+					local newPattern = "|Hplayer:" .. playerLink .. "|h"
+					local startPos, endPos = string.find(text, newPattern, 1, true)
+					if startPos and endPos then
+						local before = string.sub(text, 1, startPos - 1)
+						local after = string.sub(text, endPos)
+						text = before .. new .. after
 					end
 				end
-				break
 			end
 		end
 	end
@@ -1801,11 +1797,85 @@ end
 -- COPY FRAME FEATURE
 -- ============================================================================
 
+--this will remove UI escaped textures from strings.  It causes an issue with highlighted text as it offsets it little by little
+--https://wowwiki.fandom.com/wiki/UI_escape_sequences#Textures
+--https://wow.gamepedia.com/UI_escape_sequences
+local function unescape(str)
+
+	--this is for testing for protected strings and only for officer chat, since even the text in officer chat is protected not just the officer name
+	local isOfficerChat = false
+	if strfind(str, "|Hchannel:officer", 1, true) then
+		isOfficerChat = true
+	end
+	--str = gsub(str, "|c%x%x%x%x%x%x%x%x", "") --color tag 1
+	--str = gsub(str, "|r", "") --color tag 2
+
+    str = gsub(str, "|T.-|t", "") --textures in chat like currency coins and such
+	str = gsub(str, "|H.-|h(.-)|h", "%1") --links, just put the item description and chat color
+	str = gsub(str, "{.-}", "") --remove raid icons from chat
+
+	--so apparently blizzard protects certain strings and returns them as textures.
+	--this causes the insert for the multiline to break and not display the line.
+	--such is the case for protected BNET Friends names and in some rare occasions names in the chat in general.
+	--These protected strings start with |K and end with |k.   Example: |K[gsf][0-9]+|k[0]+|k
+	--look under the link above for escape sequences
+
+	--I want to point out that event addons like ElvUI suffer from  this problem.
+	--They get around it by not displaying protected messages at ALL.  Check MessageIsProtected(message) in ElvUI
+
+	if strfind(str, "|K", 1, true) then
+
+		--str = gsub(str, "|K(.-)|k", "%1")
+		local presenceID = strmatch(str, "|K(.-)|k")
+		local accountName
+		local stripBNet
+
+		if presenceID and C_BattleNet and BNGetNumFriends and C_BattleNet.GetFriendAccountInfo then
+			local numBNet = BNGetNumFriends()
+			for i = 1, numBNet do
+				local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+				--only continue if we have a account info to work with
+				if accountInfo and accountInfo.gameAccountInfo then
+					--grab the bnet name of the account, it will have |K|k in it so again it will be hidden
+					accountName = accountInfo.accountName
+					--do we even have a battle.net tag to replace it with?
+					if accountName and accountInfo.battleTag then
+						--grab the presenceID from in between the |K|k tags
+						accountName = gsub(accountName, "|K(.-)|k", "%1")
+						--if it matches the one we found earlier, then replace it with a battle.net tag instead
+						if accountName and accountName == presenceID then
+							--don't show entire bnet tag just the name
+							stripBNet = strmatch(accountInfo.battleTag, "(.-)#")
+							str = gsub(str, "|K(.-)|k", stripBNet or accountInfo.battleTag)
+							--return out of here since we already did the replace
+							--we don't want to go to the failsafe below
+							return str
+						end
+					end
+				end
+			end
+		end
+
+		--something went wrong with replacing the name text for |K|k
+		--so lets just remove it since it will not allow text to be inserted into the multiline box, since it will be empty and or hidden because |K|k returns a hidden textures
+		--for protected strings.  That's why we are just going to remove it
+		str = gsub(str, "|K(.-)|k", "%1")
+
+		--add extra text for protected strings, to let folks know it's protected
+		if isOfficerChat then
+			str = str..addon.L.ProtectedChannel
+		end
+	end
+
+    return str
+end
+
 -- Create the copy frame UI
 local function createCopyFrame()
+	--check to see if we have the frame already, if we do then return it
 	if addon.copyFrame then return addon.copyFrame end
 
-	local copyFrame = CreateFrame("Frame", ADDON_NAME .. "CopyFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	local copyFrame = CreateFrame("FRAME", ADDON_NAME.."CopyFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 	copyFrame:SetBackdrop({
 		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -1816,6 +1886,10 @@ local function createCopyFrame()
 	})
 	copyFrame:SetBackdropColor(0, 0, 0, 1)
 	copyFrame:EnableMouse(true)
+	copyFrame:SetMovable(true)
+	copyFrame:RegisterForDrag("LeftButton")
+	copyFrame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+	copyFrame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 	copyFrame:SetFrameStrata("DIALOG")
 	copyFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	copyFrame:SetWidth(830)
@@ -1823,59 +1897,143 @@ local function createCopyFrame()
 
 	local title = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", copyFrame, "TOPLEFT", 20, -12)
-	title:SetText(addon.L.CopyChat or "Copy Chat")
+	title:SetText(addon.L.CopyChat)
 
-	local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME .. "CopyScrollFrame", copyFrame, "UIPanelScrollFrameTemplate")
+	local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."CopyScrollFrame", copyFrame, "ScrollingEditBoxTemplate")
 	scrollFrame:SetPoint("TOPLEFT", 20, -38)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -35, 45)
+	scrollFrame:EnableMouseWheel(true)
+	if scrollFrame.SetPropagateMouseWheel then
+		scrollFrame:SetPropagateMouseWheel(true)
+	end
 
-	local editBox = CreateFrame("EditBox", ADDON_NAME .. "CopyEditBox", scrollFrame)
+	local editBox = scrollFrame.EditBox or _G[scrollFrame:GetName().."EditBox"]
+	if not editBox then
+		editBox = CreateFrame("EditBox", ADDON_NAME.."CopyEditBox", scrollFrame)
+		scrollFrame:SetScrollChild(editBox)
+	end
 	editBox:SetAutoFocus(false)
+	editBox:EnableMouse(true)
+	editBox:EnableMouseWheel(true)
+	if editBox.SetPropagateMouseWheel then
+		editBox:SetPropagateMouseWheel(true)
+	end
+	editBox:EnableKeyboard(true)
 	editBox:SetMultiLine(true)
 	editBox:SetFontObject("ChatFontNormal")
-	editBox:SetWidth(scrollFrame:GetWidth())
+	editBox:SetJustifyH("LEFT")
+	editBox:SetJustifyV("TOP")
+	editBox:SetTextInsets(4, 4, 4, 4)
 	editBox:SetText("")
-	scrollFrame:SetScrollChild(editBox)
+	if not editBox.SetBackdrop then
+		Mixin(editBox, BackdropTemplateMixin)
+	end
+	editBox:SetBackdrop({
+		bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true,
+		tileSize = 16,
+		edgeSize = 12,
+		insets = { left = 3, right = 3, top = 3, bottom = 3 }
+	})
+	editBox:SetBackdropColor(0, 0, 0, 0.5)
+	editBox:SetBackdropBorderColor(0.2, 0.2, 0.2, 0.8)
+	editBox:HookScript("OnMouseDown", function(self) self:SetFocus() end)
+	editBox:HookScript("OnMouseUp", function(self) self:SetFocus() end)
+	editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-	local function updateEditSize()
+	local function UpdateEditSize()
 		local width = scrollFrame:GetWidth() or 0
 		if width > 0 then
 			editBox:SetWidth(width)
 		end
-		-- Set height to match scroll frame - this is sufficient for copy boxes
-		local height = scrollFrame:GetHeight() or 0
-		if height > 0 then
-			editBox:SetHeight(height)
+		if scrollFrame.UpdateScrollChildRect then
+			scrollFrame:UpdateScrollChildRect()
 		end
 	end
 
-	editBox:SetScript("OnTextChanged", updateEditSize)
-	scrollFrame:HookScript("OnSizeChanged", updateEditSize)
+	editBox:SetScript("OnTextChanged", UpdateEditSize)
+	scrollFrame:HookScript("OnSizeChanged", UpdateEditSize)
+	UpdateEditSize()
 
-	local scrollBar = scrollFrame.ScrollBar or _G[scrollFrame:GetName() .. "ScrollBar"]
-
-	local mlEditBox = {
+	local scrollBar = scrollFrame.ScrollBar or _G[scrollFrame:GetName().."ScrollBar"]
+	if not scrollBar then
+		scrollBar = CreateFrame("Slider", ADDON_NAME.."CopyScrollBar", scrollFrame, "UIPanelScrollBarTemplate")
+		scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 4, -16)
+		scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 4, 16)
+		scrollBar:SetValueStep(20)
+		scrollBar:SetObeyStepOnDrag(true)
+		scrollFrame.ScrollBar = scrollBar
+		scrollBar:SetScript("OnValueChanged", function(self, value)
+			scrollFrame:SetVerticalScroll(value)
+		end)
+	end
+	if scrollBar then
+		scrollFrame:HookScript("OnScrollRangeChanged", function(self, xRange, yRange)
+			local maxVal = math.max(0, yRange or 0)
+			scrollBar:SetMinMaxValues(0, maxVal)
+			scrollBar:SetShown(maxVal > 0)
+		end)
+		scrollBar:Show()
+	end
+	local function ScrollCopyFrame(delta)
+		if scrollBar then
+			local step = scrollBar:GetValueStep() or 20
+			local minVal, maxVal = scrollBar:GetMinMaxValues()
+			local newVal = scrollBar:GetValue() - (delta * step)
+			if newVal < minVal then newVal = minVal end
+			if newVal > maxVal then newVal = maxVal end
+			scrollBar:SetValue(newVal)
+		else
+			local cur = scrollFrame:GetVerticalScroll()
+			local max = scrollFrame:GetVerticalScrollRange()
+			local newVal = cur - (delta * 20)
+			if newVal < 0 then newVal = 0 end
+			if newVal > max then newVal = max end
+			scrollFrame:SetVerticalScroll(newVal)
+		end
+	end
+	scrollFrame:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	if scrollFrame.ScrollBox then
+		scrollFrame.ScrollBox:EnableMouseWheel(true)
+		scrollFrame.ScrollBox:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	end
+	editBox:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	copyFrame:EnableMouseWheel(true)
+	copyFrame:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	local MLEditBox = {
 		editBox = editBox,
 		scrollFrame = scrollFrame,
 		scrollBar = scrollBar,
 		SetText = function(self, text)
 			self.editBox:SetText(text or "")
-			updateEditSize()
+			UpdateEditSize()
 		end,
 		GetText = function(self)
 			return self.editBox:GetText()
 		end,
+		SetCursorPosition = function(self, pos)
+			self.editBox:SetCursorPosition(pos)
+		end,
+		ClearFocus = function(self)
+			self.editBox:ClearFocus()
+		end,
+		SetFocus = function(self)
+			self.editBox:SetFocus()
+		end,
 	}
-	copyFrame.MLEditBox = mlEditBox
+	copyFrame.MLEditBox = MLEditBox
 
-	copyFrame.handleCursorChange = false
+	copyFrame.handleCursorChange = false --setting this to true will update the scrollbar to the cursor position
 	scrollFrame:HookScript("OnUpdate", function(self, elapsed)
 		if not scrollFrame:IsVisible() then return end
+
 		self.OnUpdateCounter = (self.OnUpdateCounter or 0) + elapsed
 		if self.OnUpdateCounter < 0.1 then return end
 		self.OnUpdateCounter = 0
 
-		local pos = math.max(string.len(editBox:GetText()), editBox:GetNumLetters())
+		local pos = editBox:GetNumLetters()
+
 		if copyFrame.handleCursorChange then
 			editBox:SetFocus()
 			editBox:SetCursorPosition(pos)
@@ -1897,86 +2055,89 @@ local function createCopyFrame()
 	close:SetFrameLevel(close:GetFrameLevel() + 1)
 	close:SetHeight(20)
 	close:SetWidth(100)
-	close:SetText(addon.L.Done or "Done")
+	close:SetText(addon.L.Done)
 
-	local buttonBack = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
-	buttonBack:SetText("<")
-	buttonBack:SetHeight(25)
-	buttonBack:SetWidth(25)
-	buttonBack:SetPoint("BOTTOMLEFT", 10, 13)
+    local buttonBack = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
+    buttonBack:SetText("<")
+    buttonBack:SetHeight(25)
+    buttonBack:SetWidth(25)
+    buttonBack:SetPoint("BOTTOMLEFT", 10, 13)
 	buttonBack:SetFrameLevel(buttonBack:GetFrameLevel() + 1)
-	buttonBack:SetScript("OnClick", function()
+    buttonBack:SetScript("OnClick", function()
 		if copyFrame.currChatIndex and copyFrame.currentPage then
 			if (copyFrame.currentPage - 1) > 0 then
 				getChatText(copyFrame, copyFrame.currChatIndex, copyFrame.currentPage - 1)
 			end
 		end
-	end)
-	copyFrame.buttonBack = buttonBack
+    end)
+    copyFrame.buttonBack = buttonBack
 
-	local buttonForward = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
-	buttonForward:SetText(">")
-	buttonForward:SetHeight(25)
-	buttonForward:SetWidth(25)
-	buttonForward:SetPoint("BOTTOMLEFT", 40, 13)
+    local buttonForward = CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
+    buttonForward:SetText(">")
+    buttonForward:SetHeight(25)
+    buttonForward:SetWidth(25)
+    buttonForward:SetPoint("BOTTOMLEFT", 40, 13)
 	buttonForward:SetFrameLevel(buttonForward:GetFrameLevel() + 1)
-	buttonForward:SetScript("OnClick", function()
+    buttonForward:SetScript("OnClick", function()
 		if copyFrame.currChatIndex and copyFrame.currentPage and copyFrame.pages then
 			if (copyFrame.currentPage + 1) <= #copyFrame.pages then
 				getChatText(copyFrame, copyFrame.currChatIndex, copyFrame.currentPage + 1)
 			end
 		end
-	end)
-	copyFrame.buttonForward = buttonForward
+    end)
+    copyFrame.buttonForward = buttonForward
 
-	local pageNumText = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	pageNumText:SetPoint("BOTTOMLEFT", 80, 18)
-	pageNumText:SetShadowOffset(1, -1)
-	pageNumText:SetText((addon.L.Page or "Page") .. " 1")
-	copyFrame.pageNumText = pageNumText
+	--this is to place it above the group layer
+    local pageNumText = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    pageNumText:SetPoint("BOTTOMLEFT", 80, 18)
+    pageNumText:SetShadowOffset(1, -1)
+    pageNumText:SetText(addon.L.Page.." 1")
+    copyFrame.pageNumText = pageNumText
 
 	copyFrame:Hide()
 
+	--store it for the future
 	addon.copyFrame = copyFrame
+
 	return copyFrame
 end
 
 -- Extract chat text from a chat frame into the copy frame
 local function getChatText(copyFrame, chatIndex, pageNum)
-	if not copyFrame or not copyFrame.MLEditBox then return end
 
-	copyFrame.MLEditBox:SetText("")
+	copyFrame.MLEditBox:SetText("") --clear it first in case there were previous messages
 	copyFrame.currChatIndex = chatIndex
 
-	local parentEditBox = copyFrame.MLEditBox.editBox
-	local MAXLINES = 150
-	local msgCount = 0
-	local chatFrame = _G["ChatFrame" .. chatIndex]
-	if chatFrame and chatFrame.GetNumMessages then
-		msgCount = chatFrame:GetNumMessages()
-	end
+	local chatFrame = _G["ChatFrame"..chatIndex]
+	if not chatFrame then return end
 
+	--the editbox of the multiline editbox (The parent of the multiline object)
+	local parentEditBox = copyFrame.MLEditBox.editBox
+
+	--there is a hard limit of text that can be highlighted in an editbox to 500 lines.
+	local MAXLINES = 150 --150 don't use large numbers or it will cause LAG when frame opens.  EditBox was not made for large amounts of text
+	local msgCount = chatFrame:GetNumMessages()
 	local startPos = 0
 	local endPos = 0
 	local lineText
 
-	-- Create pages
+	--lets create the pages
 	local pages = {}
-	local pageCount = 0
+	local pageCount = 0 --start at zero
 	for i = 1, msgCount, MAXLINES do
-		pageCount = i - 1
-		if pageCount <= 0 then pageCount = 1 end
-		table.insert(pages, pageCount)
+	  pageCount = i-1 --the block will extend by 1 past 150, so subtract 1
+	  if pageCount <= 0 then pageCount = 1 end --this is the first page, so start at 1
+	  pages[#pages + 1] = pageCount
 	end
 
-	-- Apply custom buffer limit
-	if XCHT_DB.pageBufferLimit and XCHT_DB.pageBufferLimit > 0 and #pages > XCHT_DB.pageBufferLimit then
+	--check for custom buffer limit by the user, ignore if it's set to zero
+	if XCHT_DB.pageBufferLimit > 0 and #pages > XCHT_DB.pageBufferLimit then
 		local counter = 0
 		local tmpPages = {}
 		for i = #pages, 1, -1 do
 			counter = counter + 1
 			if counter <= XCHT_DB.pageBufferLimit then
-				table.insert(tmpPages, pages[i])
+				tmpPages[#tmpPages + 1] = pages[i]
 			else
 				break
 			end
@@ -1984,46 +2145,48 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 		pages = tmpPages
 	end
 
-	-- Load past page if no page num
-	if not pageNum or startPos < 1 then
+	--load past page if we don't have a pageNum
+	if not pageNum and startPos < 1 then
 		if msgCount > MAXLINES then
 			startPos = msgCount - MAXLINES
+			endPos = startPos + MAXLINES
 		else
 			startPos = 1
 			endPos = msgCount
 		end
+	--otherwise load the page number
 	elseif pageNum and pages[pageNum] then
 		if pages[pageNum] == 1 then
+			--first page
 			startPos = 1
 			endPos = MAXLINES
 		else
 			startPos = pages[pageNum]
 			endPos = pages[pageNum] + MAXLINES
 		end
+	else
+		print("XanChat: "..addon.L.CopyChatError)
+		return
 	end
 
-	-- Adjust endPos
+	--adjust the endPos if it's greater than the total messages we have
 	if endPos > msgCount then endPos = msgCount end
 
-	-- Extract and format chat messages
 	for i = startPos, endPos do
-		local chatMsg, r, g, b, chatTypeID
-		if chatFrame and chatFrame.GetMessageInfo then
-			chatMsg, r, g, b, chatTypeID = chatFrame:GetMessageInfo(i)
-		end
+		local chatMsg, r, g, b, chatTypeID = chatFrame:GetMessageInfo(i)
 		if not chatMsg then break end
 
-		-- Fix color codes
+		--fix situations where links end the color prematurely
 		if (r and g and b and chatTypeID) then
 			local colorCode = RGBAToHex(r, g, b, 1)
-			chatMsg = string.gsub(chatMsg, "|r", "|r" .. colorCode)
-			chatMsg = colorCode .. chatMsg
+			chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
+			chatMsg = colorCode..chatMsg
 		end
 
 		if (i == startPos) then
-			lineText = chatMsg .. "|r"
+			lineText = unescape(chatMsg).."|r"
 		else
-			lineText = "\\n" .. chatMsg .. "|r"
+			lineText = "\n"..unescape(chatMsg).."|r"
 		end
 
 		parentEditBox:Insert(lineText)
@@ -2036,20 +2199,22 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 	end
 
 	copyFrame.pages = pages
-	copyFrame.pageNumText:SetText((addon.L.Page or "Page") .. " " .. copyFrame.currentPage)
+	copyFrame.pageNumText:SetText(addon.L.Page.." "..copyFrame.currentPage)
 
-	copyFrame.handleCursorChange = true
+	copyFrame.handleCursorChange = true -- just in case
 	copyFrame:Show()
 end
 
--- Create copy button for a chat frame
 local function createCopyChatButton(chatIndex, chatFrame)
 	if not XCHT_DB.enableCopyButton then return end
 
 	local copyFrame = createCopyFrame()
 
-	local obj = CreateFrame("Button", "xanCopyChatButton" .. chatIndex, chatFrame, BackdropTemplateMixin and "BackdropTemplate")
+	local obj = CreateFrame("Button", "xanCopyChatButton"..chatIndex, chatFrame, BackdropTemplateMixin and "BackdropTemplate")
 	obj:SetParent(chatFrame)
+	obj:SetNormalTexture("Interface\\AddOns\\xanChat\\media\\copy")
+	obj:SetHighlightTexture("Interface\\AddOns\\xanChat\\media\\copyhighlight")
+	obj:SetPushedTexture("Interface\\AddOns\\xanChat\\media\\copy")
 	obj:SetFrameLevel(7)
 	obj:SetWidth(18)
 	obj:SetHeight(18)
@@ -2059,6 +2224,7 @@ local function createCopyChatButton(chatIndex, chatFrame)
 	end)
 
 	if not XCHT_DB.enableCopyButtonLeft then
+
 		obj:SetPoint("BOTTOMRIGHT", -2, -3)
 
 		chatFrame:HookScript("OnEnter", function(self)
@@ -2067,8 +2233,16 @@ local function createCopyChatButton(chatIndex, chatFrame)
 		chatFrame:HookScript("OnLeave", function(self)
 			obj:Hide()
 		end)
+		if chatFrame.ScrollToBottomButton then
+			chatFrame.ScrollToBottomButton:HookScript("OnEnter", function(self)
+				obj:Show()
+			end)
+			chatFrame.ScrollToBottomButton:HookScript("OnLeave", function(self)
+				obj:Hide()
+			end)
+		end
 
-		-- Prevent object blinking
+		--prevent object blinking because chat continues to scroll
 		function obj.show()
 			obj:Show()
 		end
@@ -2078,11 +2252,13 @@ local function createCopyChatButton(chatIndex, chatFrame)
 
 		obj:SetScript("OnEnter", obj.show)
 		obj:SetScript("OnLeave", obj.hide)
+
 	else
-		local leftButtonFrame = "ChatFrame" .. chatIndex .. "ButtonFrame"
+		local leftButtonFrame = "ChatFrame"..chatIndex.."ButtonFrame"
 
 		local offSetY = -50
 		if not addon.IsRetail and not XCHT_DB.hideScroll then
+			--we have to move this as it will be on the scrollbars on classic
 			offSetY = 60
 		end
 
@@ -2093,24 +2269,22 @@ local function createCopyChatButton(chatIndex, chatFrame)
 		end
 		obj:Show()
 	end
+
 end
 
 -- Setup copy frame feature for all chat frames
 function addon:setupCopyFrameFeature()
 	if not XCHT_DB.enableCopyButton then return end
-
-	if CHAT_FRAMES and #CHAT_FRAMES > 0 then
-		for i = 1, #CHAT_FRAMES do
-			local frameName = CHAT_FRAMES[i]
+	if NUM_CHAT_WINDOWS then
+		for i = 1, NUM_CHAT_WINDOWS do
+			local frameName = ("ChatFrame%d"):format(i)
 			local frame = _G[frameName]
 			if frame then
 				createCopyChatButton(i, frame)
 			end
 		end
 	end
-end
-
--- Helper function for instance checking
+	end
 local function isInAnyInstance()
 	if not IsInInstance then return false end
 	return select(1, IsInInstance())
