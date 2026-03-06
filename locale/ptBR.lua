@@ -158,3 +158,5 @@ L.MoveSocialButtonOff = "xanChat: Mover social e alertas para baixo. [|cFF99CC33
 L.MoveSocialButtonInfo = "Mover o botão social e o quadro de alertas para baixo."
 
 L.PageLimitText = "Páginas recentes de chat para exibir em Copiar chat. |cFF99CC33(0 sem limite)|r"
+L.ProtectedSecretValue = " |cFFff3232(A mensagem de bate-papo contém <valores secretos>. O acesso é proibido pela Blizzard.)|r."
+

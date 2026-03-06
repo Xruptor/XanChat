@@ -119,16 +119,16 @@ local function setupChatFrame(chatID)
 
 				if addon.AddEditBoxHistoryLine then
 					addon:SecureHook(editBox, "AddHistoryLine", function(eb, text)
-						if eb then addon:AddEditBoxHistoryLine(eb) end
+						if eb then addon.AddEditBoxHistoryLine(eb) end
 					end)
 				end
 				if addon.ClearEditBoxHistory then
 					addon:SecureHook(editBox, "ClearHistory", function(eb)
-						if eb then addon:ClearEditBoxHistory(eb) end
+						if eb then addon.ClearEditBoxHistory(eb) end
 					end)
 				end
 				if addon.OnArrowPressed then
-					editBox:HookScript("OnArrowPressed", function(self, key) addon:OnArrowPressed(self, key) end)
+					editBox:HookScript("OnArrowPressed", function(self, key) addon.OnArrowPressed(self, key) end)
 				end
 			end
 
@@ -214,6 +214,11 @@ local function setupChatFrame(chatID)
 				fTab:HookScript("OnClick", function() editBox:Hide() end)
 			end
 			editBox:HookScript("OnEditFocusLost", function() editBox:Hide() end)
+		end
+
+		-- Create copy button for this chat frame
+		if _G.XCHT_DB and _G.XCHT_DB.enableCopyButton and addon.createCopyChatButton then
+			addon.createCopyChatButton(chatID, f)
 		end
 
 		-- Hide scroll bars

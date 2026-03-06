@@ -159,3 +159,5 @@ L.MoveSocialButtonOff = "xanChat: Schaltfläche für die Kontakte ist jetzt [|cF
 L.MoveSocialButtonInfo = "Schaltfläche für die Kontakte unterhalb des Chat-Fensters anzeigen."
 
 L.PageLimitText = "Anzahl der letzten Chat-Seiten in Chat-Kopie. |cFF99CC33(0 ohne Limit)|r"
+L.ProtectedSecretValue = " |cFFff3232(Chatnachricht enthält <geheime Werte>. Der Zugriff wird von Blizzard untersagt.)|r."
+

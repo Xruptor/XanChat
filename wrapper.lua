@@ -190,9 +190,17 @@ addon.SetCVar = (C_CVar and C_CVar.SetCVar) or SetCVar
 -- Initialize CallbackHandler-1.0 globally for entire addon
 local LibStub = _G.LibStub
 if LibStub then
-	local CallbackHandler = LibStub("CallbackHandler-1.0", true)
+	-- Try without version check to avoid parameter scrambling
+	local CallbackHandler = LibStub("CallbackHandler-1.0")
 	if CallbackHandler then
-		addon.callbacks = CallbackHandler.New(addon, "RegisterCallback", "UnregisterCallback", "UnregisterAllCallbacks")
+		-- Defensive check: ensure addon is a proper table before using CallbackHandler
+		if type(addon) ~= "table" then
+			if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+				DEFAULT_CHAT_FRAME:AddMessage("xanChat ERROR: addon is not a table, type is: " .. type(addon))
+			end
+			return
+		end
+		addon.callbacks = CallbackHandler:New(addon, "RegisterCallback", "UnregisterCallback", "UnregisterAllCallbacks")
 		addon.fireCallback = function(event, ...)
 			return addon.callbacks:Fire(event, ...)
 		end

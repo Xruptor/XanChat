@@ -158,3 +158,5 @@ L.MoveSocialButtonOff = "xanChat: 社交和提示框移动到底部。 [|cFF99CC
 L.MoveSocialButtonInfo = "将社交和提示框移动到底部。"
 
 L.PageLimitText = "复制聊天中显示的最近聊天页面。 |cFF99CC33（0 是无限制）|r"
+L.ProtectedSecretValue = " |cFFff3232(聊天消息包含<秘密值>。暴雪禁止访问。)|r."
+

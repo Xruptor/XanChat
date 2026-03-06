@@ -30,23 +30,25 @@ locale\ruRU.lua
 locale\zhCN.lua
 locale\zhTW.lua
 
+core/Utilities.lua
+core/AceHookIntegration.lua
+core/EventHandling.lua
+
 filter.lua
 config.lua
 stickychannels.lua
 
-XanChat.lua
-
-core/AceHookIntegration.lua
-core/EventHandling.lua
 modules/DebugSystem.lua
-modules/PatternMatching.lua
+modules/PlayerNameStyling.lua
 modules/ChatFormatting.lua
+modules/PatternMatching.lua
 modules/URLDetection.lua
-modules/PlayerListManagement.lua
 modules/ChannelShortening.lua
 modules/MessageFilters.lua
+modules/PlayerListManagement.lua
 modules/CopyFrame.lua
-modules/PlayerNameStyling.lua
+modules/ChatSettings.lua
 modules/ChatFrameSetup.lua
 modules/EditBoxHistory.lua
-modules/ChatSettings.lua
+
+XanChat.lua

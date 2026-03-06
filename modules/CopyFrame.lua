@@ -84,13 +84,123 @@ local function unescape(str)
 end
 
 -- ============================================================================
+-- GET CHAT TEXT FOR COPYING
+-- ============================================================================
+
+local function RGBToColorCode(r, g, b)
+	return string.format("|cff%02x%02x%02x", r * 255, g * 255, b * 255)
+end
+
+local function getChatText(copyFrame, chatIndex, pageNum)
+	copyFrame.MLEditBox:SetText("") -- clear it first in case there were previous messages
+	copyFrame.currChatIndex = chatIndex
+
+	local chatFrame = _G["ChatFrame" .. chatIndex]
+	if not chatFrame then return end
+
+	-- the editbox of the multiline editbox (The parent of the multiline object)
+	local parentEditBox = copyFrame.MLEditBox.editBox
+
+	-- there is a hard limit of text that can be highlighted in an editbox to 500 lines.
+	local MAXLINES = 150 -- 150 don't use large numbers or it will cause LAG when frame opens.  EditBox was not made for large amounts of text
+	local msgCount = chatFrame:GetNumMessages()
+	local startPos = 0
+	local endPos = 0
+	local lineText
+
+	-- lets create the pages
+	local pages = {}
+	local pageCount = 0 -- start at zero
+	for i = 1, msgCount, MAXLINES do
+	  pageCount = i-1 -- the block will extend by 1 past 150, so subtract 1
+	  if pageCount <= 0 then pageCount = 1 end -- this is the first page, so start at 1
+	  pages[#pages + 1] = pageCount
+	end
+
+	-- check for custom buffer limit by the user, ignore if it's set to zero
+	if _G.XCHT_DB and _G.XCHT_DB.pageBufferLimit > 0 and #pages > _G.XCHT_DB.pageBufferLimit then
+		local counter = 0
+		local tmpPages = {}
+		for i = #pages, 1, -1 do
+			counter = counter + 1
+			if counter <= _G.XCHT_DB.pageBufferLimit then
+				tmpPages[#tmpPages + 1] = pages[i]
+			else
+				break
+			end
+		end
+		pages = tmpPages
+	end
+
+	-- load past page if we don't have a pageNum
+	if not pageNum and startPos < 1 then
+		if msgCount > MAXLINES then
+			startPos = msgCount - MAXLINES
+			endPos = startPos + MAXLINES
+		else
+			startPos = 1
+			endPos = msgCount
+		end
+	-- otherwise load the page number
+	elseif pageNum and pages[pageNum] then
+		if pages[pageNum] == 1 then
+			-- first page
+			startPos = 1
+			endPos = MAXLINES
+		else
+			startPos = pages[pageNum]
+			endPos = pages[pageNum] + MAXLINES
+		end
+	else
+		print("XanChat: " .. (addon.L and addon.L.CopyChatError or "Copy Chat Error"))
+		return
+	end
+
+	-- adjust the endPos if it's greater than the total messages we have
+	if endPos > msgCount then endPos = msgCount end
+
+	for i = startPos, endPos do
+		local chatMsg, r, g, b, chatTypeID = chatFrame:GetMessageInfo(i)
+		if not chatMsg then break end
+
+		--check for secret values strings
+		chatMsg = (addon.safestr_bool(chatMsg) and addon.L.ProtectedSecretValue) or chatMsg
+
+		-- fix situations where links end the color prematurely
+		if (r and g and b and chatTypeID) then
+			local colorCode = RGBToColorCode(r, g, b)
+			chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
+			chatMsg = colorCode..chatMsg
+		end
+
+		if (i == startPos) then
+			lineText = unescape(chatMsg).."|r"
+		else
+			lineText = "\n"..unescape(chatMsg).."|r"
+		end
+
+		parentEditBox:Insert(lineText)
+	end
+
+	if pageNum then
+		copyFrame.currentPage = pageNum
+	else
+		copyFrame.currentPage = #pages
+	end
+
+	copyFrame.pages = pages
+	copyFrame.pageNumText:SetText((addon.L and addon.L.Page or "Page").." "..copyFrame.currentPage)
+
+	copyFrame.handleCursorChange = true -- just in case
+	copyFrame:Show()
+end
+
+-- ============================================================================
 -- COPY FRAME CREATION
 -- ============================================================================
 
 local function createCopyFrame()
-	if not addon then return nil end
-
-	--check to see if we have the frame already, if we do then return it
+	-- check to see if we have the frame already, if we do then return it
 	if addon.copyFrame then return addon.copyFrame end
 
 	local copyFrame = _G.CreateFrame("FRAME", ADDON_NAME.."CopyFrame", _G.UIParent, _G.BackdropTemplateMixin and "BackdropTemplate")
@@ -170,47 +280,157 @@ local function createCopyFrame()
 		end
 	end
 
-	scrollFrame:HookScript("OnShow", UpdateEditSize)
+	editBox:SetScript("OnTextChanged", UpdateEditSize)
 	scrollFrame:HookScript("OnSizeChanged", UpdateEditSize)
+	UpdateEditSize()
 
-	copyFrame.scrollFrame = scrollFrame
-	copyFrame.editBox = editBox
-	addon.copyFrame = copyFrame
+	local scrollBar = scrollFrame.ScrollBar or _G[scrollFrame:GetName().."ScrollBar"]
+	if not scrollBar then
+		scrollBar = _G.CreateFrame("Slider", ADDON_NAME.."CopyScrollBar", scrollFrame, "UIPanelScrollBarTemplate")
+		scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 4, -16)
+		scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 4, 16)
+		scrollBar:SetValueStep(20)
+		scrollBar:SetObeyStepOnDrag(true)
+		scrollFrame.ScrollBar = scrollBar
+		scrollBar:SetScript("OnValueChanged", function(self, value)
+			scrollFrame:SetVerticalScroll(value)
+		end)
+	end
+	if scrollBar then
+		scrollFrame:HookScript("OnScrollRangeChanged", function(self, xRange, yRange)
+			local maxVal = math.max(0, yRange or 0)
+			scrollBar:SetMinMaxValues(0, maxVal)
+			scrollBar:SetShown(maxVal > 0)
+		end)
+		scrollBar:Show()
+	end
 
-	return copyFrame
-end
-
--- ============================================================================
--- GET CHAT TEXT FOR COPYING
--- ============================================================================
-
-local function getChatText(copyFrame, chatIndex, pageNum)
-	if not addon or not copyFrame then return nil end
-
-	local chatFrame = _G["ChatFrame" .. chatIndex]
-	if not chatFrame then return nil end
-
-	local maxLines = chatFrame:GetNumMessages() or 0
-	if maxLines == 0 then return nil end
-
-	local text = ""
-	local startLine = pageNum and (pageNum - 1) * 500 + 1 or 1
-	local endLine = math.min(startLine + 499, maxLines)
-
-	for i = startLine, endLine do
-		local lineInfo = chatFrame:GetMessageInfo(i)
-		if lineInfo then
-			local lineText = lineInfo.message or ""
-			if lineText and lineText ~= "" then
-				lineText = unescape(lineText)
-				if lineText and lineText ~= "" then
-					text = text .. lineText .. "\n"
-				end
-			end
+	local function ScrollCopyFrame(delta)
+		if scrollBar then
+			local step = scrollBar:GetValueStep() or 20
+			local minVal, maxVal = scrollBar:GetMinMaxValues()
+			local newVal = scrollBar:GetValue() - (delta * step)
+			if newVal < minVal then newVal = minVal end
+			if newVal > maxVal then newVal = maxVal end
+			scrollBar:SetValue(newVal)
+		else
+			local cur = scrollFrame:GetVerticalScroll()
+			local max = scrollFrame:GetVerticalScrollRange()
+			local newVal = cur - (delta * 20)
+			if newVal < 0 then newVal = 0 end
+			if newVal > max then newVal = max end
+			scrollFrame:SetVerticalScroll(newVal)
 		end
 	end
 
-	return text
+	scrollFrame:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	if scrollFrame.ScrollBox then
+		scrollFrame.ScrollBox:EnableMouseWheel(true)
+		scrollFrame.ScrollBox:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	end
+	editBox:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+	copyFrame:EnableMouseWheel(true)
+	copyFrame:SetScript("OnMouseWheel", function(self, delta) ScrollCopyFrame(delta) end)
+
+	local MLEditBox = {
+		editBox = editBox,
+		scrollFrame = scrollFrame,
+		scrollBar = scrollBar,
+		SetText = function(self, text)
+			self.editBox:SetText(text or "")
+			UpdateEditSize()
+		end,
+		GetText = function(self)
+			return self.editBox:GetText()
+		end,
+		SetCursorPosition = function(self, pos)
+			self.editBox:SetCursorPosition(pos)
+		end,
+		ClearFocus = function(self)
+			self.editBox:ClearFocus()
+		end,
+		SetFocus = function(self)
+			self.editBox:SetFocus()
+		end,
+	}
+	copyFrame.MLEditBox = MLEditBox
+
+	copyFrame.handleCursorChange = false -- setting this to true will update the scrollbar to the cursor position
+	scrollFrame:HookScript("OnUpdate", function(self, elapsed)
+		if not scrollFrame:IsVisible() then return end
+
+		self.OnUpdateCounter = (self.OnUpdateCounter or 0) + elapsed
+		if self.OnUpdateCounter < 0.1 then return end
+		self.OnUpdateCounter = 0
+
+		local pos = editBox:GetNumLetters()
+
+		if copyFrame.handleCursorChange then
+			editBox:SetFocus()
+			editBox:SetCursorPosition(pos)
+			editBox:ClearFocus()
+			if scrollBar then
+				local _, statusMax = scrollBar:GetMinMaxValues()
+				scrollBar:SetValue(statusMax)
+			else
+				scrollFrame:SetVerticalScroll(scrollFrame:GetVerticalScrollRange())
+			end
+			copyFrame.handleCursorChange = false
+		end
+	end)
+	copyFrame:HookScript("OnShow", function() copyFrame.handleCursorChange = true end)
+
+	local close = _G.CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
+	close:SetScript("OnClick", function() copyFrame:Hide() end)
+	close:SetPoint("BOTTOMRIGHT", -27, 13)
+	close:SetFrameLevel(close:GetFrameLevel() + 1)
+	close:SetHeight(20)
+	close:SetWidth(100)
+	close:SetText(addon.L and addon.L.Done or "Done")
+
+	local buttonBack = _G.CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
+	buttonBack:SetText("<")
+	buttonBack:SetHeight(25)
+	buttonBack:SetWidth(25)
+	buttonBack:SetPoint("BOTTOMLEFT", 10, 13)
+	buttonBack:SetFrameLevel(buttonBack:GetFrameLevel() + 1)
+	buttonBack:SetScript("OnClick", function()
+		if copyFrame.currChatIndex and copyFrame.currentPage and copyFrame.pages then
+			if (copyFrame.currentPage - 1) >= 1 then
+				getChatText(copyFrame, copyFrame.currChatIndex, copyFrame.currentPage - 1)
+			end
+		end
+	end)
+	copyFrame.buttonBack = buttonBack
+
+	local buttonForward = _G.CreateFrame("Button", nil, copyFrame, "UIPanelButtonTemplate")
+	buttonForward:SetText(">")
+	buttonForward:SetHeight(25)
+	buttonForward:SetWidth(25)
+	buttonForward:SetPoint("BOTTOMLEFT", 40, 13)
+	buttonForward:SetFrameLevel(buttonForward:GetFrameLevel() + 1)
+	buttonForward:SetScript("OnClick", function()
+		if copyFrame.currChatIndex and copyFrame.currentPage and copyFrame.pages then
+			if (copyFrame.currentPage + 1) <= #copyFrame.pages then
+				getChatText(copyFrame, copyFrame.currChatIndex, copyFrame.currentPage + 1)
+			end
+		end
+	end)
+	copyFrame.buttonForward = buttonForward
+
+	-- this is to place it above the group layer
+	local pageNumText = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	pageNumText:SetPoint("BOTTOMLEFT", 80, 18)
+	pageNumText:SetShadowOffset(1, -1)
+	pageNumText:SetText((addon.L and addon.L.Page or "Page").." 1")
+	copyFrame.pageNumText = pageNumText
+
+	copyFrame:Hide()
+
+	-- store it for the future
+	addon.copyFrame = copyFrame
+
+	return copyFrame
 end
 
 -- ============================================================================
@@ -226,28 +446,19 @@ local function createCopyChatButton(chatIndex, chatFrame)
 	local buttonName = frameName .. "CopyChatButton"
 	if _G[buttonName] then return _G[buttonName] end
 
-	local button = _G.CreateFrame("BUTTON", buttonName, chatFrame)
-	button:SetWidth(30)
-	button:SetHeight(30)
-	button:SetNormalTexture("Interface\\Buttons\\UI-Panel-MaximizeButton-Up")
-	button:SetPushedTexture("Interface\\Buttons\\UI-Panel-MaximizeButton-Down")
-	button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight", "ADD")
+	local button = _G.CreateFrame("BUTTON", buttonName, chatFrame, _G.BackdropTemplateMixin and "BackdropTemplate")
+	button:SetParent(chatFrame)
+	button:SetWidth(18)
+	button:SetHeight(18)
+	button:SetNormalTexture("Interface\\AddOns\\xanChat\\media\\copy")
+	button:SetHighlightTexture("Interface\\AddOns\\xanChat\\media\\copyhighlight")
+	button:SetPushedTexture("Interface\\AddOns\\xanChat\\media\\copy")
+	button:SetFrameLevel(7)
 	button:SetScript("OnClick", function()
-		local frame = createCopyFrame()
-		if not frame then return end
+		local copyFrame = createCopyFrame()
+		if not copyFrame then return end
 
-		local text = getChatText(frame, chatIndex, 1)
-		if text then
-			frame.editBox:SetText(text)
-			frame.editBox:SetFocus()
-			frame.editBox:HighlightText()
-		end
-
-		if not frame:IsShown() then
-			frame:Show()
-		else
-			frame:Hide()
-		end
+		getChatText(copyFrame, chatIndex)
 	end)
 
 	button:SetScript("OnEnter", function(self)
@@ -265,47 +476,49 @@ local function createCopyChatButton(chatIndex, chatFrame)
 	end)
 
 	-- Position the button
-	local leftButtonFrame
-	if addon.IsRetail then
-		leftButtonFrame = frameName .. "BottomButton"
-	else
-		leftButtonFrame = frameName .. "ResizeButton"
-	end
+	if not _G.XCHT_DB or not _G.XCHT_DB.enableCopyButtonLeft then
+		button:SetPoint("BOTTOMRIGHT", -2, -3)
 
-	local offSetY = -5
-	if addon.IsClassic or addon.IsWLK_C then
-		--we have to move this as it will be on the scrollbars on classic
-		offSetY = 60
-	end
+		chatFrame:HookScript("OnEnter", function(self)
+			button:Show()
+		end)
+		chatFrame:HookScript("OnLeave", function(self)
+			button:Hide()
+		end)
+		if chatFrame.ScrollToBottomButton then
+			chatFrame.ScrollToBottomButton:HookScript("OnEnter", function(self)
+				button:Show()
+			end)
+			chatFrame.ScrollToBottomButton:HookScript("OnLeave", function(self)
+				button:Hide()
+			end)
+		end
 
-	if _G[leftButtonFrame] then
-		button:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, offSetY)
+		-- Prevent object blinking because chat continues to scroll
+		button.show = function() button:Show() end
+		button.hide = function() button:Hide() end
+
+		button:SetScript("OnEnter", button.show)
+		button:SetScript("OnLeave", button.hide)
+
 	else
-		button:SetPoint("TOPLEFT", chatFrame, "TOPLEFT", -30, offSetY)
+		local leftButtonFrame = frameName .. "ButtonFrame"
+
+		local offSetY = -50
+		if not addon.IsRetail and not _G.XCHT_DB.hideScroll then
+			--we have to move this as it will be on the scrollbars on classic
+			offSetY = 60
+		end
+
+		if _G[leftButtonFrame] then
+			button:SetPoint("TOPLEFT", _G[leftButtonFrame], "TOPLEFT", 5, offSetY)
+		else
+			button:SetPoint("TOPLEFT", chatFrame, "TOPLEFT", -30, offSetY)
+		end
+		button:Show()
 	end
-	button:Show()
 
 	return button
-end
-
--- ============================================================================
--- SETUP COPY FRAME FEATURE
--- ============================================================================
-
-local function setupCopyFrameFeature()
-	if not addon then return end
-
-	if not _G.XCHT_DB or not _G.XCHT_DB.enableCopyButton then return end
-
-	if _G.NUM_CHAT_WINDOWS then
-		for i = 1, _G.NUM_CHAT_WINDOWS do
-			local frameName = ("ChatFrame%d"):format(i)
-			local frame = _G[frameName]
-			if frame then
-				createCopyChatButton(i, frame)
-			end
-		end
-	end
 end
 
 -- ============================================================================
@@ -316,4 +529,3 @@ addon.unescape = unescape
 addon.createCopyFrame = createCopyFrame
 addon.getChatText = getChatText
 addon.createCopyChatButton = createCopyChatButton
-addon.setupCopyFrameFeature = setupCopyFrameFeature

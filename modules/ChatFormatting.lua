@@ -40,6 +40,17 @@ local function resetSectionBuffer(buffer)
 	end
 end
 
+local function prepareWorkingSections()
+	if addon and addon.dbg then
+		addon.dbg("prepareWorkingSections: copying sectionOriginal to sectionWorking")
+	end
+	-- Copy all fields from sectionOriginal to sectionWorking
+	for k, v in pairs(sectionOriginal) do
+		sectionWorking[k] = v
+	end
+	return sectionWorking
+end
+
 local function BuildChatText(message)
 	if addon and addon.dbg then
 		addon.dbg("BuildChatText: building chat text with direct construction")

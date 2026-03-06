@@ -29,33 +29,13 @@ local function dbg(msg)
 	end
 end
 
-local isSecretValue = function(v)
-	local fn = _G.issecretvalue
-	if type(fn) == "function" then
-		local ok, res = pcall(fn, v)
-		if ok then return not not res end
-		return true
-	end
-	return false
-end
-
-local canAccessValue = function(v)
-	local fn = _G.canaccessvalue
-	if type(fn) == "function" then
-		local ok, res = pcall(fn, v)
-		if ok then return not not res end
-		return false
-	end
-	return true
-end
-
 local function dbgValue(v)
 	local t = type(v)
 	if t == "string" then
-		if isSecretValue(v) then
+		if addon.isSecretValue(v) then
 			return "<secret-string>"
 		end
-		if not canAccessValue(v) then
+		if not addon.canAccessValue(v) then
 			return "<inaccessible-string>"
 		end
 		return v
@@ -70,62 +50,8 @@ local function dbgValue(v)
 end
 
 -- ============================================================================
--- UTILITY FUNCTIONS
--- ============================================================================
-
-local function ApplyDefaults(target, defaults)
-	if not target or not defaults then return end
-	for key, value in pairs(defaults) do
-		if target[key] == nil then
-			target[key] = value
-		end
-	end
-end
-
--- Secret Value Protection Functions
-local function isSafeString(v)
-	if isSecretValue(v) then return false end
-	if not canAccessValue(v) then return false end
-	if type(v) ~= "string" then return false end
-	return true
-end
-
-local function safestr(v)
-	if isSecretValue(v) then return "<secret-string>" end
-	if not canAccessValue(v) then return "<inaccessible-string>" end
-	if type(v) ~= "string" then return "" end
-	return v
-end
-
--- Color Helper
-local function RGBAToHex(r, g, b, a)
-	r = math.min(math.max(tonumber(r) or 1, 0), 1)
-	g = math.min(math.max(tonumber(g) or 1, 0), 1)
-	b = math.min(math.max(tonumber(b) or 1, 0), 1)
-	a = math.min(math.max(tonumber(a) or 1, 0), 1)
-	return string.format("%02X%02X%02X%02X", a * 255, r * 255, g * 255, b * 255)
-end
-
-local function HexToRGBA(hex)
-	if type(hex) ~= "string" or #hex < 8 then
-		return 1, 1, 1, 1
-	end
-	return tonumber("0x" .. string.sub(hex, 3, 4), 10) / 255,
-		tonumber("0x" .. string.sub(hex, 5, 6), 10) / 255,
-		tonumber("0x" .. string.sub(hex, 7, 8), 10) / 255,
-		tonumber("0x" .. string.sub(hex, 1, 2), 10) / 255
-end
-
--- ============================================================================
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
 addon.dbg = dbg
 addon.dbgValue = dbgValue
-addon.ApplyDefaults = ApplyDefaults
-addon.isSecretValue = isSecretValue
-addon.canAccessValue = canAccessValue
-addon.isSafeString = isSafeString
-addon.safestr = safestr
-addon.RGBAToHex = RGBAToHex
-addon.HexToRGBA = HexToRGBA

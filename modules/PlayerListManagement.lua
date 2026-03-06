@@ -60,6 +60,11 @@ end
 local function addToPlayerList(name, realm, level, class, bnName, pin)
 	if not addon then return end
 
+	-- Debug output to see what's being passed
+	if addon and addon.dbg then
+		addon.dbg("addToPlayerList: name=" .. tostring(name) .. " level=" .. tostring(level) .. " class=" .. tostring(class) .. " realm=" .. tostring(realm))
+	end
+
 	if not name or not level or not class or level <= 0 then
 		return
 	end
@@ -133,10 +138,18 @@ local function addToPlayerList(name, realm, level, class, bnName, pin)
 end
 
 local function initUpdateCurrentPlayer()
-	local class = select(2, UnitClass("player"))
+	local _, classFile = UnitClass("player")
 	local name, realm = UnitName("player")
 	local level = UnitLevel("player")
-	addToPlayerList(name, realm, level, class, nil, true)
+
+	if addon and addon.dbg then
+		addon.dbg("-->initUpdateCurrentPlayer: name=" .. tostring(name) .. " level=" .. tostring(level) .. " class=" .. tostring(classFile))
+	end
+
+	-- Only add to list if we have valid data
+	if name and level and level > 0 then
+		addToPlayerList(name, realm, level, classFile, nil, true)
+	end
 end
 
 local function doRosterUpdate()
@@ -146,12 +159,28 @@ local function doRosterUpdate()
 
 	local playerNum = inRaid and GetNumGroupMembers() or MAX_PARTY_MEMBERS
 	local unit = inRaid and "raid" or "party"
+
 	for i = 1, playerNum do
-		if UnitExists(unit .. i) then
-			local playerName, playerServer = UnitName(unit .. i)
-			local _, class = UnitClass(unit .. i)
-			local level = UnitLevel(unit .. i)
-			addToPlayerList(playerName, playerServer, level, class)
+		local unitId = unit .. i
+		if UnitExists(unitId) then
+			local playerName, playerServer = UnitName(unitId)
+			local className, classFile = UnitClass(unitId)
+			local level = UnitLevel(unitId)
+
+			if addon and addon.dbg and playerName then
+				addon.dbg("-->doRosterUpdate: unit=" .. tostring(unitId) .. " name=" .. tostring(playerName) .. " className=" .. tostring(className) .. " classFile=" .. tostring(classFile) .. " level=" .. tostring(level))
+			end
+
+			-- Only add if we have valid data
+			if playerName and level and level > 0 and classFile and classFile ~= 0 then
+				addToPlayerList(playerName, playerServer, level, classFile)
+			elseif playerName and level and level > 0 and not classFile or classFile == 0 then
+				-- Still add even if class is 0, but debug it
+				if addon and addon.dbg then
+					addon.dbg("-->doRosterUpdate: Adding player with class=0: " .. tostring(playerName))
+				end
+				addToPlayerList(playerName, playerServer, level, 0)
+			end
 		end
 	end
 end
@@ -193,7 +222,8 @@ local function doGuildUpdate()
 
 	local numMembers = GetNumGuildMembers and GetNumGuildMembers(true) or 0
 	for i = 1, numMembers do
-		local name, _, _, level, _, _, _, online, _, class = GetGuildRosterInfo(i)
+		local name, _, _, level, classDisplayName, _, _, _, online, _, class = GetGuildRosterInfo(i)
+
 		if online and name then
 			local playerName, playerServer = string.match(name, "([^%-]+)%-?(.*)")
 			if playerName and playerServer and playerServer ~= "" then

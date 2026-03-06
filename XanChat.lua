@@ -22,24 +22,6 @@ addon.IsClassic = WOW_PROJECT_ID == WOW_PROJECT_CLASSIC
 addon.IsWLK_C = WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC
 
 -- ============================================================================
--- ADDMESSAGE HANDLER (for AceHook RawHook)
--- ============================================================================
-addon.AddMessage = function(self, frame, text, r, g, b, id, ...)
-	-- Capture text when called on the capture proxy frame
-	if addon.captureState.proxy == frame and addon.captureState.text == nil then
-		addon.captureState.text = text
-		addon.captureState.color.r = r
-		addon.captureState.color.g = g
-		addon.captureState.color.b = b
-		addon.captureState.color.id = id
-		addon.dbg("capture proxy stored formatter output")
-		return
-	end
-	-- Call original AddMessage for non-capture calls
-	return self.hooks[frame].AddMessage(frame, text, r, g, b, id, ...)
-end
-
--- ============================================================================
 -- EVENT CALLBACK SYSTEM
 -- Event constants
 local EVENTS = {
@@ -467,7 +449,7 @@ local function initializeDatabase()
 	if not XCHT_DB then
 		XCHT_DB = {}
 	end
-	ApplyDefaults(XCHT_DB, DEFAULTS)
+	addon.ApplyDefaults(XCHT_DB, DEFAULTS)
 	addon.wrapperDebug = XCHT_DB.debugWrapper
 
 	-- Setup History DB
@@ -597,7 +579,7 @@ function addon:OnLoad()
 	addon.ensureCaptureProxyFrame()
 	addon.registerUrlPatterns()
 	addon.installUrlCopyHook()
-	self:setDisableChatEnterLeaveNotice()
+	self.setDisableChatEnterLeaveNotice()
 	self:setOutWhisperColor()
 
 	if self.EnableFilterList then
@@ -678,7 +660,7 @@ function addon:OnLoad()
 	-- Setup all chat frames
 	if NUM_CHAT_WINDOWS then
 		for i = 1, NUM_CHAT_WINDOWS do
-			self:setupChatFrame(i)
+			self.setupChatFrame(i)
 		end
 	end
 
@@ -688,7 +670,7 @@ function addon:OnLoad()
 		FCF_OpenTemporaryWindow = function(...)
 			local frame = old_OpenTemporaryWindow(...)
 			if frame and frame.GetID then
-				self:setupChatFrame(frame:GetID())
+				self.setupChatFrame(frame:GetID())
 			end
 			return frame
 		end
@@ -790,9 +772,6 @@ function addon:OnLoad()
 		end
 	end
 
-	-- Setup copy frame for chat windows
-	self:setupCopyFrameFeature()
-
 	addon.dbg("OnLoad: COMPLETE xanChat initialization")
 	if addon.configFrame then addon.configFrame:EnableConfig() end
 
@@ -805,7 +784,7 @@ function addon:OnEnable()
 	addon.registerUrlPatterns()
 	self:EnableAddon()
 	-- Setup auto-save hooks for chat settings changes
-	self:hookupAutoSave()
+	self.hookupAutoSave()
 end
 
 function addon:OnDisable()
