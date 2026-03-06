@@ -34,5 +34,4 @@ filter.lua
 config.lua
 stickychannels.lua
 
-XanChat.Template.lua
 XanChat.lua

@@ -364,26 +364,10 @@ addon.AddMessage = function(self, frame, text, r, g, b, id, ...)
 end
 
 -- ============================================================================
--- CHAT COMPOSITION SYSTEM (Descriptive Templates)
+-- CHAT COMPOSITION SYSTEM (Direct Construction)
 -- ============================================================================
 
 dbg("chat_composition_system_init")
-
--- Defines the main structure of a chat line.
-local CHAT_MASTER_TEMPLATE = "{{prefix}} {{player}} {{postfix}}: {{message_body}}"
-
--- Defines the components that make up the chat line.
--- These can be customized to change the look of the chat.
-local CHAT_COMPONENT_TEMPLATES = {
-    prefix  = "{{channel_display}} {{type_prefix}}",
-    player  = "{{player_flag}} {{styled_player_name_or_link}}",
-    postfix = "[{{language}}] {{mobile_icon}}",
-
-    -- Sub-components for more granular control
-    channel_display = "[{{channel_number}}. {{channel_name}}]",
-    styled_player_name_level = "[{{level_text}}:{{name_text}}]",
-    styled_player_name_simple = "[{{name_text}}]",
-}
 
 -- All possible data keys that can be populated from a chat event.
 local CHAT_DATA_KEYS = {
@@ -418,32 +402,60 @@ local function prepareWorkingSections()
 end
 
 function addon:BuildChatText(message)
-	dbg("BuildChatText: building chat text from descriptive templates")
+	dbg("BuildChatText: building chat text with direct construction")
 	local m = message or sectionWorking
 
-    -- Create some composite fields for easier templating
-    if m.channel_number and m.channel_number ~= "" then
-        m.channel_display = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.channel_display, m)
-    else
-        m.channel_display = ""
-    end
-    m.styled_player_name_or_link = m.styled_player_name or m.player_link or m.player_name
+	-- Helper function to safely get and trim values
+	local function getValue(field)
+		local value = m[field] or ""
+		if type(value) ~= "string" then return "" end
+		return value:gsub("^%s+", ""):gsub("%s+$", "")
+	end
 
-	-- Build the main components
-    local prefix = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.prefix, m)
-    local player = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.player, m)
-    local postfix = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.postfix, m)
+	-- Build prefix section (channel info and type prefix)
+	local prefixSection = ""
+	if getValue("channel_number") ~= "" and getValue("channel_name") ~= "" then
+		prefixSection = "[" .. getValue("channel_number") .. ". " .. getValue("channel_name") .. "] "
+	end
+	if getValue("type_prefix") ~= "" then
+		prefixSection = prefixSection .. getValue("type_prefix") .. " "
+	end
 
-    local composition = {
-        prefix = prefix,
-        player = player,
-        postfix = postfix,
-        message_body = m.message_text or "",
-    }
+	-- Build player section (flag, styled name, or link)
+	local playerSection = ""
+	if getValue("player_flag") ~= "" then
+		playerSection = getValue("player_flag")
+	end
 
-	-- Assemble final chat line from master template, stripping extra whitespace
-	local result = addon.private.Template:Parse(CHAT_MASTER_TEMPLATE, composition)
-    result = result:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
+	-- Use styled player name if available, otherwise use original link/name
+	if getValue("styled_player_name") ~= "" then
+		playerSection = playerSection .. getValue("styled_player_name")
+	elseif getValue("player_link") ~= "" then
+		playerSection = playerSection .. getValue("player_link")
+	elseif getValue("player_name") ~= "" then
+		-- Add server name if present
+		if getValue("server_name") ~= "" then
+			playerSection = playerSection .. getValue("player_name") .. getValue("server_separator") .. getValue("server_name")
+		else
+			playerSection = playerSection .. getValue("player_name")
+		end
+	end
+	playerSection = playerSection .. " "
+
+	-- Build postfix section (language and mobile icon)
+	local postfixSection = ""
+	if getValue("language") ~= "" then
+		postfixSection = "[" .. getValue("language") .. "] "
+	end
+	if getValue("mobile_icon") ~= "" then
+		postfixSection = postfixSection .. getValue("mobile_icon") .. " "
+	end
+
+	-- Combine all sections with message
+	local result = prefixSection .. playerSection .. postfixSection .. ": " .. getValue("message_text")
+
+	-- Clean up extra whitespace
+	result = result:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
 
 	if isSafeString(result) then
 		dbg("BuildChatText: result length=" .. #result)
@@ -908,38 +920,51 @@ local function FormatPlayerSection(m)
 		return
 	end
 
-	local levelText = ""
+	-- Helper function to wrap text in WoW color format
+	local function wrapInColor(text, r, g, b)
+		if not text or text == "" then return "" end
+		if not r or not g or not b then return text end
+		local hexColor = RGBAToHex(r, g, b, 1)
+		return "|c" .. hexColor .. text .. "|r"
+	end
+
+	-- Build level text with difficulty coloring
+	local coloredLevel = ""
 	if playerInfo.level and playerInfo.level > 0 then
 		local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
 		if colorFunc then
-			local color = colorFunc(playerInfo.level)
-			if color then
-				local levelCode = RGBAToHex(color.r, color.g, color.b, 1)
-				levelText = "|c" .. levelCode .. playerInfo.level .. "|r"
+			local difficultyColor = colorFunc(playerInfo.level)
+			if difficultyColor then
+				coloredLevel = wrapInColor(tostring(playerInfo.level), difficultyColor.r, difficultyColor.g, difficultyColor.b)
 			end
 		end
 	end
 
-	local nameText = m.player_name
+	-- Build player name with class coloring
+	local coloredPlayerName = m.player_name
 	if playerInfo.class then
-		local colorInfo = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[playerInfo.class] or (_G.CUSTOM_CLASS_COLORS and _G.CUSTOM_CLASS_COLORS[playerInfo.class])
-		if colorInfo then
-			local colorCode = RGBAToHex(colorInfo.r, colorInfo.g, colorInfo.b, 1)
-			nameText = "|c" .. colorCode .. m.player_name .. "|r"
+		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
+		if classColorTable then
+			local classColor = classColorTable[playerInfo.class]
+			if classColor then
+				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
+			end
 		end
 	end
 
-	-- Overwrite styled_player_name to inject custom formatting
-    local template_data = { level_text = levelText, name_text = nameText }
-    if levelText ~= "" then
-	    m.styled_player_name = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.styled_player_name_level, template_data)
-    else
-        m.styled_player_name = addon.private.Template:Parse(CHAT_COMPONENT_TEMPLATES.styled_player_name_simple, template_data)
-    end
+	-- Construct styled player name directly without templates
+	if coloredLevel ~= "" then
+		-- Format: [70:Xruptor]
+		m.styled_player_name = "[" .. coloredLevel .. ":" .. coloredPlayerName .. "]"
+	else
+		-- Format: [Xruptor]
+		m.styled_player_name = "[" .. coloredPlayerName .. "]"
+	end
+
 	-- Clear other player fields that are now part of styled_player_name
 	m.player_name = ""
 	m.server_name = ""
-    m.server_separator = ""
+	m.server_separator = ""
 end
 
 local function shouldSuppressJoinLeaveMessage(event, text)
@@ -1193,9 +1218,10 @@ addon.playerListByName = addon.playerListByName or {}
 addon.playerListRing = addon.playerListRing or {}
 addon.playerListRingPos = addon.playerListRingPos or 0
 
-local URL_LINK_TEMPLATE = " |cff99FF33|Hurl:{{url}}|h[{{url}}]|h|r "
 local function buildUrlLink(url)
-	return addon.private.Template:Parse(URL_LINK_TEMPLATE, { url = url })
+	-- Build clickable URL link with green coloring
+	-- Format: |cff99FF33|Hurl:url|h[url]|h|r
+	return " |cff99FF33|Hurl:" .. url .. "|h[" .. url .. "]|h|r "
 end
 
 local URL_PATTERNS = {
