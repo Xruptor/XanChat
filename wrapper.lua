@@ -128,49 +128,6 @@ function addon:UnregisterAllEvents()
 	state.registered = {}
 end
 
-function addon:RegisterCallback(name, func, owner)
-	if type(name) ~= "string" or name == "" then return end
-	if type(func) ~= "function" then return end
-	local list = state.callbacks[name]
-	if not list then
-		list = {}
-		state.callbacks[name] = list
-	end
-	for i = 1, #list do
-		local entry = list[i]
-		if entry.func == func and entry.owner == owner then
-			return
-		end
-	end
-	list[#list + 1] = { func = func, owner = owner }
-end
-
-function addon:UnregisterCallback(name, funcOrOwner)
-	local list = state.callbacks[name]
-	if not list then return end
-	if funcOrOwner == nil then
-		state.callbacks[name] = nil
-		return
-	end
-	for i = #list, 1, -1 do
-		local entry = list[i]
-		if entry.func == funcOrOwner or entry.owner == funcOrOwner then
-			table.remove(list, i)
-		end
-	end
-	if #list == 0 then
-		state.callbacks[name] = nil
-	end
-end
-
-function addon:Fire(name, ...)
-	local list = state.callbacks[name]
-	if not list then return end
-	for i = 1, #list do
-		list[i].func(list[i].owner, ...)
-	end
-end
-
 local function EnsureOnUpdate()
 	if state.useOnUpdate then return end
 	state.useOnUpdate = true
@@ -225,3 +182,29 @@ end
 addon.GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 addon.GetCVar = (C_CVar and C_CVar.GetCVar) or GetCVar
 addon.SetCVar = (C_CVar and C_CVar.SetCVar) or SetCVar
+
+-- ============================================================================
+-- CALLBACK HANDLER INTEGRATION
+-- ============================================================================
+
+-- Initialize CallbackHandler-1.0 globally for entire addon
+local LibStub = _G.LibStub
+if LibStub then
+	local CallbackHandler = LibStub("CallbackHandler-1.0", true)
+	if CallbackHandler then
+		addon.callbacks = CallbackHandler.New(addon, "RegisterCallback", "UnregisterCallback", "UnregisterAllCallbacks")
+		addon.fireCallback = function(event, ...)
+			return addon.callbacks:Fire(event, ...)
+		end
+		addon.unregisterAllCallbacks = function()
+			return addon:UnregisterAllCallbacks()
+		end
+		-- Provide lowercase wrapper functions for API compatibility
+		addon.registerCallback = function(event, handler)
+			return addon:RegisterCallback(event, handler)
+		end
+		addon.unregisterCallback = function(event)
+			return addon:UnregisterCallback(event)
+		end
+	end
+end

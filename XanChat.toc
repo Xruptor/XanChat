@@ -35,3 +35,18 @@ config.lua
 stickychannels.lua
 
 XanChat.lua
+
+core/AceHookIntegration.lua
+core/EventHandling.lua
+modules/DebugSystem.lua
+modules/PatternMatching.lua
+modules/ChatFormatting.lua
+modules/URLDetection.lua
+modules/PlayerListManagement.lua
+modules/ChannelShortening.lua
+modules/MessageFilters.lua
+modules/CopyFrame.lua
+modules/PlayerNameStyling.lua
+modules/ChatFrameSetup.lua
+modules/EditBoxHistory.lua
+modules/ChatSettings.lua

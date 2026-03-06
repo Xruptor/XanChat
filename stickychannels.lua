@@ -1,8 +1,6 @@
 local ADDON_NAME, private = ...
-if not _G[ADDON_NAME] then
-	_G[ADDON_NAME] = CreateFrame("Frame", ADDON_NAME, UIParent, BackdropTemplateMixin and "BackdropTemplate")
-end
 local addon = _G[ADDON_NAME]
+
 addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
 
