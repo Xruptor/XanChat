@@ -64,6 +64,10 @@ L.CHAT_PARTY_GUIDE_GET  			= [[|Hchannel:party|h[PG|TInterface\GroupFrame\UI-Gro
 L.CHAT_RAID_GET         			= "|Hchannel:raid|h[R]|h %s: "
 L.CHAT_RAID_LEADER_GET  			= [[|Hchannel:raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
 L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:raidwarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
+L.CHAT_BN_WHISPER_GET 				= "[BW] %s: "
+L.CHAT_BN_WHISPER_INFORM_GET 		= "[BW2] %s: "
+L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[I]|h %s: "
+L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[IL]|h %s: "
 
 L.EditFilterListHeader = "Editar lista de filtros estilizados"
 L.EditStickyChannelsListHeader = "Editar lista de canais fixos"
@@ -159,5 +163,3 @@ L.MoveSocialButtonOff = "xanChat: Mover social e alertas para baixo. [|cFF99CC33
 L.MoveSocialButtonInfo = "Mover o botão social e o quadro de alertas para baixo."
 
 L.PageLimitText = "Páginas recentes de chat para exibir em Copiar chat. |cFF99CC33(0 sem limite)|r"
-
-

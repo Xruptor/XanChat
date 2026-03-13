@@ -62,7 +62,7 @@ function RegisterMatch(text, ptype)
 
 	local token = "@##" .. tokennum .. "##@"
 
-	if addon.dbg then addon.dbg("RegisterMatch: token=" .. token .. " text=" .. text) end
+	if addon.dbg then addon.dbg("RegisterMatch: token=" .. token .. " text=" .. addon.dbgSafeValue(text)) end
 
 	local mt = MatchTable[ptype or "FRAME"]
 	if not mt then
@@ -101,7 +101,7 @@ local function MatchPatterns(m, ptype)
 	for _, v in ipairs(PatternRegistry.sortedList) do
 		if text and ptype == (v.type or "FRAME") then
 				if type(v.pattern) == "string" and string.len(v.pattern) > 0 then
-					if addon.dbg then addon.dbg("MatchPatterns: checking pattern=" .. v.pattern) end
+					if addon.dbg then addon.dbg("MatchPatterns: checking pattern=" .. tostring(v.pattern)) end
 					if v.matchfunc ~= nil then
 						text = string.gsub(text, v.pattern, function(...)
 							local parms = { ... }
@@ -113,7 +113,7 @@ local function MatchPatterns(m, ptype)
 		end
 	end
 
-	if addon.dbg then addon.dbg("MatchPatterns: result=" .. tostring(text)) end
+	if addon.dbg then addon.dbg("MatchPatterns: result=" .. addon.dbgSafeValue(text)) end
 	return text
 end
 
@@ -145,7 +145,7 @@ local function ReplaceMatches(m, ptype)
 		end
 	end
 
-	if addon.dbg then addon.dbg("ReplaceMatches: result=" .. text) end
+	if addon.dbg then addon.dbg("ReplaceMatches: result=" .. addon.dbgSafeValue(text)) end
 	return text
 end
 

@@ -62,7 +62,7 @@ local function addToPlayerList(name, realm, level, class, bnName, pin)
 
 	-- Debug output to see what's being passed
 	if addon and addon.dbg then
-		addon.dbg("addToPlayerList: name=" .. tostring(name) .. " level=" .. tostring(level) .. " class=" .. tostring(class) .. " realm=" .. tostring(realm))
+		addon.dbg("addToPlayerList: name=" .. addon.dbgSafeValue(name) .. " level=" .. addon.dbgSafeValue(level) .. " class=" .. addon.dbgSafeValue(class) .. " realm=" .. addon.dbgSafeValue(realm))
 	end
 
 	if not name or not level or not class or level <= 0 then
@@ -143,7 +143,7 @@ local function initUpdateCurrentPlayer()
 	local level = UnitLevel("player")
 
 	if addon and addon.dbg then
-		addon.dbg("-->initUpdateCurrentPlayer: name=" .. tostring(name) .. " level=" .. tostring(level) .. " class=" .. tostring(classFile))
+		addon.dbg("-->initUpdateCurrentPlayer: name=" .. addon.dbgSafeValue(name) .. " level=" .. addon.dbgSafeValue(level) .. " class=" .. addon.dbgSafeValue(classFile))
 	end
 
 	-- Only add to list if we have valid data
@@ -168,7 +168,7 @@ local function doRosterUpdate()
 			local level = UnitLevel(unitId)
 
 			if addon and addon.dbg and playerName then
-				addon.dbg("-->doRosterUpdate: unit=" .. tostring(unitId) .. " name=" .. tostring(playerName) .. " className=" .. tostring(className) .. " classFile=" .. tostring(classFile) .. " level=" .. tostring(level))
+				addon.dbg("-->doRosterUpdate: unit=" .. addon.dbgSafeValue(unitId) .. " name=" .. addon.dbgSafeValue(playerName) .. " className=" .. addon.dbgSafeValue(className) .. " classFile=" .. addon.dbgSafeValue(classFile) .. " level=" .. addon.dbgSafeValue(level))
 			end
 
 			-- Only add if we have valid data
@@ -177,7 +177,7 @@ local function doRosterUpdate()
 			elseif playerName and level and level > 0 and (not classFile or classFile == 0) then
 				-- Still add even if class is 0, but debug it
 				if addon and addon.dbg then
-					addon.dbg("-->doRosterUpdate: Adding player with class=0: " .. tostring(playerName))
+					addon.dbg("-->doRosterUpdate: Adding player with class=0: " .. addon.dbgSafeValue(playerName))
 				end
 				addToPlayerList(playerName, playerServer, level, 0)
 			end

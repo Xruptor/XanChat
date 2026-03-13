@@ -101,16 +101,16 @@ local function StylePlayerSection(m)
 		end
 
 		if addon and addon.dbg then
-			addon.dbg("-->player list lookup: name=" .. tostring(nameToLookup) .. " clean=" .. tostring(cleanName) .. " found=" .. tostring(playerInfo and "yes" or "no"))
+			addon.dbg("-->player list lookup: name=" .. addon.dbgSafeValue(nameToLookup) .. " clean=" .. addon.dbgSafeValue(cleanName) .. " found=" .. tostring(playerInfo and "yes" or "no"))
 			if playerInfo then
-				addon.dbg("-->playerInfo: level=" .. tostring(playerInfo.level or "nil") .. " class=" .. tostring(playerInfo.class or "nil"))
+				addon.dbg("-->playerInfo: level=" .. addon.dbgSafeValue(playerInfo.level or "nil") .. " class=" .. addon.dbgSafeValue(playerInfo.class or "nil"))
 			end
 		end
 	end
 
 	-- Simple debug summary
 	if addon and addon.dbg then
-		addon.dbg("-->StylePlayerSection: name=" .. tostring(m.player_name) .. " player_class=" .. tostring(m.player_class or "nil") .. " extractedColor=" .. tostring(extractedClassColor and "yes" or "no"))
+		addon.dbg("-->StylePlayerSection: name=" .. addon.dbgSafeValue(m.player_name) .. " player_class=" .. addon.dbgSafeValue(m.player_class or "nil") .. " extractedColor=" .. tostring(extractedClassColor and "yes" or "no"))
 	end
 
 	-- Continue only if we have player info for level or class info for name styling
@@ -124,7 +124,7 @@ local function StylePlayerSection(m)
 	if playerInfo then
 		local level = tonumber(playerInfo.level) or 0
 		if addon and addon.dbg then
-			addon.dbg("-->level calculation: playerInfo.level=" .. tostring(playerInfo.level) .. " tonumber=" .. tostring(level) .. " >0=" .. tostring(level and level > 0))
+			addon.dbg("-->level calculation: playerInfo.level=" .. addon.dbgSafeValue(playerInfo.level) .. " tonumber=" .. tostring(level) .. " >0=" .. tostring(level and level > 0))
 		end
 		if level and level > 0 then
 			local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
@@ -156,11 +156,11 @@ local function StylePlayerSection(m)
 			if classColor then
 				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
 				if addon and addon.dbg then
-					addon.dbg("-->class color: using GUID class=" .. tostring(m.player_class))
+					addon.dbg("-->class color: using GUID class=" .. addon.dbgSafeValue(m.player_class))
 				end
 			else
 				if addon and addon.dbg then
-					addon.dbg("-->class color: GUID class " .. tostring(m.player_class) .. " NOT found in color table")
+					addon.dbg("-->class color: GUID class " .. addon.dbgSafeValue(m.player_class) .. " NOT found in color table")
 				end
 			end
 		end
@@ -172,11 +172,11 @@ local function StylePlayerSection(m)
 			if classColor then
 				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
 				if addon and addon.dbg then
-					addon.dbg("-->class color: using player list class=" .. tostring(playerInfo.class))
+					addon.dbg("-->class color: using player list class=" .. addon.dbgSafeValue(playerInfo.class))
 				end
 			else
 				if addon and addon.dbg then
-					addon.dbg("-->class color: class " .. tostring(playerInfo.class) .. " NOT found in color table")
+					addon.dbg("-->class color: class " .. addon.dbgSafeValue(playerInfo.class) .. " NOT found in color table")
 				end
 			end
 		end
@@ -187,15 +187,15 @@ local function StylePlayerSection(m)
 		-- Format: [70:Xruptor]
 		m.styled_player_name = "[" .. coloredLevel .. ":" .. coloredPlayerName .. "]"
 		if addon and addon.dbg then
-			addon.dbg("-->stylized_player_name applied: [" .. coloredLevel .. ":" .. m.player_name .. "]")
-			addon.dbg("-->Final styled name result: " .. m.styled_player_name)
+			addon.dbg("-->stylized_player_name applied: [" .. addon.dbgSafeValue(coloredLevel) .. ":" .. addon.dbgSafeValue(m.player_name) .. "]")
+			addon.dbg("-->Final styled name result: " .. addon.dbgSafeValue(m.styled_player_name))
 		end
 	else
 		-- Format: [Xruptor]
 		m.styled_player_name = "[" .. coloredPlayerName .. "]"
 		if addon and addon.dbg then
-			addon.dbg("-->stylized_player_name applied: [" .. m.player_name .. "] (no level)")
-			addon.dbg("-->Final styled name result: " .. m.styled_player_name)
+			addon.dbg("-->stylized_player_name applied: [" .. addon.dbgSafeValue(m.player_name) .. "] (no level)")
+			addon.dbg("-->Final styled name result: " .. addon.dbgSafeValue(m.styled_player_name))
 		end
 	end
 

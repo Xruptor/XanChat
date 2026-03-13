@@ -64,6 +64,10 @@ L.CHAT_PARTY_GUIDE_GET  			= [[|Hchannel:party|h[ГЛ|TInterface\GroupFrame\UI-G
 L.CHAT_RAID_GET         			= "|Hchannel:raid|h[Р]|h %s: "
 L.CHAT_RAID_LEADER_GET  			= [[|Hchannel:raid|h[РЛ|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
 L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:raidwarning|h[РП|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
+L.CHAT_BN_WHISPER_GET 				= "[BW] %s: "
+L.CHAT_BN_WHISPER_INFORM_GET 		= "[BW2] %s: "
+L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[I]|h %s: "
+L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[IL]|h %s: "
 
 L.EditFilterListHeader = "Редактировать список стилизованных фильтров"
 L.EditStickyChannelsListHeader = "Редактировать список закрепленных каналов"
@@ -159,5 +163,3 @@ L.MoveSocialButtonOff = "xanChat: Перемещение социальной к
 L.MoveSocialButtonInfo = "Переместить социальную кнопку и рамку уведомлений вниз."
 
 L.PageLimitText = "Недавние страницы чата для отображения в функции копирования чата. |cFF99CC33(0 для отсутствия ограничений)|r"
-
-

@@ -29,9 +29,17 @@ if not frame then
 end
 
 local function DebugPrint(...)
-	if addon.wrapperDebug then
-		DEFAULT_CHAT_FRAME:AddMessage("xanChat wrapper: " .. string.join(" ", tostringall(...)))
+	if not addon.wrapperDebug then return end
+	local parts = {}
+	for i = 1, select("#", ...) do
+		local v = select(i, ...)
+		if addon.dbgSafeValue then
+			parts[#parts + 1] = addon.dbgSafeValue(v)
+		else
+			parts[#parts + 1] = tostring(v)
+		end
 	end
+	DEFAULT_CHAT_FRAME:AddMessage("xanChat wrapper: " .. table.concat(parts, " "))
 end
 
 local function Dispatch(_, event, ...)

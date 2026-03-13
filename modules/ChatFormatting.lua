@@ -54,14 +54,19 @@ end
 local function FormatChatMessage(message)
 	if addon and addon.dbg then
 		addon.dbg("FormatChatMessage: building chat text with direct construction")
-		addon.dbg("FormatChatMessage: channel_name=" .. tostring(message and message.channel_name or sectionWorking.channel_name or "nil"))
-		addon.dbg("FormatChatMessage: styled_player_name=" .. tostring(message and message.styled_player_name or sectionWorking.styled_player_name or "nil"))
+		addon.dbg("FormatChatMessage: channel_name=" .. addon.dbgSafeValue(message and message.channel_name or sectionWorking.channel_name or "nil"))
+		addon.dbg("FormatChatMessage: styled_player_name=" .. addon.dbgSafeValue(message and message.styled_player_name or sectionWorking.styled_player_name or "nil"))
 	end
-	local m = message or sectionWorking
+	if message ~= nil and message ~= false then
+		sectionWorking = message
+	end
+	local m = sectionWorking
 
 	-- Helper function to safely get and trim values
 	local function getValue(field)
 		local value = m[field] or ""
+		if _G.issecretvalue and _G.issecretvalue(value) then return "" end
+		if _G.canaccessvalue and not _G.canaccessvalue(value) then return "" end
 		if type(value) ~= "string" then return "" end
 		return value:gsub("^%s+", ""):gsub("%s+$", "")
 	end
@@ -94,7 +99,9 @@ local function FormatChatMessage(message)
 			playerSection = playerSection .. getValue("player_name")
 		end
 	end
-	playerSection = playerSection .. " "
+	if playerSection ~= "" then
+		playerSection = playerSection .. " "
+	end
 
 	-- Build postfix section (language and mobile icon)
 	local postfixSection = ""
@@ -117,10 +124,11 @@ local function FormatChatMessage(message)
 
 	-- Clean up extra whitespace
 	result = result:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
+	result = result:gsub("%s+:%s+", ": ")
 
 	if addon and addon.isSafeString and addon.isSafeString(result) then
 		if addon and addon.dbg then
-			addon.dbg("FormatChatMessage: result length=" .. #result)
+			addon.dbg("FormatChatMessage: result length=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(result) or 0))
 		end
 	end
 	return result

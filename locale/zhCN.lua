@@ -64,6 +64,10 @@ L.CHAT_PARTY_GUIDE_GET  			= [[|Hchannel:party|h[PG|TInterface\GroupFrame\UI-Gro
 L.CHAT_RAID_GET         			= "|Hchannel:raid|h[R]|h %s: "
 L.CHAT_RAID_LEADER_GET  			= [[|Hchannel:raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
 L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:raidwarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
+L.CHAT_BN_WHISPER_GET 				= "[BW] %s: "
+L.CHAT_BN_WHISPER_INFORM_GET 		= "[BW2] %s: "
+L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[战]|h %s: "
+L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[蟀]|h %s: "
 
 L.EditFilterListHeader = "编辑过滤器列表"
 L.EditStickyChannelsListHeader = "编辑频道列表"
@@ -159,5 +163,3 @@ L.MoveSocialButtonOff = "xanChat: 社交和提示框移动到底部。 [|cFF99CC
 L.MoveSocialButtonInfo = "将社交和提示框移动到底部。"
 
 L.PageLimitText = "复制聊天中显示的最近聊天页面。 |cFF99CC33（0 是无限制）|r"
-
-

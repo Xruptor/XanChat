@@ -37,7 +37,7 @@ local function applyShortChannelNamesToSections(m)
 	local shortName = longName -- Default to long name
 
 	if addon and addon.dbg then
-		addon.dbg("applyShortChannelNamesToSections: longName=" .. tostring(longName))
+		addon.dbg("applyShortChannelNamesToSections: longName=" .. addon.dbgSafeValue(longName))
 	end
 
 	-- Shorten the channel name and remove zone suffix
@@ -53,14 +53,14 @@ local function applyShortChannelNamesToSections(m)
 			shortName = gsub(shortName, withZone, Sn)
 			shortName = gsub(shortName, withoutZone, Sn)
 			if addon and addon.dbg then
-				addon.dbg("applyShortChannelNamesToSections: matched Ln=" .. tostring(Ln) .. " shortName=" .. tostring(shortName))
+				addon.dbg("applyShortChannelNamesToSections: matched Ln=" .. addon.dbgSafeValue(Ln) .. " shortName=" .. addon.dbgSafeValue(shortName))
 			end
 		end
 	end
 
 	m.channel_name = shortName
 	if addon and addon.dbg then
-		addon.dbg("applyShortChannelNamesToSections: final channel_name=" .. tostring(shortName))
+		addon.dbg("applyShortChannelNamesToSections: final channel_name=" .. addon.dbgSafeValue(shortName))
 	end
 end
 

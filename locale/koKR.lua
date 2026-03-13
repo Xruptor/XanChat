@@ -64,6 +64,10 @@ L.CHAT_PARTY_GUIDE_GET  			= [[|Hchannel:party|h[PG|TInterface\GroupFrame\UI-Gro
 L.CHAT_RAID_GET         			= "|Hchannel:raid|h[R]|h %s: "
 L.CHAT_RAID_LEADER_GET  			= [[|Hchannel:raid|h[R|TInterface\GroupFrame\UI-Group-LeaderIcon:0|t]|h %s: ]]
 L.CHAT_RAID_WARNING_GET 			= [[|Hchannel:raidwarning|h[RW|TInterface\GroupFrame\UI-GROUP-MAINASSISTICON:0|t]|h %s: ]]
+L.CHAT_BN_WHISPER_GET 				= "[BW] %s: "
+L.CHAT_BN_WHISPER_INFORM_GET 		= "[BW2] %s: "
+L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[전장]|h %s: "
+L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[전투대장]|h %s: "
 
 L.EditFilterListHeader = "스타일 필터 목록 편집"
 L.EditStickyChannelsListHeader = "고정 채널 목록 편집"
@@ -159,5 +163,3 @@ L.MoveSocialButtonOff = "xanChat: 소셜/알림 프레임 아래로 이동. [|cF
 L.MoveSocialButtonInfo = "소셜 버튼과 알림 프레임을 아래로 이동합니다."
 
 L.PageLimitText = "복사 채팅에 표시할 최근 채팅 페이지 수. |cFF99CC33(0은 제한 없음)|r"
-
-

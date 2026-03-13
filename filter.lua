@@ -294,7 +294,7 @@ function addon:searchFilterList(event, text)
 	if not filterList then return false end
 	if not event then return false end
 	if addon.DebugPrint then
-		local textDump = addon.DebugValue and addon.DebugValue(text) or "<text>"
+		local textDump = addon.dbgSafeValue and addon.dbgSafeValue(text) or (addon.DebugValue and addon.DebugValue(text) or "<text>")
 		addon.DebugPrint("searchFilterList: event=" .. tostring(event) .. " text=" .. textDump)
 	end
 
