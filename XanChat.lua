@@ -106,20 +106,50 @@ function addon:ParseChatEvent(frame, event, ...)
 	-- Check if player name is a secret value (SEPARATE from message text secret check)
 	local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
 	local coloredName = nil
+	local guidClass = nil  -- Store class from GUID lookup for secret messages
 
-	-- If arg2 is secret, try to get player name from GUID (arg12)
+	if addon and addon.dbg then
+		addon.dbg("ParseChatEvent: isArg2Secret=" .. tostring(isArg2Secret) .. " arg12=" .. tostring(arg12))
+	end
+
+	-- If arg2 is secret, try to get player name and class from GUID (arg12)
 	-- This matches Prat's approach for secret boss encounter messages
-	if isArg2Secret and arg12 and _G.GetPlayerInfoByGUID then
-		local firstName = _G.GetPlayerInfoByGUID(arg12)
-		if firstName then
-			coloredName = firstName
+	-- GetPlayerInfoByGUID returns: localizedClass, englishClass, localizedRace, englishRace, sex, name, realmName
+	local isArg12Secret = _G.issecretvalue and _G.issecretvalue(arg12)
+	if isArg2Secret and not isArg12Secret and arg12 and _G.GetPlayerInfoByGUID then
+		if addon and addon.dbg then
+			addon.dbg("ParseChatEvent: arg2 is secret but arg12 is not, trying GetPlayerInfoByGUID")
+		end
+		local _, englishClass, _, _, name = _G.GetPlayerInfoByGUID(arg12)
+		if name then
+			coloredName = name
+			guidClass = englishClass  -- Capture class for styling
 			isArg2Secret = false  -- Now we have a safe player name
+			if addon and addon.dbg then
+				addon.dbg("ParseChatEvent: Got player info from GUID: name=" .. tostring(name) .. " class=" .. tostring(englishClass))
+			end
+		end
+	elseif isArg2Secret and isArg12Secret then
+		if addon and addon.dbg then
+			addon.dbg("ParseChatEvent: Both arg2 and arg12 are secret, cannot get player name for styling")
+		end
+	end
+
+	-- Store GUID class in message object for StylePlayerSection to use
+	if guidClass then
+		s.player_class = guidClass
+		if addon and addon.dbg then
+			addon.dbg("ParseChatEvent: Set s.player_class=" .. tostring(guidClass) .. " from GUID lookup (arg2 was secret)")
 		end
 	end
 
 	-- Extract player information
 	-- Use canaccessvalue to safely check if we can work with arg2
-	if not isArg2Secret and (not _G.canaccessvalue or _G.canaccessvalue(arg2)) then
+	if isArg2Secret then
+		if addon and addon.dbg then
+			addon.dbg("ParseChatEvent: Skipping player info extraction - arg2 is secret")
+		end
+	elseif not _G.canaccessvalue or _G.canaccessvalue(arg2) then
 		-- Set coloredName to arg2 only after confirming it's accessible
 		coloredName = arg2 or ""
 
@@ -229,6 +259,12 @@ function addon:ParseChatEvent(frame, event, ...)
 	end
 
 	s.INFO = info
+
+	-- Debug: Show what player info we have after ParseChatEvent
+	if addon and addon.dbg then
+		addon.dbg("ParseChatEvent: Final state - player_link=" .. tostring(s.player_link) .. " player_name=" .. tostring(s.player_name) .. " player_class=" .. tostring(s.player_class))
+	end
+
 	addon.prepareWorkingSections()
 	return addon.sectionWorking, info
 end
@@ -365,12 +401,16 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		if _G.XCHT_DB then
 			-- Use styled output if any xanChat features are enabled
 			useStyledOutput = _G.XCHT_DB.enablePlayerChatStyle or _G.XCHT_DB.shortNames or applyPatterns
+			if addon and addon.dbg then
+				addon.dbg("ChatFrame_MessageEventHandler: enablePlayerChatStyle=" .. tostring(_G.XCHT_DB.enablePlayerChatStyle) .. " shortNames=" .. tostring(_G.XCHT_DB.shortNames) .. " applyPatterns=" .. tostring(applyPatterns) .. " useStyledOutput=" .. tostring(useStyledOutput))
+			end
 		end
 
-		if useStyledOutput then
-			addon.dbg("ChatFrame_MessageEventHandler: using styled output (xanChat features active)")
-			textToDisplay = addon:FormatChatMessage(m) or ""
-		elseif processMode == addon.EventProcessingType.Full then
+		-- if useStyledOutput then
+		-- 	addon.dbg("ChatFrame_MessageEventHandler: using styled output (xanChat features active)")
+		-- 	textToDisplay = addon:FormatChatMessage(m) or ""
+		-- else
+		if processMode == addon.EventProcessingType.Full then
 			addon.dbg("ChatFrame_MessageEventHandler: using Full processing mode, building from sections")
 			textToDisplay = addon:FormatChatMessage(m) or ""
 		elseif processMode == addon.EventProcessingType.PatternsOnly then
@@ -396,8 +436,12 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE_BLOCKED, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
 			end
 		elseif isSecretPayload then
-			addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame")
-			this:AddMessage(textToDisplay, outR, outG, outB, outID, m.ACCESSID, m.TYPEID)
+			addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame with event args for Blizzard formatting")
+			-- Pass original event args so Blizzard can format the message properly with player name
+			-- Use arg1 directly like censored messages - this allows Blizzard's formatter to handle it
+			this:AddMessage(arg1 or "", outR, outG, outB, outID, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
+				return text
+			end)
 			if addon.fireCallback then
 				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
 			end

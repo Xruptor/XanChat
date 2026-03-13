@@ -27,11 +27,18 @@ local function applyShortChannelNamesToSections(m)
 	if not addon then return end
 
 	if not (_G.XCHT_DB and _G.XCHT_DB.shortNames) or not m.channel_name or m.channel_name == "" then
+		if addon and addon.dbg then
+			addon.dbg("applyShortChannelNamesToSections: shortNames disabled or channel_name empty")
+		end
 		return
 	end
 
 	local longName = m.channel_name
 	local shortName = longName -- Default to long name
+
+	if addon and addon.dbg then
+		addon.dbg("applyShortChannelNamesToSections: longName=" .. tostring(longName))
+	end
 
 	-- Shorten the channel name and remove zone suffix
 	-- e.g., "General" -> "Gen" or "General - Orgrimmar" -> "Gen"
@@ -45,10 +52,16 @@ local function applyShortChannelNamesToSections(m)
 			local withoutZone = "^" .. Ln .. "$"
 			shortName = gsub(shortName, withZone, Sn)
 			shortName = gsub(shortName, withoutZone, Sn)
+			if addon and addon.dbg then
+				addon.dbg("applyShortChannelNamesToSections: matched Ln=" .. tostring(Ln) .. " shortName=" .. tostring(shortName))
+			end
 		end
 	end
 
 	m.channel_name = shortName
+	if addon and addon.dbg then
+		addon.dbg("applyShortChannelNamesToSections: final channel_name=" .. tostring(shortName))
+	end
 end
 
 -- ============================================================================

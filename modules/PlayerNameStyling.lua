@@ -110,11 +110,11 @@ local function StylePlayerSection(m)
 
 	-- Simple debug summary
 	if addon and addon.dbg then
-		addon.dbg("-->StylePlayerSection: name=" .. tostring(m.player_name) .. " extractedColor=" .. tostring(extractedClassColor and "yes" or "no"))
+		addon.dbg("-->StylePlayerSection: name=" .. tostring(m.player_name) .. " player_class=" .. tostring(m.player_class or "nil") .. " extractedColor=" .. tostring(extractedClassColor and "yes" or "no"))
 	end
 
-	-- Continue only if we have player info for level or extracted class color for name styling
-	if not playerInfo and not extractedClassColor then
+	-- Continue only if we have player info for level or class info for name styling
+	if not playerInfo and not extractedClassColor and not (m.player_class and m.player_class ~= "") then
 		return
 	end
 
@@ -148,6 +148,22 @@ local function StylePlayerSection(m)
 	-- First try to use extracted class color from Blizzard output
 	if extractedClassColor then
 		coloredPlayerName = wrapInColor(m.player_name, extractedClassColor.r, extractedClassColor.g, extractedClassColor.b)
+	-- Try to use class from GUID lookup (for secret messages)
+	elseif m.player_class and m.player_class ~= "" then
+		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
+		if classColorTable then
+			local classColor = classColorTable[m.player_class]
+			if classColor then
+				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
+				if addon and addon.dbg then
+					addon.dbg("-->class color: using GUID class=" .. tostring(m.player_class))
+				end
+			else
+				if addon and addon.dbg then
+					addon.dbg("-->class color: GUID class " .. tostring(m.player_class) .. " NOT found in color table")
+				end
+			end
+		end
 	-- Fallback to player list lookup for class color
 	elseif playerInfo and playerInfo.class then
 		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS

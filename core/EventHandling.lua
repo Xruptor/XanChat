@@ -47,7 +47,9 @@ local function EventIsProcessed(event)
 end
 
 local function callOriginalMessageHandler(self, frame, event, ...)
-	if not addon then return nil end
+	if addon and addon.dbg then
+		addon.dbg("callOriginalMessageHandler: event=" .. tostring(event) .. " _chatEventHooked=" .. tostring(self._chatEventHooked))
+	end
 
 	if self._chatEventHooked == "global" then
 		-- Use AceHook's stored original for global hook
@@ -65,8 +67,6 @@ local function callOriginalMessageHandler(self, frame, event, ...)
 end
 
 local function shouldRunPatternPass(isSecretPayload, mode)
-	if not addon then return false end
-
 	if isSecretPayload then
 		return false
 	end

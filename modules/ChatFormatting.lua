@@ -19,7 +19,7 @@ end
 -- All possible data keys that can be populated from a chat event.
 local CHAT_DATA_KEYS = {
     "prefix_text", "type_prefix", "channel_link", "channel_number", "channel_name", "zone_name",
-    "player_flag", "timerunner", "player_link", "player_name", "non_player_name", "server_name", "server_separator",
+    "player_flag", "timerunner", "player_link", "player_name", "player_class", "non_player_name", "server_name", "server_separator",
     "type_postfix", "language", "mobile_icon", "message_text", "postfix_text", "styled_player_name", "PRE", "POST"
 }
 
@@ -54,6 +54,8 @@ end
 local function FormatChatMessage(message)
 	if addon and addon.dbg then
 		addon.dbg("FormatChatMessage: building chat text with direct construction")
+		addon.dbg("FormatChatMessage: channel_name=" .. tostring(message and message.channel_name or sectionWorking.channel_name or "nil"))
+		addon.dbg("FormatChatMessage: styled_player_name=" .. tostring(message and message.styled_player_name or sectionWorking.styled_player_name or "nil"))
 	end
 	local m = message or sectionWorking
 
