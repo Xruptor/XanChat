@@ -71,6 +71,11 @@ local function ensureCaptureProxyFrame()
 	if not addon then return nil end
 
 	if captureProxyFrame then
+		if addon.IsHooked and not addon:IsHooked(captureProxyFrame, "AddMessage") then
+			addon:RawHook(captureProxyFrame, "AddMessage", true)
+			addon._rawHooks = addon._rawHooks or {}
+			addon._rawHooks["DummyFrame"] = true
+		end
 		return captureProxyFrame
 	end
 
@@ -85,6 +90,8 @@ local function ensureCaptureProxyFrame()
 	-- hookSecure = true allows hooking secure functions on the proxy frame
 	-- The handler is addon:AddMessage which captures the formatted output
 	addon:RawHook(captureProxyFrame, "AddMessage", true)
+	addon._rawHooks = addon._rawHooks or {}
+	addon._rawHooks["DummyFrame"] = true
 	addon.captureProxyFrame = captureProxyFrame
 
 	return captureProxyFrame

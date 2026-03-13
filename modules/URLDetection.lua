@@ -108,7 +108,10 @@ local function installUrlCopyHook()
 		maxLetters = 255,
 	}
 
-	local originalSetHyperlink = _G.ItemRefTooltip.SetHyperlink
+	if not addon._origItemRefTooltipSetHyperlink then
+		addon._origItemRefTooltipSetHyperlink = _G.ItemRefTooltip.SetHyperlink
+	end
+	local originalSetHyperlink = addon._origItemRefTooltipSetHyperlink
 	_G.ItemRefTooltip.SetHyperlink = function(self, link, ...)
 		if type(link) == "string" and string.sub(link, 1, 3) == "url" then
 			local url = string.sub(link, 5)
@@ -134,6 +137,16 @@ local function installUrlCopyHook()
 	addon._urlCopyHookInstalled = true
 end
 
+local function uninstallUrlCopyHook()
+	if not addon or not addon._urlCopyHookInstalled then
+		return
+	end
+	if _G.ItemRefTooltip and addon._origItemRefTooltipSetHyperlink then
+		_G.ItemRefTooltip.SetHyperlink = addon._origItemRefTooltipSetHyperlink
+	end
+	addon._urlCopyHookInstalled = false
+end
+
 -- ============================================================================
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
@@ -141,4 +154,5 @@ end
 addon.registerUrlPatterns = registerUrlPatterns
 addon.unregisterUrlPatterns = unregisterUrlPatterns
 addon.installUrlCopyHook = installUrlCopyHook
+addon.uninstallUrlCopyHook = uninstallUrlCopyHook
 addon.buildUrlLink = buildUrlLink

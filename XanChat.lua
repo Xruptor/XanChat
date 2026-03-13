@@ -36,6 +36,35 @@ addon.EVENTS = EVENTS
 -- MAIN MESSAGE HANDLER
 -- ============================================================================
 
+function addon:DebugChatHandlerState(context)
+	if not addon.dbg then return end
+	local handler = _G.ChatFrame_MessageEventHandler
+	local isSecureVar = _G.issecurevariable and _G.issecurevariable("ChatFrame_MessageEventHandler")
+	local orig = addon.hooks and addon.hooks._G and addon.hooks._G.ChatFrame_MessageEventHandler
+	local stateKey = table.concat({
+		tostring(context),
+		tostring(addon._chatEventHooked),
+		tostring(isSecureVar),
+		tostring(handler),
+		tostring(orig),
+		tostring(handler == orig),
+		tostring(handler == addon.ChatFrame_MessageEventHandler),
+	}, "|")
+	if addon._chatHandlerStateLast == stateKey then
+		return
+	end
+	addon._chatHandlerStateLast = stateKey
+	addon.dbg(
+		"ChatHandlerState: context=" .. tostring(context) ..
+		" hookMode=" .. tostring(addon._chatEventHooked) ..
+		" isSecureVar=" .. tostring(isSecureVar) ..
+		" handler=" .. addon.dbgSafeValue(handler) ..
+		" orig=" .. addon.dbgSafeValue(orig) ..
+		" handlerIsOrig=" .. tostring(handler == orig) ..
+		" handlerIsSelf=" .. tostring(handler == addon.ChatFrame_MessageEventHandler)
+	)
+end
+
 -- Parse WoW event args into chat sections
 function addon:ParseChatEvent(frame, event, ...)
 	addon.dbg("ParseChatEvent: START event=" .. tostring(event))
@@ -295,7 +324,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 	addon.dbg("ChatFrame_MessageEventHandler: START event=" .. tostring(event) .. " frame=" .. tostring(frameName))
 
 	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15 = ...
-	local isSecretPayload = _G.issecretvalue and _G.issecretvalue(arg1)
+	local isSecretPayload = _G.issecretvalue and (_G.issecretvalue(arg1) or _G.issecretvalue(arg2))
 	local processMode = addon.EventIsProcessed(event)
 	local handlerResult
 
@@ -311,6 +340,67 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 	end
 
 	addon.dbg("ChatFrame_MessageEventHandler: frame is managed by xanChat")
+
+	if isSecretPayload then
+		addon.dbg("ChatFrame_MessageEventHandler: secret payload detected, using local safe rendering")
+		self:DebugChatHandlerState("secret-payload")
+
+		local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+		local s = type(parsedMessage) == "table" and parsedMessage or addon.sectionOriginal or {}
+
+		local chatType = s.CHATTYPE or (type(event) == "string" and string.sub(event, 10) or nil)
+		local chatGet = chatType and _G["CHAT_" .. chatType .. "_GET"] or nil
+		local infoRow = s.INFO or info or (_G.ChatTypeInfo and chatType and _G.ChatTypeInfo[chatType]) or (_G.ChatTypeInfo and _G.ChatTypeInfo.SYSTEM) or {}
+		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
+
+		local safeName = nil
+		if type(s.player_name) == "string" and s.player_name ~= "" and (not _G.issecretvalue or not _G.issecretvalue(s.player_name)) then
+			safeName = s.player_name
+		end
+		if not safeName then
+			local lineID = arg11
+			local isLineSecret = _G.issecretvalue and _G.issecretvalue(lineID)
+			if not isLineSecret and type(lineID) == "number" and lineID > 0 and _G.C_ChatInfo then
+				local isValid = true
+				local nameChk, guidNameChk, guidChk
+				if _G.C_ChatInfo.IsValidChatLine then
+					isValid = _G.C_ChatInfo.IsValidChatLine(lineID)
+				end
+				if isValid and _G.C_ChatInfo.GetChatLineSenderName then
+					nameChk = _G.C_ChatInfo.GetChatLineSenderName(lineID)
+					if nameChk and (not _G.issecretvalue or not _G.issecretvalue(nameChk)) then
+						safeName = nameChk
+					end
+				end
+				if not safeName and isValid and _G.C_ChatInfo.GetChatLineSenderGUID and _G.GetPlayerInfoByGUID then
+					guidChk = _G.C_ChatInfo.GetChatLineSenderGUID(lineID)
+					if guidChk and (not _G.issecretvalue or not _G.issecretvalue(guidChk)) then
+						local _, _, _, _, _, guidNameChk = _G.GetPlayerInfoByGUID(guidChk)
+						if guidNameChk and (not _G.issecretvalue or not _G.issecretvalue(guidNameChk)) then
+							safeName = guidNameChk
+						end
+					end
+				end
+				addon.dbg("ChatFrame_MessageEventHandler: arg11 > lineID is not secret lineID="..addon.dbgSafeValue(lineID).." isValid="..addon.dbgSafeValue(isValid).." nameChk="..addon.dbgSafeValue(nameChk).." guidChk="..addon.dbgSafeValue(guidChk).." guidNameChk="..addon.dbgSafeValue(guidNameChk).." safeName="..addon.dbgSafeValue(safeName))
+			elseif isLineSecret then
+				addon.dbg("ChatFrame_MessageEventHandler: arg11 > lineID is secret")
+			end
+		end
+
+		local prefix = ""
+		if safeName and type(chatGet) == "string" then
+			local ok, formatted = pcall(string.format, chatGet, "[" .. safeName .. "]")
+			if ok and formatted then
+				prefix = formatted
+			end
+		end
+
+		local textToDisplay = prefix .. (arg1 or "")
+		addon.dbg("ChatFrame_MessageEventHandler: secret local output=" .. addon.dbgSafeValue(textToDisplay))
+		this:AddMessage(textToDisplay, outR, outG, outB, outID)
+		addon.dbg("ChatFrame_MessageEventHandler: secret local output added, returning true")
+		return true
+	end
 
 	if not isSecretPayload and type(arg1) == "string" and string.find(arg1, "\r", 1, true) then
 		addon.dbg("ChatFrame_MessageEventHandler: cleaning carriage returns from message")
@@ -393,6 +483,18 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 				addon.resetCaptureState()
 				m.CAPTUREOUTPUT = nil
 				return handlerResult
+			end
+		end
+		local senderName = nil
+		if _G.UnitName then
+			senderName = _G.UnitName("player")
+		end
+		local chatType = m.CHATTYPE or (type(resolvedEvent) == "string" and string.sub(resolvedEvent, 10) or nil)
+		local chatGet = chatType and _G["CHAT_" .. chatType .. "_GET"] or nil
+		if senderName and type(chatGet) == "string" then
+			local ok, prefix = pcall(string.format, chatGet, "[" .. senderName .. "]")
+			if ok and prefix then
+				textToDisplay = prefix .. (textToDisplay or "")
 			end
 		end
 		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
@@ -690,6 +792,7 @@ function addon:OnLoad()
 	addon.ensureCaptureProxyFrame()
 	addon.registerUrlPatterns()
 	addon.installUrlCopyHook()
+	addon.installTempWindowHook()
 	self.setDisableChatEnterLeaveNotice()
 	self:setOutWhisperColor()
 
@@ -776,16 +879,7 @@ function addon:OnLoad()
 	end
 
 	-- Hook FCF_OpenTemporaryWindow for temporary whisper windows
-	if FCF_OpenTemporaryWindow then
-		local old_OpenTemporaryWindow = FCF_OpenTemporaryWindow
-		FCF_OpenTemporaryWindow = function(...)
-			local frame = old_OpenTemporaryWindow(...)
-			if frame and frame.GetID then
-				self.setupChatFrame(frame:GetID())
-			end
-			return frame
-		end
-	end
+	addon.installTempWindowHook()
 
 	-- Register UI_SCALE_CHANGED event
 	self:RegisterEvent("UI_SCALE_CHANGED")
@@ -893,7 +987,22 @@ function addon:OnEnable()
 	addon.dbg("OnEnable: installing message hooks")
 	rebuildHookedFrames()
 	addon.registerUrlPatterns()
+	addon.installUrlCopyHook()
+	addon.installTempWindowHook()
 	self:EnableAddon()
+	self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
+	self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
+	if _G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown then
+		if not self._chatLockdownTicker then
+			self._chatLockdownTicker = self:NewTicker(0.5, function()
+				addon:CheckChatLockdownState()
+			end)
+		end
+		self:CheckChatLockdownState()
+	end
+	if _G.IsEncounterInProgress and _G.IsEncounterInProgress() then
+		self:OnEncounterStart()
+	end
 	-- Setup auto-save hooks for chat settings changes
 	self.hookupAutoSave()
 end
@@ -903,8 +1012,73 @@ function addon:OnDisable()
 	if addon.unregisterAllCallbacks then
 		addon.unregisterAllCallbacks()
 	end
+	self:UnregisterEvent("ENCOUNTER_START", "OnEncounterStart")
+	self:UnregisterEvent("ENCOUNTER_END", "OnEncounterEnd")
+	if self._chatLockdownTicker then
+		self:CancelTicker(self._chatLockdownTicker)
+		self._chatLockdownTicker = nil
+	end
+	if addon.uninstallUrlCopyHook then
+		addon.uninstallUrlCopyHook()
+	end
+	if addon.uninstallTempWindowHook then
+		addon.uninstallTempWindowHook()
+	end
 	self:DisableAddon()
 	addon.unregisterUrlPatterns()
+end
+
+function addon.installTempWindowHook()
+	if addon._tempWindowHookInstalled then
+		return
+	end
+	if _G.FCF_OpenTemporaryWindow then
+		addon._origFCF_OpenTemporaryWindow = addon._origFCF_OpenTemporaryWindow or _G.FCF_OpenTemporaryWindow
+		_G.FCF_OpenTemporaryWindow = function(...)
+			local frame = addon._origFCF_OpenTemporaryWindow(...)
+			if frame and frame.GetID then
+				addon.setupChatFrame(frame:GetID())
+			end
+			return frame
+		end
+		addon._tempWindowHookInstalled = true
+	end
+end
+
+function addon.uninstallTempWindowHook()
+	if not addon._tempWindowHookInstalled then
+		return
+	end
+	if addon._origFCF_OpenTemporaryWindow then
+		_G.FCF_OpenTemporaryWindow = addon._origFCF_OpenTemporaryWindow
+	end
+	addon._tempWindowHookInstalled = nil
+end
+
+-- Debug-only: Chat lockdown state probe (does NOT enable/disable hooks).
+function addon:CheckChatLockdownState()
+	if not (_G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown) then
+		return
+	end
+	local isLocked = _G.C_ChatInfo.InChatMessagingLockdown()
+	if addon._chatLockdownLast == isLocked then
+		return
+	end
+	addon._chatLockdownLast = isLocked
+	addon.dbg("ChatLockdown: state=" .. (addon.dbgSafeBool and addon.dbgSafeBool(isLocked) or tostring(isLocked)))
+	self:DebugChatHandlerState("chat-lockdown-change")
+end
+
+-- Debug-only: Encounter start hook (does NOT enable/disable hooks).
+function addon:OnEncounterStart()
+	addon.dbg("OnEncounterStart: encounter started (debug only, no hook changes)")
+	self:DebugChatHandlerState("encounter-start")
+end
+
+-- Debug-only: Encounter end hook (does NOT enable/disable hooks).
+function addon:OnEncounterEnd()
+	addon.dbg("OnEncounterEnd: encounter ended (debug only, no hook changes)")
+	self:DebugChatHandlerState("encounter-end")
 end
 
 function addon:EnableAddon()
@@ -921,6 +1095,8 @@ function addon:EnableAddon()
 
 	-- Create DummyFrame for proxy capture
 	addon.ensureCaptureProxyFrame()
+	addon.installUrlCopyHook()
+	addon.installTempWindowHook()
 
 	-- Hook ChatFrame_MessageEventHandler using RawHook (stores original, unsafe)
 	if _G["ChatFrame_MessageEventHandler"] then
@@ -965,6 +1141,13 @@ function addon:DisableAddon()
 	end
 
 	addon.dbg("DisableAddon: START removing message hooks")
+
+	if addon.uninstallUrlCopyHook then
+		addon.uninstallUrlCopyHook()
+	end
+	if addon.uninstallTempWindowHook then
+		addon.uninstallTempWindowHook()
+	end
 
 	-- Unhook RawHooked ChatFrame_MessageEventHandler
 	if self._chatEventHooked == "global" and self._rawHooks and self._rawHooks["ChatFrame_MessageEventHandler"] then

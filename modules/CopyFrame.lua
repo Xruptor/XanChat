@@ -36,18 +36,20 @@ local function unescape(str)
 	--I want to point out that event addons like ElvUI suffer from  this problem.
 	--They get around it by not displaying protected messages at ALL.  Check MessageIsProtected(message) in ElvUI
 
-	if string.find(str,"|K") then
-		local kStart, kNum, _, kInfo = string.match(text, "(.-)|K(.-)|k(.-)|k(.+)")
-		if string.len(kStart) then
-			str = kStart.."-BNET-"..kNum
-		else
-			str = "-BNET-"..kNum
-		end
-		if string.len(kInfo) then
-			str = str..kInfo
-		end
-		if string.find(str, "|K") then
-			str = unescape(str)
+	if string.find(str, "|K", 1, true) then
+		local kStart, kNum, _, kInfo = string.match(str, "(.-)|K(.-)|k(.-)|k(.+)")
+		if kNum then
+			if kStart and kStart ~= "" then
+				str = kStart .. "-BNET-" .. kNum
+			else
+				str = "-BNET-" .. kNum
+			end
+			if kInfo and kInfo ~= "" then
+				str = str .. kInfo
+			end
+			if string.find(str, "|K", 1, true) then
+				str = unescape(str)
+			end
 		end
 	end
 
