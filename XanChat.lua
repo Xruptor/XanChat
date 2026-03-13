@@ -275,7 +275,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15 = ...
 	local isSecretPayload = _G.issecretvalue and _G.issecretvalue(arg1)
-	local processMode = addon:EventIsProcessed(event)
+	local processMode = addon.EventIsProcessed(event)
 	local handlerResult
 
 	addon.dbg("ChatFrame_MessageEventHandler: isSecretPayload=" .. tostring(isSecretPayload) .. " processMode=" .. tostring(processMode))
@@ -436,12 +436,9 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE_BLOCKED, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
 			end
 		elseif isSecretPayload then
-			addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame with event args for Blizzard formatting")
-			-- Pass original event args so Blizzard can format the message properly with player name
-			-- Use arg1 directly like censored messages - this allows Blizzard's formatter to handle it
-			this:AddMessage(arg1 or "", outR, outG, outB, outID, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
-				return text
-			end)
+			addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (Prat-style output)")
+			-- Use the built output directly; avoid passing event args for Blizzard formatting.
+			this:AddMessage(textToDisplay or "", outR, outG, outB, outID, m.ACCESSID, m.TYPEID)
 			if addon.fireCallback then
 				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
 			end
