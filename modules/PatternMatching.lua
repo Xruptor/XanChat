@@ -76,7 +76,7 @@ end
 
 -- Remove matched strings and replace them with temporary tokens
 local function MatchPatterns(m, ptype)
-	local text = m.message_text
+	local text = m.message_text or ""
 
 	-- Secret value guard
 	if _G.issecretvalue and _G.issecretvalue(text) then
@@ -113,13 +113,13 @@ local function MatchPatterns(m, ptype)
 		end
 	end
 
-	if addon.dbg then addon.dbg("MatchPatterns: result=" .. text) end
+	if addon.dbg then addon.dbg("MatchPatterns: result=" .. tostring(text)) end
 	return text
 end
 
 -- Put tokenized matches back into the text
 local function ReplaceMatches(m, ptype)
-	local text = m.message_text
+	local text = m.message_text or ""
 
 	-- Secret value guard
 	if _G.issecretvalue and _G.issecretvalue(text) then

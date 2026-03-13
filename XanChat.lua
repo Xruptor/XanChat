@@ -106,6 +106,7 @@ function addon:ParseChatEvent(frame, event, ...)
 	-- Check if player name is a secret value (SEPARATE from message text secret check)
 	local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
 	local coloredName = nil
+	local senderName = arg2
 	local guidClass = nil  -- Store class from GUID lookup for secret messages
 
 	if addon and addon.dbg then
@@ -123,6 +124,7 @@ function addon:ParseChatEvent(frame, event, ...)
 		local _, englishClass, _, _, name = _G.GetPlayerInfoByGUID(arg12)
 		if name then
 			coloredName = name
+			senderName = name
 			guidClass = englishClass  -- Capture class for styling
 			isArg2Secret = false  -- Now we have a safe player name
 			if addon and addon.dbg then
@@ -149,9 +151,9 @@ function addon:ParseChatEvent(frame, event, ...)
 		if addon and addon.dbg then
 			addon.dbg("ParseChatEvent: Skipping player info extraction - arg2 is secret")
 		end
-	elseif not _G.canaccessvalue or _G.canaccessvalue(arg2) then
-		-- Set coloredName to arg2 only after confirming it's accessible
-		coloredName = arg2 or ""
+	elseif not _G.canaccessvalue or _G.canaccessvalue(senderName) then
+		-- Set coloredName only after confirming it's accessible
+		coloredName = senderName or ""
 
 		-- Trim arg2 only if not secret
 		if not isArg2Secret then
@@ -159,7 +161,7 @@ function addon:ParseChatEvent(frame, event, ...)
 		end
 
 		-- Check if secret (Ambiguate guard)
-		if _G.Ambiguate and (not _G.issecretvalue or not _G.issecretvalue(arg2)) then
+		if _G.Ambiguate and (not _G.issecretvalue or not _G.issecretvalue(senderName)) then
 			if chatType == "GUILD" then
 				coloredName = _G.Ambiguate(coloredName, "guild")
 			else
@@ -173,20 +175,24 @@ function addon:ParseChatEvent(frame, event, ...)
 
 			local playerLink
 
-			if chatType == "BN_WHISPER" or chatType == "BN_WHISPER_INFORM" or chatType == "BN_CONVERSATION" then
-				if arg13 then
-					playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", arg2, arg13, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
+				if chatType == "BN_WHISPER" or chatType == "BN_WHISPER_INFORM" or chatType == "BN_CONVERSATION" then
+					if arg13 then
+						playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", senderName, arg13, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
+					else
+						playerLink = "[" .. coloredName .. "]"
+					end
 				else
-					playerLink = "[" .. coloredName .. "]"
+					playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", senderName, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
 				end
-			else
-				playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", arg2, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
-			end
 
 			s.player_link = playerLink
 
 			-- Extract name and server
-			local plr, svr = arg2:match("([^%-]+)%-?(.*)")
+			local plr, svr
+			if type(senderName) == "string" then
+				plr, svr = senderName:match("([^%-]+)%-?(.*)")
+			end
+
 			if plr then
 				s.player_name = plr
 			end

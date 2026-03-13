@@ -106,7 +106,14 @@ local function FormatChatMessage(message)
 	end
 
 	-- Combine all sections with message
-	local result = prefixSection .. playerSection .. postfixSection .. ": " .. getValue("message_text")
+	local messageText = getValue("message_text")
+	local result = prefixSection .. playerSection .. postfixSection
+	if messageText ~= "" then
+		if result ~= "" then
+			result = result .. ": "
+		end
+		result = result .. messageText
+	end
 
 	-- Clean up extra whitespace
 	result = result:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")

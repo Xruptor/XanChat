@@ -209,30 +209,21 @@ end
 -- NOTICE FILTER CHECKING
 -- ============================================================================
 
-local function checkNoticeFilter(...)
+local function checkNoticeFilter(_, event, message)
 	if not addon then return false end
 
-	if not _G.XCHT_DB or not _G.XCHT_DB.filterJoinLeave then
+	if not _G.XCHT_DB or not _G.XCHT_DB.disableChatEnterLeaveNotice then
 		return false
 	end
 
-	local event = ...
-	if event ~= "CHAT_MSG_SYSTEM" then
-		return false
-	end
-
-	local arg1 = _G.select(1, ...)
-	if not arg1 or type(arg1) ~= "string" then
-		return false
-	end
-
-	-- Filter join/leave messages
-	if string.find(arg1, _G.ERR_PLAYER_DND, 1, true) then
+	if event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_JOIN" or event == "CHAT_MSG_CHANNEL_LEAVE" then
 		return true
 	end
 
-	if string.find(arg1, _G.ERR_PLAYER_AFK, 1, true) then
-		return true
+	if event == "CHAT_MSG_SYSTEM" and type(message) == "string" then
+		if string.find(message, "|Hplayer:", 1, true) and (string.find(message, "has joined", 1, true) or string.find(message, "has left", 1, true)) then
+			return true
+		end
 	end
 
 	return false
@@ -251,6 +242,7 @@ local function setDisableChatEnterLeaveNotice()
 		_G.ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", addon.checkNoticeFilter)
 		_G.ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", addon.checkNoticeFilter)
 		_G.ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", addon.checkNoticeFilter)
+		_G.ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", addon.checkNoticeFilter)
 	end
 
 	addon._noticeFilterRegistered = true

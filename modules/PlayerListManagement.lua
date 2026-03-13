@@ -174,7 +174,7 @@ local function doRosterUpdate()
 			-- Only add if we have valid data
 			if playerName and level and level > 0 and classFile and classFile ~= 0 then
 				addToPlayerList(playerName, playerServer, level, classFile)
-			elseif playerName and level and level > 0 and not classFile or classFile == 0 then
+			elseif playerName and level and level > 0 and (not classFile or classFile == 0) then
 				-- Still add even if class is 0, but debug it
 				if addon and addon.dbg then
 					addon.dbg("-->doRosterUpdate: Adding player with class=0: " .. tostring(playerName))

@@ -77,7 +77,7 @@ local function runFrameMessageFilters(frame, event, a1, a2, a3, a4, a5, a6, a7, 
 	if string.sub(event or "", 1, 8) ~= "CHAT_MSG" then
 		return false, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14
 	end
-	if not (_G.ChatFrameUtil or not _G.ChatFrameUtil.ProcessMessageEventFilters) then
+	if not (_G.ChatFrameUtil and _G.ChatFrameUtil.ProcessMessageEventFilters) then
 		return false, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14
 	end
 	local discard = false
