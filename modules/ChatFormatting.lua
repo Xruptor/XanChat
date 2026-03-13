@@ -51,9 +51,9 @@ local function prepareWorkingSections()
 	return sectionWorking
 end
 
-local function BuildChatText(message)
+local function FormatChatMessage(message)
 	if addon and addon.dbg then
-		addon.dbg("BuildChatText: building chat text with direct construction")
+		addon.dbg("FormatChatMessage: building chat text with direct construction")
 	end
 	local m = message or sectionWorking
 
@@ -111,7 +111,7 @@ local function BuildChatText(message)
 
 	if addon and addon.isSafeString and addon.isSafeString(result) then
 		if addon and addon.dbg then
-			addon.dbg("BuildChatText: result length=" .. #result)
+			addon.dbg("FormatChatMessage: result length=" .. #result)
 		end
 	end
 	return result
@@ -124,7 +124,7 @@ end
 -- Make section buffers and functions accessible to addon object
 -- These are used in the main XanChat.lua file
 
-addon.BuildChatText = BuildChatText
+addon.FormatChatMessage = FormatChatMessage
 addon.CHAT_DATA_KEYS = CHAT_DATA_KEYS
 addon.resetSectionBuffer = resetSectionBuffer
 addon.prepareWorkingSections = prepareWorkingSections

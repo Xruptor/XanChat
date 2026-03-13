@@ -37,15 +37,15 @@ addon.EVENTS = EVENTS
 -- ============================================================================
 
 -- Parse WoW event args into chat sections
-function addon:SplitChatMessage(frame, event, ...)
-	addon.dbg("SplitChatMessage: START event=" .. tostring(event))
+function addon:ParseChatEvent(frame, event, ...)
+	addon.dbg("ParseChatEvent: START event=" .. tostring(event))
 	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17 = ...
 	local isSecret = _G.issecretvalue and _G.issecretvalue(arg1)
 
-	addon.dbg("SplitChatMessage: isSecret=" .. tostring(isSecret) .. " arg1=" .. addon.dbgValue(arg1))
+	addon.dbg("ParseChatEvent: isSecret=" .. tostring(isSecret) .. " arg1=" .. addon.dbgValue(arg1))
 
 	if type(event) ~= "string" or string.sub(event, 1, 8) ~= "CHAT_MSG" then
-		addon.dbg("SplitChatMessage: not a CHAT_MSG event, returning nil")
+		addon.dbg("ParseChatEvent: not a CHAT_MSG event, returning nil")
 		return nil, nil
 	end
 
@@ -93,15 +93,35 @@ function addon:SplitChatMessage(frame, event, ...)
 	s.CHATTARGET = chatTarget
 
 	-- Message text
-	s.message_text = isSecret and arg1 or (addon.safestr(arg1) or ""):gsub("^%s*(.-)%s*$", "%1")
+	-- Use isNotSafeStr to check if we can safely process the value
+	-- If it returns a value (secret/inaccessible/not-string), use it directly
+	-- If it returns false (safe string), then do the trim operation
+	local unsafeMessageText = isSecret and arg1 or addon.isNotSafeStr(arg1)
+	if unsafeMessageText then
+		s.message_text = unsafeMessageText
+	else
+		s.message_text = (arg1 or ""):gsub("^%s*(.-)%s*$", "%1")
+	end
 
 	-- Check if player name is a secret value (SEPARATE from message text secret check)
 	local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
-	local coloredName = arg2
+	local coloredName = nil
 
-		-- Extract player information
-	if not isArg2Secret and type(arg2) == "string" and arg2 ~= "" then
+	-- If arg2 is secret, try to get player name from GUID (arg12)
+	-- This matches Prat's approach for secret boss encounter messages
+	if isArg2Secret and arg12 and _G.GetPlayerInfoByGUID then
+		local firstName = _G.GetPlayerInfoByGUID(arg12)
+		if firstName then
+			coloredName = firstName
+			isArg2Secret = false  -- Now we have a safe player name
+		end
+	end
 
+	-- Extract player information
+	-- Use canaccessvalue to safely check if we can work with arg2
+	if not isArg2Secret and (not _G.canaccessvalue or _G.canaccessvalue(arg2)) then
+		-- Set coloredName to arg2 only after confirming it's accessible
+		coloredName = arg2 or ""
 
 		-- Trim arg2 only if not secret
 		if not isArg2Secret then
@@ -248,9 +268,9 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		return true
 	end
 
-	addon.dbg("ChatFrame_MessageEventHandler: message passed Blizzard filters, calling SplitChatMessage")
+	addon.dbg("ChatFrame_MessageEventHandler: message passed Blizzard filters, calling ParseChatEvent")
 
-	local parsedMessage, info = addon:SplitChatMessage(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+	local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 	if type(parsedMessage) == "boolean" and parsedMessage == true then
 		addon.dbg("ChatFrame_MessageEventHandler: split returned boolean, passing through")
 		return true
@@ -327,7 +347,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		if addon.fireCallback then
 			addon.dbg("ChatFrame_MessageEventHandler: firing PRE_ADDMESSAGE callback")
-			addon.fireCallback(addon.EVENTS.PRE_ADDMESSAGE, m, this, resolvedEvent, addon:BuildChatText(m), outR, outG, outB, outID)
+			addon.fireCallback(addon.EVENTS.PRE_ADDMESSAGE, m, this, resolvedEvent, addon:FormatChatMessage(m), outR, outG, outB, outID)
 		end
 
 		if applyPatterns then
@@ -336,12 +356,23 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		end
 
 		-- Apply xanChat-specific transformations on the message sections
-		addon.FormatPlayerSection(m)
+		addon.StylePlayerSection(m)
 		addon.applyShortChannelNamesToSections(m)
 
-		if processMode == addon.EventProcessingType.Full then
+		-- Build display text - use FormatChatMessage if xanChat features are active,
+		-- otherwise fall back to captured output based on processMode
+		local useStyledOutput = false
+		if _G.XCHT_DB then
+			-- Use styled output if any xanChat features are enabled
+			useStyledOutput = _G.XCHT_DB.enablePlayerChatStyle or _G.XCHT_DB.shortNames or applyPatterns
+		end
+
+		if useStyledOutput then
+			addon.dbg("ChatFrame_MessageEventHandler: using styled output (xanChat features active)")
+			textToDisplay = addon:FormatChatMessage(m) or ""
+		elseif processMode == addon.EventProcessingType.Full then
 			addon.dbg("ChatFrame_MessageEventHandler: using Full processing mode, building from sections")
-			textToDisplay = addon:BuildChatText(m) or ""
+			textToDisplay = addon:FormatChatMessage(m) or ""
 		elseif processMode == addon.EventProcessingType.PatternsOnly then
 			addon.dbg("ChatFrame_MessageEventHandler: using PatternsOnly processing mode")
 			textToDisplay = (m.PRE or "") .. (m.message_text or "") .. (m.POST or "")

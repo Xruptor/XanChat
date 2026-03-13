@@ -20,7 +20,8 @@ L.ChangeOutgoingWhisperColor = "Farbe des ausgehenden Flüsterchats ändern."
 L.EnableOutWhisperColor = "Benutzerdefinierte Farbe für ausgehende Flüsterchats aktivieren."
 L.DisableChatEnterLeaveNotice = "Channel-Benachhrichtigungen (|cFF99CC33Beitreten/Verlassen/Wechseln|r) ausschalten."
 
-L.ProtectedChannel = " |cFFDF2B2B(Channel ist von Blizzard geschützt. Addon-Zugriff ist nicht erlaut.)|r."
+L.ProtectedChannel = "¡¡Channel ist von Blizzard geschützt. Addon-Zugriff ist nicht erlaut.¡¡"
+L.ProtectedSecretValue = "¡¡Chatnachricht enthält <geheime Werte>. Der Zugriff wird von Blizzard untersagt.¡¡"
 
 L.ChatFeaturesDisabledInstance = "xanChat: Einige Funktionen sind in Instanzen wegen Einschränkungen deaktiviert."
 L.ChatFeaturesDisabledLockdown = "xanChat: Einige Chat-Funktionen sind aufgrund von Begegnungsbeschränkungen deaktiviert."
@@ -159,5 +160,5 @@ L.MoveSocialButtonOff = "xanChat: Schaltfläche für die Kontakte ist jetzt [|cF
 L.MoveSocialButtonInfo = "Schaltfläche für die Kontakte unterhalb des Chat-Fensters anzeigen."
 
 L.PageLimitText = "Anzahl der letzten Chat-Seiten in Chat-Kopie. |cFF99CC33(0 ohne Limit)|r"
-L.ProtectedSecretValue = " |cFFff3232(Chatnachricht enthält <geheime Werte>. Der Zugriff wird von Blizzard untersagt.)|r."
+
 

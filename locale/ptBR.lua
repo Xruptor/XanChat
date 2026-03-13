@@ -19,7 +19,8 @@ L.ChangeOutgoingWhisperColor = "Alterar a cor do sussurro enviado."
 L.EnableOutWhisperColor = "Ativar cor personalizada para sussurros enviados."
 L.DisableChatEnterLeaveNotice = "Desativar notificações do canal (|cFF99CC33Entrar/Sair/Alterado|r)."
 
-L.ProtectedChannel = " |cFFDF2B2B(O canal é protegido pela Blizzard. Acesso do addon é proibido.)|r."
+L.ProtectedChannel = "¡¡O canal é protegido pela Blizzard. Acesso do addon é proibido.¡¡"
+L.ProtectedSecretValue = "¡¡A mensagem de bate-papo contém <valores secretos>. O acesso é proibido pela Blizzard.¡¡"
 
 L.ChatFeaturesDisabledInstance = "xanChat: Algumas funções estão desativadas em instâncias devido a restrições."
 L.ChatFeaturesDisabledLockdown = "xanChat: Algumas funções do chat estão desativadas devido a restrições de encontro."
@@ -158,5 +159,5 @@ L.MoveSocialButtonOff = "xanChat: Mover social e alertas para baixo. [|cFF99CC33
 L.MoveSocialButtonInfo = "Mover o botão social e o quadro de alertas para baixo."
 
 L.PageLimitText = "Páginas recentes de chat para exibir em Copiar chat. |cFF99CC33(0 sem limite)|r"
-L.ProtectedSecretValue = " |cFFff3232(A mensagem de bate-papo contém <valores secretos>. O acesso é proibido pela Blizzard.)|r."
+
 

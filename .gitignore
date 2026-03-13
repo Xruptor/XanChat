@@ -13,3 +13,7 @@ resource
 resource/CHATTYNATOR_ANALYSIS.md
 .luacheckrc
 PR-CLAUDE.md
+markdowns
+posthook.txt
+chat_debug.txt
+prat_debug.txt

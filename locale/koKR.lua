@@ -19,7 +19,8 @@ L.ChangeOutgoingWhisperColor = "보내는 귓속말 색상 변경."
 L.EnableOutWhisperColor = "사용자 지정 보내는 귓속말 색상 사용."
 L.DisableChatEnterLeaveNotice = "채널 (|cFF99CC33입장/퇴장/변경|r) 알림 끄기."
 
-L.ProtectedChannel = " |cFFDF2B2B(채널은 Blizzard에 의해 보호됩니다. 애드온 접근이 금지됩니다.)|r."
+L.ProtectedChannel = "¡¡채널은 Blizzard에 의해 보호됩니다. 애드온 접근이 금지됩니다.¡¡"
+L.ProtectedSecretValue = "¡¡채팅 메시지에 <비밀 값>이 포함되어 있습니다. Blizzard에서 액세스를 금지했습니다.¡¡"
 
 L.ChatFeaturesDisabledInstance = "xanChat: 인스턴스에서는 제한으로 인해 일부 기능이 비활성화됩니다."
 L.ChatFeaturesDisabledLockdown = "xanChat: 전투 제한으로 인해 일부 채팅 기능이 비활성화됩니다."
@@ -158,5 +159,5 @@ L.MoveSocialButtonOff = "xanChat: 소셜/알림 프레임 아래로 이동. [|cF
 L.MoveSocialButtonInfo = "소셜 버튼과 알림 프레임을 아래로 이동합니다."
 
 L.PageLimitText = "복사 채팅에 표시할 최근 채팅 페이지 수. |cFF99CC33(0은 제한 없음)|r"
-L.ProtectedSecretValue = " |cFFff3232(채팅 메시지에 <비밀 값>이 포함되어 있습니다. Blizzard에서 액세스를 금지했습니다.)|r."
+
 

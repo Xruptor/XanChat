@@ -19,8 +19,8 @@ L.ChangeOutgoingWhisperColor = "Change outgoing whisper chat color."
 L.EnableOutWhisperColor = "Enable custom outgoing whisper chat color."
 L.DisableChatEnterLeaveNotice = "Disable chat channel (|cFF99CC33Enter/Leave/Changed|r) notifications."
 
-L.ProtectedChannel = " |cFFDF2B2B(Channel is protected by Blizzard. Addon access is prohibited.)|r."
-L.ProtectedSecretValue = " |cFFff3232(Chat message contains <secret values>. Access is prohibited by Blizzard.)|r."
+L.ProtectedChannel = "¡¡Channel is protected by Blizzard. Addon access is prohibited.¡¡"
+L.ProtectedSecretValue = "¡¡Chat message contains <secret values>. Access is prohibited by Blizzard.¡¡"
 
 --C_ChatInfo.InChatMessagingLockdown()
 L.ChatFeaturesDisabledInstance = "xanChat: Some features disabled due to restrictions while in instances."

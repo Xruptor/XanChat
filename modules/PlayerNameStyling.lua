@@ -1,5 +1,5 @@
 --[[
-	HelperFunctions.lua - Helper functions for XanChat
+	PlayerNameStyling.lua - Player name styling and formatting for XanChat
 ]]
 
 local ADDON_NAME, private = ...
@@ -48,7 +48,7 @@ end
 -- PLAYER SECTION FORMATTING
 -- ============================================================================
 
-local function FormatPlayerSection(m)
+local function StylePlayerSection(m)
 	if not addon then return end
 
 	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) then
@@ -81,7 +81,7 @@ local function FormatPlayerSection(m)
 					b = tonumber(string.sub(hexColor, 5, 6), 16) / 255
 				}
 				if addon and addon.dbg then
-					addon.dbg("FormatPlayerSection: Extracted class color from Blizzard output: R=" .. string.format("%.2f", extractedClassColor.r) .. " G=" .. string.format("%.2f", extractedClassColor.g) .. " B=" .. string.format("%.2f", extractedClassColor.b))
+					addon.dbg("StylePlayerSection: Extracted class color from Blizzard output: R=" .. string.format("%.2f", extractedClassColor.r) .. " G=" .. string.format("%.2f", extractedClassColor.g) .. " B=" .. string.format("%.2f", extractedClassColor.b))
 				end
 				break
 			end
@@ -110,7 +110,7 @@ local function FormatPlayerSection(m)
 
 	-- Simple debug summary
 	if addon and addon.dbg then
-		addon.dbg("-->FormatPlayerSection: name=" .. tostring(m.player_name) .. " extractedColor=" .. tostring(extractedClassColor and "yes" or "no"))
+		addon.dbg("-->StylePlayerSection: name=" .. tostring(m.player_name) .. " extractedColor=" .. tostring(extractedClassColor and "yes" or "no"))
 	end
 
 	-- Continue only if we have player info for level or extracted class color for name styling
@@ -244,7 +244,7 @@ end
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
-addon.FormatPlayerSection = FormatPlayerSection
+addon.StylePlayerSection = StylePlayerSection
 addon.checkNoticeFilter = checkNoticeFilter
 addon.setDisableChatEnterLeaveNotice = setDisableChatEnterLeaveNotice
 addon.RGBAToHex = RGBAToHex

@@ -19,7 +19,8 @@ L.ChangeOutgoingWhisperColor = "Changer la couleur des chuchotements sortants."
 L.EnableOutWhisperColor = "Activer une couleur personnalisée pour les chuchotements sortants."
 L.DisableChatEnterLeaveNotice = "Désactiver les notifications de canal (|cFF99CC33Entrée/Sortie/Changé|r)."
 
-L.ProtectedChannel = " |cFFDF2B2B(Canal protégé par Blizzard. Accès addon interdit.)|r."
+L.ProtectedChannel = "¡¡Canal protégé par Blizzard. Accès addon interdit.¡¡"
+L.ProtectedSecretValue = "¡¡Le message de discussion contient des <valeurs secrètes>. L'accès est interdit par Blizzard.¡¡"
 
 L.ChatFeaturesDisabledInstance = "xanChat : Certaines fonctions sont désactivées en instance en raison de restrictions."
 L.ChatFeaturesDisabledLockdown = "xanChat : Certaines fonctions du chat sont désactivées en raison des restrictions de rencontre."
@@ -158,5 +159,5 @@ L.MoveSocialButtonOff = "xanChat : Déplacer les boutons sociaux et alertes en b
 L.MoveSocialButtonInfo = "Déplacer le bouton social et le cadre d'alerte en bas."
 
 L.PageLimitText = "Pages de chat récentes à afficher dans Copie de chat. |cFF99CC33(0 sans limite)|r"
-L.ProtectedSecretValue = " |cFFff3232(Le message de discussion contient des <valeurs secrètes>. L'accès est interdit par Blizzard.)|r."
+
 

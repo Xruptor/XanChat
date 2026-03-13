@@ -25,6 +25,7 @@ local function unescape(str)
     str = string.gsub(str, "|T.-|t", "") --textures in chat like currency coins and such
 	str = string.gsub(str, "|H.-|h(.-)|h", "%1") --links, just put the item description and chat color
 	str = string.gsub(str, "{.-}", "") --remove raid icons from chat
+	str = string.gsub(str,"||","««")
 
 	--so apparently blizzard protects certain strings and returns them as textures.
 	--this causes the insert for the multiline to break and not display the line.
@@ -35,49 +36,29 @@ local function unescape(str)
 	--I want to point out that event addons like ElvUI suffer from  this problem.
 	--They get around it by not displaying protected messages at ALL.  Check MessageIsProtected(message) in ElvUI
 
-	if string.find(str, "|K", 1, true) then
-
-		--str = string.gsub(str, "|K(.-)|k", "%1")
-		local presenceID = string.match(str, "|K(.-)|k")
-		local accountName
-		local stripBNet
-
-		if presenceID and _G.C_BattleNet and _G.BNGetNumFriends and _G.C_BattleNet.GetFriendAccountInfo then
-			local numBNet = _G.BNGetNumFriends()
-			for i = 1, numBNet do
-				local accountInfo = _G.C_BattleNet.GetFriendAccountInfo(i)
-				--only continue if we have a account info to work with
-				if accountInfo and accountInfo.gameAccountInfo then
-					--grab the bnet name of the account, it will have |K|k in it so again it will be hidden
-					accountName = accountInfo.accountName
-					--do we even have a battle.net tag to replace it with?
-					if accountName and accountInfo.battleTag then
-						--grab the presenceID from in between the |K|k tags
-						accountName = string.gsub(accountName, "|K(.-)|k", "%1")
-						--if it matches the one we found earlier, then replace it with a battle.net tag instead
-						if accountName and accountName == presenceID then
-							--don't show entire bnet tag just the name
-							stripBNet = string.match(accountInfo.battleTag, "(.-)#")
-							str = string.gsub(str, "|K(.-)|k", stripBNet or accountInfo.battleTag)
-							--return out of here since we already did the replace
-							--we don't want to go to the failsafe below
-							return str
-						end
-					end
-				end
-			end
+	if string.find(str,"|K") then
+		local kStart, kNum, _, kInfo = string.match(text, "(.-)|K(.-)|k(.-)|k(.+)")
+		if string.len(kStart) then
+			str = kStart.."-BNET-"..kNum
+		else
+			str = "-BNET-"..kNum
 		end
-
-		--something went wrong with replacing the name text for |K|k
-		--so lets just remove it since it will not allow text to be inserted into the multiline box, since it will be empty and or hidden because |K|k returns a hidden textures
-		--for protected strings.  That's why we are just going to remove it
-		str = string.gsub(str, "|K(.-)|k", "%1")
-
-		--add extra text for protected strings, to let folks know it's protected
-		if isOfficerChat then
-
-			str = str..(addon.L and addon.L.ProtectedChannel or " (Protected)")
+		if string.len(kInfo) then
+			str = str..kInfo
 		end
+		if string.find(str, "|K") then
+			str = unescape(str)
+		end
+	end
+
+	--remove colored strings
+	if (string.find(str, "|")) then
+		str = string.gsub(str, "|", "¦")
+	end
+
+	--add extra text for protected strings, to let folks know it's protected
+	if isOfficerChat then
+		str = str..(addon.L and addon.L.ProtectedChannel or " (Protected)")
 	end
 
     return str

@@ -65,6 +65,15 @@ local function safestr_bool(v)
 	return false
 end
 
+-- Returns the original value if it's NOT safe to process (secret/inaccessible/not-string)
+-- Returns false if the value IS safe to process
+local function isNotSafeStr(v)
+	if isSecretValue(v) then return v end
+	if not canAccessValue(v) then return v end
+	if type(v) ~= "string" then return v end
+	return false
+end
+
 
 addon.isInAnyInstance = isInAnyInstance
 addon.ApplyDefaults = ApplyDefaults
@@ -73,3 +82,4 @@ addon.canAccessValue = canAccessValue
 addon.isSafeString = isSafeString
 addon.safestr = safestr
 addon.safestr_bool = safestr_bool
+addon.isNotSafeStr = isNotSafeStr

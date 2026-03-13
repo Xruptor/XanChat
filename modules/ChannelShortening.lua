@@ -33,16 +33,22 @@ local function applyShortChannelNamesToSections(m)
 	local longName = m.channel_name
 	local shortName = longName -- Default to long name
 
+	-- Shorten the channel name and remove zone suffix
+	-- e.g., "General" -> "Gen" or "General - Orgrimmar" -> "Gen"
 	for i = 1, #SHORT_CHANNEL_REPLACEMENTS do
 		local Ln = SHORT_CHANNEL_REPLACEMENTS[i][1]
 		local Sn = SHORT_CHANNEL_REPLACEMENTS[i][2]
 
 		if Ln and Sn then
-			shortName = gsub(shortName, Ln, "["..m.channel_number..Sn.."]")
+			-- Match with or without zone suffix, replace with just short name
+			local withZone = "^" .. Ln .. " %-.+"
+			local withoutZone = "^" .. Ln .. "$"
+			shortName = gsub(shortName, withZone, Sn)
+			shortName = gsub(shortName, withoutZone, Sn)
 		end
 	end
 
-    m.channel_name = shortName
+	m.channel_name = shortName
 end
 
 -- ============================================================================

@@ -23,14 +23,27 @@ local EventProcessingType = {
 -- ============================================================================
 
 local function EventIsProcessed(event)
-	if not addon then return EventProcessingType.OutputOnly end
-
-	-- Default to Full processing for all CHAT_MSG events
-	if type(event) == "string" and string.sub(event, 1, 8) == "CHAT_MSG" then
-		return EventProcessingType.Full
+	if not addon then
+		if addon and addon.dbg then
+			addon.dbg("EventIsProcessed: addon is nil, returning OutputOnly")
+		end
+		return EventProcessingType.OutputOnly
 	end
 
-	return EventProcessingType.OutputOnly
+	-- Default to Full processing for all CHAT_MSG events
+	local eventType = type(event)
+	local eventSub = (eventType == "string") and string.sub(event, 1, 8) or ""
+	local isChatMsg = eventType == "string" and eventSub == "CHAT_MSG"
+
+	if addon and addon.dbg then
+		addon.dbg("EventIsProcessed: event=" .. tostring(event) .. " type=" .. tostring(eventType) .. " sub=" .. tostring(eventSub) .. " isChatMsg=" .. tostring(isChatMsg))
+	end
+
+	if isChatMsg then
+		return EventProcessingType.Full
+	else
+		return EventProcessingType.OutputOnly
+	end
 end
 
 local function callOriginalMessageHandler(self, frame, event, ...)
@@ -57,7 +70,7 @@ local function shouldRunPatternPass(isSecretPayload, mode)
 	if isSecretPayload then
 		return false
 	end
-	return mode == addon.EventProcessingType.Full or mode == addon.EventProcessingType.PatternsOnly
+	return mode == EventProcessingType.Full or mode == EventProcessingType.PatternsOnly
 end
 
 local function runFrameMessageFilters(frame, event, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14)

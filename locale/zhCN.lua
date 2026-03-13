@@ -19,7 +19,8 @@ L.ChangeOutgoingWhisperColor = "改变发出密语颜色"
 L.EnableOutWhisperColor = "启用自定义发出密语颜色"
 L.DisableChatEnterLeaveNotice = "禁用聊天频道 (|cFF99CC33进入/离开/更改|r) 通知。"
 
-L.ProtectedChannel = " |cFFDF2B2B（频道受暴雪保护，禁止插件修改）|r。"
+L.ProtectedChannel = "¡¡频道受暴雪保护，禁止插件修改。¡¡"
+L.ProtectedSecretValue = "¡¡聊天消息包含<秘密值>。暴雪禁止访问。¡¡"
 
 L.ChatFeaturesDisabledInstance = "xanChat：在副本中因限制而禁用部分功能。"
 L.ChatFeaturesDisabledLockdown = "xanChat：由于战斗限制，部分聊天功能已禁用。"
@@ -158,5 +159,5 @@ L.MoveSocialButtonOff = "xanChat: 社交和提示框移动到底部。 [|cFF99CC
 L.MoveSocialButtonInfo = "将社交和提示框移动到底部。"
 
 L.PageLimitText = "复制聊天中显示的最近聊天页面。 |cFF99CC33（0 是无限制）|r"
-L.ProtectedSecretValue = " |cFFff3232(聊天消息包含<秘密值>。暴雪禁止访问。)|r."
+
 
