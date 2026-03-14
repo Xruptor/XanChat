@@ -39,13 +39,13 @@ local function RegisterPattern(pattern, owner)
 	pattern.owner = owner
 	pattern.idx = idx
 
-	if addon.dbg then addon.dbg("RegisterPattern: idx=" .. tostring(idx) .. " priority=" .. tostring(pattern.priority)) end
+	if addon.dbg then addon.dbg("RegisterPattern: idx="..tostring(idx).." priority="..tostring(pattern.priority)) end
 	return idx
 end
 
 -- Unregister all patterns for a specific owner
 local function UnregisterAllPatterns(owner)
-	if addon.dbg then addon.dbg("UnregisterAllPatterns: owner=" .. tostring(owner)) end
+	if addon.dbg then addon.dbg("UnregisterAllPatterns: owner="..tostring(owner)) end
 
 	for i = #PatternRegistry.sortedList, 1, -1 do
 		local pattern = PatternRegistry.sortedList[i]
@@ -60,9 +60,9 @@ end
 function RegisterMatch(text, ptype)
 	tokennum = tokennum + 1
 
-	local token = "@##" .. tokennum .. "##@"
+	local token = "@##"..tokennum.."##@"
 
-	if addon.dbg then addon.dbg("RegisterMatch: token=" .. token .. " text=" .. addon.dbgSafeValue(text)) end
+	if addon.dbg then addon.dbg("RegisterMatch: token="..token.." text="..addon.dbgSafeValue(text)) end
 
 	local mt = MatchTable[ptype or "FRAME"]
 	if not mt then
@@ -101,7 +101,7 @@ local function MatchPatterns(m, ptype)
 	for _, v in ipairs(PatternRegistry.sortedList) do
 		if text and ptype == (v.type or "FRAME") then
 				if type(v.pattern) == "string" and string.len(v.pattern) > 0 then
-					if addon.dbg then addon.dbg("MatchPatterns: checking pattern=" .. tostring(v.pattern)) end
+					if addon.dbg then addon.dbg("MatchPatterns: checking pattern="..tostring(v.pattern)) end
 					if v.matchfunc ~= nil then
 						text = string.gsub(text, v.pattern, function(...)
 							local parms = { ... }
@@ -113,7 +113,7 @@ local function MatchPatterns(m, ptype)
 		end
 	end
 
-	if addon.dbg then addon.dbg("MatchPatterns: result=" .. addon.dbgSafeValue(text)) end
+	if addon.dbg then addon.dbg("MatchPatterns: result="..addon.dbgSafeValue(text)) end
 	return text
 end
 
@@ -132,20 +132,20 @@ local function ReplaceMatches(m, ptype)
 
 	-- Substitute tokens back
 	for t = tokennum, 1, -1 do
-		local k = "@##" .. tostring(t) .. "##@"
+		local k = "@##"..tostring(t).."##@"
 
 		if mt and mt[k] then
 			local cleaned = mt[k]:gsub("([%%W])", "%%%1")
 			text = string.gsub(text, k, cleaned)
 		else
-			if addon.dbg then addon.dbg("ReplaceMatches: token not found: " .. k) end
+			if addon.dbg then addon.dbg("ReplaceMatches: token not found: "..k) end
 		end
 		if mt then
 			mt[k] = nil
 		end
 	end
 
-	if addon.dbg then addon.dbg("ReplaceMatches: result=" .. addon.dbgSafeValue(text)) end
+	if addon.dbg then addon.dbg("ReplaceMatches: result="..addon.dbgSafeValue(text)) end
 	return text
 end
 

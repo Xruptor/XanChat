@@ -15,14 +15,14 @@ addon.L = (private and private.L) or addon.L or {}
 local function buildUrlLink(url)
 	-- Build clickable URL link with green coloring
 	-- Format: |cff99FF33|Hurl:url|h[url]|h|r
-	return " |cff99FF33|Hurl:" .. url .. "|h[" .. url .. "]|h|r "
+	return " |cff99FF33|Hurl:"..url.."|h["..url.."]|h|r "
 end
 
 local URL_PATTERNS = {
 	{
 		pattern = "(%a+)://(%S+)%s?",
 		matchfunc = function(scheme, remainder)
-			return _G.RegisterMatch(buildUrlLink(scheme .. "://" .. remainder), "FRAME")
+			return _G.RegisterMatch(buildUrlLink(scheme.."://"..remainder), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -30,7 +30,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "www%.([_A-Za-z0-9-]+)%.(%S+)%s?",
 		matchfunc = function(domain, tail)
-			return _G.RegisterMatch(buildUrlLink("www." .. domain .. "." .. tail), "FRAME")
+			return _G.RegisterMatch(buildUrlLink("www."..domain.."."..tail), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -38,7 +38,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?",
 		matchfunc = function(user, domain, dots, tld)
-			return _G.RegisterMatch(buildUrlLink(user .. "@" .. domain .. dots .. tld), "FRAME")
+			return _G.RegisterMatch(buildUrlLink(user.."@"..domain..dots..tld), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -46,7 +46,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?",
 		matchfunc = function(a, b, c, d, port)
-			return _G.RegisterMatch(buildUrlLink(a .. "." .. b .. "." .. c .. "." .. d .. ":" .. port), "FRAME")
+			return _G.RegisterMatch(buildUrlLink(a.."."..b.."."..c.."."..d..":"..port), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -54,7 +54,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?",
 		matchfunc = function(a, b, c, d)
-			return _G.RegisterMatch(buildUrlLink(a .. "." .. b .. "." .. c .. "." .. d), "FRAME")
+			return _G.RegisterMatch(buildUrlLink(a.."."..b.."."..c.."."..d), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -68,7 +68,7 @@ local function registerUrlPatterns()
 		if addon.dbg then addon.dbg("registerUrlPatterns: already registered") end
 		return
 	end
-	if addon.dbg then addon.dbg("registerUrlPatterns: registering " .. #URL_PATTERNS .. " URL patterns") end
+	if addon.dbg then addon.dbg("registerUrlPatterns: registering "..#URL_PATTERNS.." URL patterns") end
 	for _, pat in ipairs(URL_PATTERNS) do
 		addon.RegisterPattern(pat, "xanChat-URL")
 	end
@@ -117,12 +117,12 @@ local function installUrlCopyHook()
 			local url = string.sub(link, 5)
 			local dialog = _G.StaticPopup_Show("LINKME")
 			if dialog then
-				local editbox = _G[dialog:GetName() .. "EditBox"]
+				local editbox = _G[dialog:GetName().."EditBox"]
 				if editbox then
 					editbox:SetText(url)
 					editbox:SetFocus()
 					editbox:HighlightText()
-					local button = _G[dialog:GetName() .. "Button2"]
+					local button = _G[dialog:GetName().."Button2"]
 					if button then
 						button:ClearAllPoints()
 						button:SetPoint("CENTER", editbox, "CENTER", 0, -30)

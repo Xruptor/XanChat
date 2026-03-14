@@ -39,7 +39,7 @@ local function DebugPrint(...)
 			parts[#parts + 1] = tostring(v)
 		end
 	end
-	DEFAULT_CHAT_FRAME:AddMessage("xanChat wrapper: " .. table.concat(parts, " "))
+	DEFAULT_CHAT_FRAME:AddMessage("xanChat wrapper: "..table.concat(parts, " "))
 end
 
 local function Dispatch(_, event, ...)
@@ -204,7 +204,7 @@ if LibStub then
 		-- Defensive check: ensure addon is a proper table before using CallbackHandler
 		if type(addon) ~= "table" then
 			if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-				DEFAULT_CHAT_FRAME:AddMessage("xanChat ERROR: addon is not a table, type is: " .. type(addon))
+				DEFAULT_CHAT_FRAME:AddMessage("xanChat ERROR: addon is not a table, type is: "..type(addon))
 			end
 			return
 		end

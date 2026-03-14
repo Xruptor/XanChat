@@ -40,12 +40,12 @@ local function unescape(str)
 		local kStart, kNum, _, kInfo = string.match(str, "(.-)|K(.-)|k(.-)|k(.+)")
 		if kNum then
 			if kStart and kStart ~= "" then
-				str = kStart .. "-BNET-" .. kNum
+				str = kStart.."-BNET-"..kNum
 			else
-				str = "-BNET-" .. kNum
+				str = "-BNET-"..kNum
 			end
 			if kInfo and kInfo ~= "" then
-				str = str .. kInfo
+				str = str..kInfo
 			end
 			if string.find(str, "|K", 1, true) then
 				str = unescape(str)
@@ -78,7 +78,7 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 	copyFrame.MLEditBox:SetText("") -- clear it first in case there were previous messages
 	copyFrame.currChatIndex = chatIndex
 
-	local chatFrame = _G["ChatFrame" .. chatIndex]
+	local chatFrame = _G["ChatFrame"..chatIndex]
 	if not chatFrame then return end
 
 	-- the editbox of the multiline editbox (The parent of the multiline object)
@@ -135,7 +135,7 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 			endPos = pages[pageNum] + MAXLINES
 		end
 	else
-		print("XanChat: " .. (addon.L and addon.L.CopyChatError or "Copy Chat Error"))
+		print("XanChat: "..(addon.L and addon.L.CopyChatError or "Copy Chat Error"))
 		return
 	end
 
@@ -426,7 +426,7 @@ local function createCopyChatButton(chatIndex, chatFrame)
 	local frameName = chatFrame:GetName()
 	if not frameName then return nil end
 
-	local buttonName = frameName .. "CopyChatButton"
+	local buttonName = frameName.."CopyChatButton"
 	if _G[buttonName] then return _G[buttonName] end
 
 	local button = _G.CreateFrame("BUTTON", buttonName, chatFrame, _G.BackdropTemplateMixin and "BackdropTemplate")
@@ -485,7 +485,7 @@ local function createCopyChatButton(chatIndex, chatFrame)
 		button:SetScript("OnLeave", button.hide)
 
 	else
-		local leftButtonFrame = frameName .. "ButtonFrame"
+		local leftButtonFrame = frameName.."ButtonFrame"
 
 		local offSetY = -50
 		if not addon.IsRetail and not _G.XCHT_DB.hideScroll then

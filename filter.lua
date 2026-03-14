@@ -295,7 +295,7 @@ function addon:searchFilterList(event, text)
 	if not event then return false end
 	if addon.DebugPrint then
 		local textDump = addon.dbgSafeValue and addon.dbgSafeValue(text) or (addon.DebugValue and addon.DebugValue(text) or "<text>")
-		addon.DebugPrint("searchFilterList: event=" .. tostring(event) .. " text=" .. textDump)
+		addon.DebugPrint("searchFilterList: event="..tostring(event).." text="..textDump)
 	end
 
 	--first lets check the core
@@ -308,7 +308,7 @@ function addon:searchFilterList(event, text)
 	for k, v in pairs(filterList.custom) do
 		--if it's enabled then check the string
 		if v and strfind(event, k, 1, true) then
-			if addon.DebugPrint then addon.DebugPrint("searchFilterList: custom match key=" .. tostring(k)) end
+			if addon.DebugPrint then addon.DebugPrint("searchFilterList: custom match key="..tostring(k)) end
 			return true
 		end
 	end

@@ -268,7 +268,7 @@ end
 -- end
 --
 -- function MyAddon:ActionButton_UpdateHotkeys(button, type)
---   print(button:GetName() .. " is updating its HotKey")
+--   print(button:GetName().." is updating its HotKey")
 -- end
 function AceHook:Hook(object, method, handler, hookSecure)
 	if type(object) == "string" then
@@ -389,7 +389,7 @@ end
 --   -- Call the original function
 --   self.hooks[frame].OnShow(frame)
 --   -- Do our processing
---   -- .. stuff
+--   --..stuff
 -- end
 function AceHook:RawHookScript(frame, script, handler)
 	hook(self, frame, script, handler, true, false, true, false, "Usage: RawHookScript(object, method, [handler])")

@@ -43,8 +43,8 @@ local chkBoxIndex = 0
 local function createCheckbutton(parentFrame, displayText)
 	chkBoxIndex = chkBoxIndex + 1
 
-	local checkbutton = CreateFrame("CheckButton", ADDON_NAME.."_config_chkbtn_" .. chkBoxIndex, parentFrame, "ChatConfigCheckButtonTemplate")
-	local label = _G[checkbutton:GetName() .. "Text"]
+	local checkbutton = CreateFrame("CheckButton", ADDON_NAME.."_config_chkbtn_"..chkBoxIndex, parentFrame, "ChatConfigCheckButtonTemplate")
+	local label = _G[checkbutton:GetName().."Text"]
 	if label then
 		label:SetText(" "..displayText)
 	end
@@ -56,7 +56,7 @@ local buttonIndex = 0
 local function createButton(parentFrame, displayText)
 	buttonIndex = buttonIndex + 1
 
-	local button = CreateFrame("Button", ADDON_NAME.."_config_button_" .. buttonIndex, parentFrame, "UIPanelButtonTemplate")
+	local button = CreateFrame("Button", ADDON_NAME.."_config_button_"..buttonIndex, parentFrame, "UIPanelButtonTemplate")
 	button:SetText(displayText)
 	button:SetHeight(30)
 	button:SetWidth(button:GetTextWidth() + 30)
@@ -75,7 +75,7 @@ local function createSlider(parentFrame, displayText, minVal, maxVal)
 		insets = { left = 3, right = 3, top = 6, bottom = 6 }
 	}
 
-	local slider = CreateFrame("Slider", ADDON_NAME.."_config_slider_" .. sliderIndex, parentFrame, BackdropTemplateMixin and "BackdropTemplate")
+	local slider = CreateFrame("Slider", ADDON_NAME.."_config_slider_"..sliderIndex, parentFrame, BackdropTemplateMixin and "BackdropTemplate")
 	slider:SetOrientation("HORIZONTAL")
 	slider:SetHeight(15)
 	slider:SetWidth(300)
@@ -112,10 +112,10 @@ local function createColorPicker(parentFrame, dbObj, objName, displayText)
 	colorPickerIndex = colorPickerIndex + 1
 
 	local function ToRGBA(hex)
-		return tonumber('0x' .. string.sub(hex, 3, 4), 10) / 255,
-			tonumber('0x' .. string.sub(hex, 5, 6), 10) / 255,
-			tonumber('0x' .. string.sub(hex, 7, 8), 10) / 255,
-			tonumber('0x' .. string.sub(hex, 1, 2), 10) / 255
+		return tonumber('0x'..string.sub(hex, 3, 4), 10) / 255,
+			tonumber('0x'..string.sub(hex, 5, 6), 10) / 255,
+			tonumber('0x'..string.sub(hex, 7, 8), 10) / 255,
+			tonumber('0x'..string.sub(hex, 1, 2), 10) / 255
 	end
 	local function ToHex(r, g, b, a)
 		return string.format('%02X%02X%02X%02X', a * 255, r * 255, g * 255, b * 255)
@@ -142,7 +142,7 @@ local function createColorPicker(parentFrame, dbObj, objName, displayText)
 		dbObj[objName] = value
 	end
 
-	local Button = CreateFrame('Button', ADDON_NAME.."_config_colorpicker_" .. colorPickerIndex, parentFrame, BackdropTemplateMixin and "BackdropTemplate")
+	local Button = CreateFrame('Button', ADDON_NAME.."_config_colorpicker_"..colorPickerIndex, parentFrame, BackdropTemplateMixin and "BackdropTemplate")
 	Button:SetSize(25, 25)
 	Button:SetScript('OnClick', function(self)
 		local r, g, b, a = ToRGBA(dbObj[objName])

@@ -25,8 +25,20 @@ local function dbg(msg)
 
 	if not (addon.debugChat or (_G.XCHT_DB and _G.XCHT_DB.debugChat)) then return end
 	if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
-		pcall(_G.DEFAULT_CHAT_FRAME.AddMessage, _G.DEFAULT_CHAT_FRAME, DEBUG_PREFIX .. ": " .. msg)
+		pcall(_G.DEFAULT_CHAT_FRAME.AddMessage, _G.DEFAULT_CHAT_FRAME, DEBUG_PREFIX..": "..msg)
 	end
+end
+
+--apparently you can do tostring() on secret values and they will print out in chat, but you cannot copy it to a copyframe, a placeholder would have to be used
+local doSafeToString = function(v)
+	local fn = tostring
+	if type(fn) == "function" then
+		local ok, res = pcall(fn, v)
+		if ok and res then
+			return ok, res
+		end
+	end
+	return false
 end
 
 local function safeValue(v, depth)
@@ -38,7 +50,8 @@ local function safeValue(v, depth)
 	local t = type(v)
 	if t == "string" then
 		if addon.isSecretValue(v) then
-			return "<secret-string>"
+			local boolChk, safeToString = doSafeToString(v)
+			return "<secret-string>"..(boolChk and "-> "..safeToString)
 		end
 		if not addon.canAccessValue(v) then
 			return "<inaccessible-string>"
@@ -55,7 +68,7 @@ local function safeValue(v, depth)
 		if v.GetObjectType then
 			local name = v:GetName()
 			if name then
-				return "<Frame:" .. name .. ">"
+				return "<Frame:"..name..">"
 			end
 			return "<Frame:anonymous>"
 		end
@@ -74,14 +87,14 @@ local function safeValue(v, depth)
 		for k, val in pairs(v) do
 			count = count + 1
 			if count > 10 then
-				result = result .. " ...<truncated>"
+				result = result.." ...<truncated>"
 				break
 			end
 			local keyStr = safeValue(k, depth + 1)
 			local valStr = safeValue(val, depth + 1)
-			result = result .. "[" .. keyStr .. "]=" .. valStr .. ", "
+			result = result.."["..keyStr.."]="..valStr..", "
 		end
-		result = result .. "}"
+		result = result.."}"
 		return result
 	end
 	if t == "function" then
@@ -90,7 +103,7 @@ local function safeValue(v, depth)
 	if t == "userdata" then
 		return "<userdata>"
 	end
-	return "<" .. t .. ">"
+	return "<"..t..">"
 end
 
 local function safeLength(v)
@@ -108,7 +121,8 @@ end
 
 local function safeSub(v, startPos, length)
 	if addon.isSecretValue and addon.isSecretValue(v) then
-		return "<secret-string>"
+		local boolChk, safeToString = doSafeToString(v)
+		return "<secret-string>"..(boolChk and "-> "..safeToString)
 	end
 	if addon.canAccessValue and not addon.canAccessValue(v) then
 		return "<inaccessible-string>"

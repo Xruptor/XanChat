@@ -20,10 +20,10 @@ local function setupChatFrame(chatID)
 
 	if not chatID then return end
 
-	local n = "ChatFrame" .. chatID
+	local n = "ChatFrame"..chatID
 	local f = _G[n]
-	local fTab = _G[n .. "Tab"]
-	local editBox = _G[n .. "EditBox"]
+	local fTab = _G[n.."Tab"]
+	local editBox = _G[n.."EditBox"]
 
 	if f and not processedFrames[n] then
 		-- Ensure new frames respect chat history size
@@ -42,14 +42,14 @@ local function setupChatFrame(chatID)
 		if _G.XCHT_DB and _G.XCHT_DB.disableChatFrameFade and _G.CHAT_FRAME_TEXTURES then
 			local alpha = _G.XCHT_DB.userChatAlpha or _G.DEFAULT_CHATFRAME_ALPHA or 0.25
 			for i = 1, #_G.CHAT_FRAME_TEXTURES do
-				local object = _G[n .. _G.CHAT_FRAME_TEXTURES[i]]
+				local object = _G[n.._G.CHAT_FRAME_TEXTURES[i]]
 				if object then
 					object:SetAlpha(alpha)
 				end
 			end
 		elseif _G.CHAT_FRAME_TEXTURES then
 			for i = 1, #_G.CHAT_FRAME_TEXTURES do
-				local object = _G[n .. _G.CHAT_FRAME_TEXTURES[i]]
+				local object = _G[n.._G.CHAT_FRAME_TEXTURES[i]]
 				if object then
 					object:SetAlpha(0)
 				end
@@ -134,9 +134,9 @@ local function setupChatFrame(chatID)
 
 			-- EditBox design changes
 			if not editBox.left then
-				editBox.left = _G[n .. "EditBoxLeft"]
-				editBox.right = _G[n .. "EditBoxRight"]
-				editBox.mid = _G[n .. "EditBoxMid"]
+				editBox.left = _G[n.."EditBoxLeft"]
+				editBox.right = _G[n.."EditBoxRight"]
+				editBox.mid = _G[n.."EditBoxMid"]
 			end
 
 			local editBoxBackdrop

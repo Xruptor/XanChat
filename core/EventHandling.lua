@@ -36,7 +36,7 @@ local function EventIsProcessed(event)
 	local isChatMsg = eventType == "string" and eventSub == "CHAT_MSG"
 
 	if addon and addon.dbg then
-		addon.dbg("EventIsProcessed: event=" .. tostring(event) .. " type=" .. tostring(eventType) .. " sub=" .. tostring(eventSub) .. " isChatMsg=" .. tostring(isChatMsg))
+		addon.dbg("EventIsProcessed: event="..tostring(event).." type="..tostring(eventType).." sub="..tostring(eventSub).." isChatMsg="..tostring(isChatMsg))
 	end
 
 	if isChatMsg then
@@ -48,7 +48,7 @@ end
 
 local function callOriginalMessageHandler(self, frame, event, ...)
 	if addon and addon.dbg then
-		addon.dbg("callOriginalMessageHandler: event=" .. tostring(event) .. " _chatEventHooked=" .. tostring(self._chatEventHooked))
+		addon.dbg("callOriginalMessageHandler: event="..tostring(event).." _chatEventHooked="..tostring(self._chatEventHooked))
 	end
 
 	if self._chatEventHooked == "global" then

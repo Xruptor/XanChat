@@ -39,21 +39,21 @@ local function addEditBoxHistoryLine(editBox)
 
 	local text = ""
 	local chatType = editBox:GetAttribute("chatType")
-	local header = chatType and _G["SLASH_" .. chatType .. "1"]
+	local header = chatType and _G["SLASH_"..chatType.."1"]
 
 	if header then
 		text = header
 	end
 
 	if chatType == "WHISPER" then
-		text = text .. " " .. editBox:GetAttribute("tellTarget")
+		text = text.." "..editBox:GetAttribute("tellTarget")
 	elseif chatType == "CHANNEL" then
-		text = "/" .. editBox:GetAttribute("channelTarget")
+		text = "/"..editBox:GetAttribute("channelTarget")
 	end
 
 	local editBoxText = editBox:GetText()
 	if editBoxText and editBoxText ~= "" then
-		text = text .. " " .. editBoxText
+		text = text.." "..editBoxText
 		if not text or text == "" then
 			return
 		end

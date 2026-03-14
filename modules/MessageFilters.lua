@@ -17,7 +17,7 @@ local function shouldSuppressJoinLeaveMessage(event, text)
 	end
 
 	if addon and addon.dbg then
-		addon.dbg("shouldSuppressJoinLeaveMessage: checking event=" .. tostring(event))
+		addon.dbg("shouldSuppressJoinLeaveMessage: checking event="..tostring(event))
 	end
 
 	if event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_JOIN" or event == "CHAT_MSG_CHANNEL_LEAVE" then

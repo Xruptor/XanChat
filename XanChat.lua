@@ -73,7 +73,7 @@ function addon:ParseChatEvent(frame, event, ...)
 
 	addon.dbg("ParseChatEvent: isSecret=" .. tostring(isSecret) .. " arg1=" .. addon.dbgValue(arg1))
 
-	if type(event) ~= "string" or string.sub(event, 1, 8) ~= "CHAT_MSG" then
+	if type(event) ~= "string" or string.sub(event, 1, 8) ~= "CHAT_MSG" then  -- Check if event starts with "CHAT_MSG" (e.g., "CHAT_MSG_WHISPER")
 		addon.dbg("ParseChatEvent: not a CHAT_MSG event, returning nil")
 		return nil, nil
 	end
@@ -83,7 +83,7 @@ function addon:ParseChatEvent(frame, event, ...)
 		return true
 	end
 
-	local chatType = string.sub(event, 10)
+	local chatType = string.sub(event, 10)  -- Extract from EVENT name, e.g., "CHAT_MSG_WHISPER_INFORM" -> "WHISPER_INFORM" (NOT from template like CHAT_WHISPER_INFORM_GET)
 	local info
 
 	-- Get chat info (color, etc.)
@@ -113,8 +113,9 @@ function addon:ParseChatEvent(frame, event, ...)
 	s.CHATGROUP = chatGroup
 
 	-- Type prefix from CHAT_*_GET templates (short channel names)
+	-- chatType came from string.sub(event, 10), now we build the template lookup key
 	local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
-	local chatGetKey = "CHAT_" .. chatType .. "_GET"
+	local chatGetKey = "CHAT_" .. chatType .. "_GET"  -- e.g., "WHISPER_INFORM" -> "CHAT_WHISPER_INFORM_GET"
 	if chatType ~= "CHANNEL" and chatGetKey then
 		local chatGet = (useShortNames and addon.L and addon.L[chatGetKey]) or _G[chatGetKey]
 		if type(chatGet) == "string" then
@@ -148,9 +149,8 @@ function addon:ParseChatEvent(frame, event, ...)
 
 	-- Check if player name is a secret value (SEPARATE from message text secret check)
 	local isArg2Secret = _G.issecretvalue and _G.issecretvalue(arg2)
-	local coloredName = nil
-	local senderName = arg2
-	local guidClass = nil  -- Store class from GUID lookup for secret messages
+	local isArg12Secret = _G.issecretvalue and _G.issecretvalue(arg12)
+	local hasSafePlayerName = false  -- Track if we successfully retrieved a safe player name
 
 	if addon and addon.dbg then
 		addon.dbg("ParseChatEvent: isArg2Secret=" .. tostring(isArg2Secret) .. " arg12=" .. addon.dbgSafeValue(arg12))
@@ -159,62 +159,136 @@ function addon:ParseChatEvent(frame, event, ...)
 	-- If arg2 is secret, try to get player name and class from GUID (arg12)
 	-- This matches Baseline's approach for secret boss encounter messages
 	-- GetPlayerInfoByGUID returns: localizedClass, englishClass, localizedRace, englishRace, sex, name, realmName
-	local isArg12Secret = _G.issecretvalue and _G.issecretvalue(arg12)
-	if isArg2Secret and not isArg12Secret and arg12 and _G.GetPlayerInfoByGUID then
+	if isArg2Secret and _G.GetPlayerInfoByGUID then
 		if addon and addon.dbg then
-			addon.dbg("ParseChatEvent: arg2 is secret but arg12 is not, trying GetPlayerInfoByGUID")
+			addon.dbg("ParseChatEvent: arg2 is secret, trying GetPlayerInfoByGUID")
 		end
-		local _, englishClass, _, _, name = _G.GetPlayerInfoByGUID(arg12)
+		local _, englishClass, _, _, _, name, realmName = _G.GetPlayerInfoByGUID(arg12)
+
 		if name then
-			coloredName = name
-			senderName = name
-			guidClass = englishClass  -- Capture class for styling
-			isArg2Secret = false  -- Now we have a safe player name
+			s.player_name = name
+			s.player_class = englishClass
+			s.server_name = realmName
+			hasSafePlayerName = true  -- Now we have a safe player name
 			if addon and addon.dbg then
 			addon.dbg("ParseChatEvent: Got player info from GUID: name=" .. addon.dbgSafeValue(name) .. " class=" .. addon.dbgSafeValue(englishClass))
 			end
+		elseif addon and addon.dbg then
+			addon.dbg("ParseChatEvent: GetPlayerInfoByGUID returned nil name, will try lineID fallback")
 		end
-	elseif isArg2Secret and isArg12Secret then
-		if addon and addon.dbg then
-			addon.dbg("ParseChatEvent: Both arg2 and arg12 are secret, cannot get player name for styling")
+		addon.dbg("ChatFrame_MessageEventHandler: arg12 >> GetPlayerInfoByGUID  englishClass="..addon.dbgSafeValue(englishClass).." name="..addon.dbgSafeValue(name))
+	end
+
+	-- Fallback: try lineID (arg11) to get player name via C_ChatInfo
+	-- This handles two cases:
+	-- 1. Both arg2 and arg12 are secret
+	-- 2. arg2 is secret but arg12 failed to return a valid name
+	if isArg2Secret and not hasSafePlayerName then
+		-- Third fallback: try lineID (arg11) to get player name via C_ChatInfo
+		-- This handles cases where both arg2 (sender name) and arg12 (sender GUID) are secret
+		local lineID = arg11 or 0
+		local isLineSecret = _G.issecretvalue and _G.issecretvalue(lineID)
+		if not isLineSecret and type(lineID) == "number" and lineID > 0 and _G.C_ChatInfo then
+			if addon and addon.dbg then
+				addon.dbg("ParseChatEvent: arg2 still secret (arg12 lookup failed or was secret), trying lineID fallback: lineID=" .. addon.dbgSafeValue(lineID))
+			end
+			local isValid = true
+			if _G.C_ChatInfo.IsValidChatLine then
+				isValid = _G.C_ChatInfo.IsValidChatLine(lineID)
+			end
+			if isValid and _G.C_ChatInfo.GetChatLineSenderName then
+				local nameChk = _G.C_ChatInfo.GetChatLineSenderName(lineID)
+				if nameChk then
+					s.player_name_with_realm = nameChk
+					hasSafePlayerName = true  -- Now we have a safe player name
+					if addon and addon.dbg then
+						addon.dbg("ParseChatEvent: Got player name from lineID GetChatLineSenderName: nameChk=" .. addon.dbgSafeValue(nameChk))
+					end
+				end
+			end
+			-- If GetChatLineSenderName didn't work, try GetChatLineSenderGUID
+			if isValid and _G.C_ChatInfo.GetChatLineSenderGUID and _G.GetPlayerInfoByGUID then
+				local guidChk = _G.C_ChatInfo.GetChatLineSenderGUID(lineID)
+				if guidChk then
+					local _, englishClassChk, _, _, _, guidNameChk, realmNameChk = _G.GetPlayerInfoByGUID(guidChk)
+					if guidNameChk then
+						s.player_name = guidNameChk
+						s.player_class = englishClassChk
+						s.server_name = realmNameChk
+						hasSafePlayerName = true  -- Now we have a safe player name
+						if addon and addon.dbg then
+							addon.dbg("ParseChatEvent: Got player name from lineID GetChatLineSenderGUID + GetPlayerInfoByGUID: guidNameChk=" .. addon.dbgSafeValue(guidNameChk) .. " class=" .. addon.dbgSafeValue(englishClassChk))
+						end
+					end
+				end
+			end
+			addon.dbg("ParseChatEvent: arg11 > lineID is not secret lineID="..addon.dbgSafeValue(lineID).." isValid="..addon.dbgSafeValue(isValid).." nameChk="..addon.dbgSafeValue(coloredName).." senderName="..addon.dbgSafeValue(arg2).." player_name_with_realm="..addon.dbgSafeValue(s.player_name_with_realm))
+		elseif isLineSecret then
+
+			if addon and addon.dbg then
+				addon.dbg("ParseChatEvent: arg2 still secret and lineID is also secret - cannot get player name")
+			end
+		else
+			if addon and addon.dbg then
+				addon.dbg("ParseChatEvent: arg2 still secret but lineID not available or invalid - cannot get player name")
+			end
 		end
 	end
 
-	-- Store GUID class in message object for StylePlayerSection to use
-	if guidClass then
-		s.player_class = guidClass
-		if addon and addon.dbg then
-			addon.dbg("ParseChatEvent: Set s.player_class=" .. addon.dbgSafeValue(guidClass) .. " from GUID lookup (arg2 was secret)")
-		end
-	end
+	local coloredName = nil
+	local senderName = nil
 
 	-- Extract player information
 	-- Use canaccessvalue to safely check if we can work with arg2
-	if isArg2Secret then
+	if isArg2Secret and not hasSafePlayerName then
 		if addon and addon.dbg then
-			addon.dbg("ParseChatEvent: Skipping player info extraction - arg2 is secret")
+			addon.dbg("ParseChatEvent: Skipping player info extraction - arg2 is secret and no safe player name found")
 		end
-	elseif not _G.canaccessvalue or _G.canaccessvalue(senderName) then
+	else
 		-- Set coloredName only after confirming it's accessible
-		coloredName = senderName or ""
+		senderName = s.player_name_with_realm or arg2
+		coloredName = senderName
 
-		-- Trim arg2 only if not secret
-		if not isArg2Secret then
-			coloredName = string.match(coloredName, "^%s*(.-)%s*$") or coloredName
+		-- Extract name and server
+		local plr, svr
+		if type(coloredName) == "string" then
+			plr, svr = coloredName:match("([^%-]+)%-?(.*)")
 		end
 
-		-- Check if secret (Ambiguate guard)
-		if _G.Ambiguate and (not _G.issecretvalue or not _G.issecretvalue(senderName)) then
+		if plr then
+			s.player_name = plr
+		end
+		if svr and string.len(svr) > 0 then
+			s.server_separator = "-"
+			s.server_name = svr
+		end
+
+		-- Check if secret (Ambiguate guard), if it is then use the regular player name as fallback
+		if _G.Ambiguate and not isArg2Secret then
 			if chatType == "GUILD" then
 				coloredName = _G.Ambiguate(coloredName, "guild")
 			else
 				coloredName = _G.Ambiguate(coloredName, "none")
 			end
+		else
+			coloredName = s.player_name
 		end
 
-		local hasSenderName = type(senderName) == "string" and senderName ~= ""
+		-- Add timerunning icon when necessary based on player guid
+		-- Timerunning players have a special blue hourglass icon next to their name
+		if not isArg12Secret and arg12 and type(arg12) == "string" and _G.C_ChatInfo and _G.C_ChatInfo.IsTimerunningPlayer then
+			if _G.C_ChatInfo.IsTimerunningPlayer(arg12) then
+				-- Use Blizzard's TimerunningUtil if available
+				if _G.TimerunningUtil and _G.TimerunningUtil.AddSmallIcon then
+					coloredName = _G.TimerunningUtil.AddSmallIcon(coloredName)
+				elseif addon and addon.dbg then
+					addon.dbg("ParseChatEvent: TimerunningUtil not available, cannot add timerunning icon")
+				end
+			end
+		end
+
 		-- Create player link
-		if hasSenderName and string.sub(chatType, 1, 7) ~= "MONSTER" and string.sub(chatType, 1, 18) ~= "RAID_BOSS_EMOTE" and
+		if string.sub(chatType, 1, 7) ~= "MONSTER" and string.sub(chatType, 1, 18) ~= "RAID_BOSS_EMOTE" and
 		    chatType ~= "CHANNEL_NOTICE" and chatType ~= "CHANNEL_NOTICE_USER" then
 
 			local playerLink
@@ -230,20 +304,6 @@ function addon:ParseChatEvent(frame, event, ...)
 				end
 
 			s.player_link = playerLink
-
-			-- Extract name and server
-			local plr, svr
-			if type(senderName) == "string" then
-				plr, svr = senderName:match("([^%-]+)%-?(.*)")
-			end
-
-			if plr then
-				s.player_name = plr
-			end
-			if svr and string.len(svr) > 0 then
-				s.server_separator = "-"
-				s.server_name = svr
-			end
 		end
 	end
 
@@ -348,54 +408,11 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 		local s = type(parsedMessage) == "table" and parsedMessage or addon.sectionOriginal or {}
 
-		local chatType = s.CHATTYPE or (type(event) == "string" and string.sub(event, 10) or nil)
-		local chatGet = chatType and _G["CHAT_" .. chatType .. "_GET"] or nil
-		local infoRow = s.INFO or info or (_G.ChatTypeInfo and chatType and _G.ChatTypeInfo[chatType]) or (_G.ChatTypeInfo and _G.ChatTypeInfo.SYSTEM) or {}
+		local infoRow = s.INFO or info or (_G.ChatTypeInfo and _G.ChatTypeInfo.SYSTEM) or {}
 		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
 
-		local safeName = nil
-		if type(s.player_name) == "string" and s.player_name ~= "" and (not _G.issecretvalue or not _G.issecretvalue(s.player_name)) then
-			safeName = s.player_name
-		end
-		if not safeName then
-			local lineID = arg11
-			local isLineSecret = _G.issecretvalue and _G.issecretvalue(lineID)
-			if not isLineSecret and type(lineID) == "number" and lineID > 0 and _G.C_ChatInfo then
-				local isValid = true
-				local nameChk, guidNameChk, guidChk
-				if _G.C_ChatInfo.IsValidChatLine then
-					isValid = _G.C_ChatInfo.IsValidChatLine(lineID)
-				end
-				if isValid and _G.C_ChatInfo.GetChatLineSenderName then
-					nameChk = _G.C_ChatInfo.GetChatLineSenderName(lineID)
-					if nameChk and (not _G.issecretvalue or not _G.issecretvalue(nameChk)) then
-						safeName = nameChk
-					end
-				end
-				if not safeName and isValid and _G.C_ChatInfo.GetChatLineSenderGUID and _G.GetPlayerInfoByGUID then
-					guidChk = _G.C_ChatInfo.GetChatLineSenderGUID(lineID)
-					if guidChk and (not _G.issecretvalue or not _G.issecretvalue(guidChk)) then
-						local _, _, _, _, _, guidNameChk = _G.GetPlayerInfoByGUID(guidChk)
-						if guidNameChk and (not _G.issecretvalue or not _G.issecretvalue(guidNameChk)) then
-							safeName = guidNameChk
-						end
-					end
-				end
-				addon.dbg("ChatFrame_MessageEventHandler: arg11 > lineID is not secret lineID="..addon.dbgSafeValue(lineID).." isValid="..addon.dbgSafeValue(isValid).." nameChk="..addon.dbgSafeValue(nameChk).." guidChk="..addon.dbgSafeValue(guidChk).." guidNameChk="..addon.dbgSafeValue(guidNameChk).." safeName="..addon.dbgSafeValue(safeName))
-			elseif isLineSecret then
-				addon.dbg("ChatFrame_MessageEventHandler: arg11 > lineID is secret")
-			end
-		end
-
-		local prefix = ""
-		if safeName and type(chatGet) == "string" then
-			local ok, formatted = pcall(string.format, chatGet, "[" .. safeName .. "]")
-			if ok and formatted then
-				prefix = formatted
-			end
-		end
-
-		local textToDisplay = prefix .. (arg1 or "")
+		-- Use the clickable player_link that ParseChatEvent already generated
+		local textToDisplay = (s.player_link or "") .. (s.player_link and ": " or "") .. (arg1 or "")
 		addon.dbg("ChatFrame_MessageEventHandler: secret local output=" .. addon.dbgSafeValue(textToDisplay))
 		this:AddMessage(textToDisplay, outR, outG, outB, outID)
 		addon.dbg("ChatFrame_MessageEventHandler: secret local output added, returning true")
@@ -560,6 +577,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		-- else
 		if processMode == addon.EventProcessingType.Full then
 			addon.dbg("ChatFrame_MessageEventHandler: using Full processing mode, building from sections")
+			addon.dbg("ChatFrame_MessageEventHandler: player_link=" .. addon.dbgSafeValue(m.player_link) .. " player_name=" .. addon.dbgSafeValue(m.player_name))
 			textToDisplay = addon.FormatChatMessage(m) or ""
 		elseif processMode == addon.EventProcessingType.PatternsOnly then
 			addon.dbg("ChatFrame_MessageEventHandler: using PatternsOnly processing mode")
@@ -592,7 +610,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			local isCensored = arg11 and _G.C_ChatInfo and _G.C_ChatInfo.IsChatLineCensored(arg11)
 			local visibleText = isCensored and (arg1 or "") or textToDisplay
 
-			addon.dbg("ChatFrame_MessageEventHandler: isCensored=" .. (addon.dbgSafeBool and addon.dbgSafeBool(isCensored) or tostring(isCensored)))
+			addon.dbg("ChatFrame_MessageEventHandler: isCensored=" .. (addon.dbgSafeBool and addon.dbgSafeBool(isCensored) or tostring(isCensored)) .. " using_censored_text=" .. tostring(isCensored))
 
 			if isCensored then
 				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
