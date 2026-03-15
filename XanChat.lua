@@ -159,7 +159,7 @@ function addon:ParseChatEvent(frame, event, ...)
 	-- If arg2 is secret, try to get player name and class from GUID (arg12)
 	-- This matches Baseline's approach for secret boss encounter messages
 	-- GetPlayerInfoByGUID returns: localizedClass, englishClass, localizedRace, englishRace, sex, name, realmName
-	if isArg2Secret and _G.GetPlayerInfoByGUID then
+	if isArg2Secret and not isArg12Secret and arg12 and type(arg12) == "string" and _G.GetPlayerInfoByGUID then
 		if addon and addon.dbg then
 			addon.dbg("ParseChatEvent: arg2 is secret, trying GetPlayerInfoByGUID")
 		end
@@ -246,7 +246,7 @@ function addon:ParseChatEvent(frame, event, ...)
 		end
 	else
 		-- Set coloredName only after confirming it's accessible
-		senderName = s.player_name_with_realm or arg2
+		senderName = arg2 or s.player_name_with_realm
 		coloredName = senderName
 
 		-- Extract name and server
@@ -290,20 +290,20 @@ function addon:ParseChatEvent(frame, event, ...)
 		-- Create player link
 		if string.sub(chatType, 1, 7) ~= "MONSTER" and string.sub(chatType, 1, 18) ~= "RAID_BOSS_EMOTE" and
 		    chatType ~= "CHANNEL_NOTICE" and chatType ~= "CHANNEL_NOTICE_USER" then
-
 			local playerLink
 
-				if chatType == "BN_WHISPER" or chatType == "BN_WHISPER_INFORM" or chatType == "BN_CONVERSATION" then
-					if arg13 then
-						playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", senderName, arg13, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
-					else
-						playerLink = "[" .. coloredName .. "]"
-					end
+			if chatType == "BN_WHISPER" or chatType == "BN_WHISPER_INFORM" or chatType == "BN_CONVERSATION" then
+				if arg13 then
+					playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", senderName, arg13, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
 				else
-					playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", senderName, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
+					playerLink = "[" .. coloredName .. "]"
 				end
+			else
+				playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", senderName, arg11 or 0, chatGroup or 0, chatTarget or "", coloredName)
+			end
 
 			s.player_link = playerLink
+			addon.dbg("ParseChatEvent: player_link created=" .. addon.dbgSafeValue(playerLink))
 		end
 	end
 
