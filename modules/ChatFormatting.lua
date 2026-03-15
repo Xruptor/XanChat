@@ -19,7 +19,7 @@ end
 -- All possible data keys that can be populated from a chat event.
 local CHAT_DATA_KEYS = {
     "prefix_text", "type_prefix", "channel_link", "channel_number", "channel_name", "zone_name",
-    "player_flag", "timerunner", "player_link", "player_name", "player_name_with_realm", "player_class", "non_player_name", "server_name", "server_separator",
+    "player_flag", "timerunner", "player_link", "player_guid", "player_name", "player_name_with_realm", "player_class", "non_player_name", "server_name", "server_separator",
     "type_postfix", "language", "mobile_icon", "message_text", "postfix_text", "styled_player_name", "PRE", "POST"
 }
 
@@ -65,8 +65,8 @@ local function FormatChatMessage(message)
 	-- Helper function to safely get and trim values
 	local function getValue(field)
 		local value = m[field] or ""
-		if _G.issecretvalue and _G.issecretvalue(value) then return "" end
-		if _G.canaccessvalue and not _G.canaccessvalue(value) then return "" end
+		if addon.isSecretValue(value) then return "" end
+		if not addon.canAccessValue(value) then return "" end
 		if type(value) ~= "string" then return "" end
 		return value:gsub("^%s+", ""):gsub("%s+$", "")
 	end

@@ -79,7 +79,7 @@ local function MatchPatterns(m, ptype)
 	local text = m.message_text or ""
 
 	-- Secret value guard
-	if _G.issecretvalue and _G.issecretvalue(text) then
+	if addon.isSecretValue(text) then
 		if addon.dbg then addon.dbg("MatchPatterns: secret value, returning") end
 		return text
 	end
@@ -122,7 +122,7 @@ local function ReplaceMatches(m, ptype)
 	local text = m.message_text or ""
 
 	-- Secret value guard
-	if _G.issecretvalue and _G.issecretvalue(text) then
+	if addon.isSecretValue(text) then
 		if addon.dbg then addon.dbg("ReplaceMatches: secret value, returning") end
 		return text
 	end

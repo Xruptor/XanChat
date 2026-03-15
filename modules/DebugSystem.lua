@@ -51,7 +51,7 @@ local function safeValue(v, depth)
 	if t == "string" then
 		if addon.isSecretValue(v) then
 			local boolChk, safeToString = doSafeToString(v)
-			return "<secret-string>"..(boolChk and "-> "..safeToString)
+			return "<secret-string>"..(boolChk and " ¦¦¦ "..safeToString)
 		end
 		if not addon.canAccessValue(v) then
 			return "<inaccessible-string>"
@@ -122,7 +122,7 @@ end
 local function safeSub(v, startPos, length)
 	if addon.isSecretValue and addon.isSecretValue(v) then
 		local boolChk, safeToString = doSafeToString(v)
-		return "<secret-string>"..(boolChk and "-> "..safeToString)
+		return "<secret-string>"..(boolChk and " ¦¦¦ "..safeToString)
 	end
 	if addon.canAccessValue and not addon.canAccessValue(v) then
 		return "<inaccessible-string>"

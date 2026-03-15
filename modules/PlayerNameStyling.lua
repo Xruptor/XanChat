@@ -44,17 +44,102 @@ local function wrapInColor(text, r, g, b)
 	return "|c"..hexColor..text.."|r"
 end
 
+local function addTimeRunningIcon(guid, stylizedName)
+	if not stylizedName then return "" end
+	if not guid then return stylizedName end
+	if addon.isSecretValue(guid) then return stylizedName end
+	if type(guid) ~= "string" then return stylizedName end
+	if not _G.C_ChatInfo or not _G.C_ChatInfo.IsTimerunningPlayer then return stylizedName end
+	if not _G.TimerunningUtil or not  _G.TimerunningUtil.AddSmallIcon then return stylizedName end
+
+	stylizedName = _G.TimerunningUtil.AddSmallIcon(stylizedName)
+	return stylizedName
+end
+
 -- ============================================================================
 -- PLAYER SECTION FORMATTING
 -- ============================================================================
 
 local function StylePlayerSection(m)
 	if not addon then return end
+	local isSecret = addon.isSecretValue(m.player_name)
 
-	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) then
+	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) or isSecret then
+		-- Even if player chat style is disabled, we still need to generate player_link for clickable names
+		if not m.player_name or (not isSecret and m.player_name == "") then
+			return
+		end
+
+		-- Try to get class color for the player name
+		local coloredPlayerName = m.player_name
+		local playerClass = m.player_class
+
+		--only do these checks if we don't have secret values, since we cannot do table lookups using secret value keys
+		if not isSecret and (not playerClass or playerClass == "") and addon.getPlayerInfo then
+			-- If class not available from ParseChatEvent, check player table using getPlayerInfo
+			local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
+			if playerInfo and playerInfo.class then
+				playerClass = playerInfo.class
+			end
+		elseif isSecret and (m.player_guid and not playerClass)  then
+			local _, englishClassChk = _G.GetPlayerInfoByGUID(m.player_guid)
+			playerClass = englishClassChk
+		end
+
+		-- Apply class color for non-secret, because you cannot do a table lookup using secret values
+		if not isSecret and playerClass and playerClass ~= "" then
+			local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
+			if classColorTable then
+				local classColor = classColorTable[playerClass]
+				if classColor then
+					coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
+					if addon and addon.dbg then
+						addon.dbg("StylePlayerSection: class color applied for disabled style="..addon.dbgSafeValue(playerClass))
+					end
+				end
+			end
+		elseif isSecret and playerClass and C_ClassColor then
+			--NOTE:  This is the only real way to colorize a player name that is a secret value.  Because we also pass secret value class to a blizzard function.
+			local classColor = C_ClassColor.GetClassColor(playerClass)
+			if classColor then
+				coloredPlayerName = classColor:WrapTextInColorCode(coloredPlayerName)
+				addon.dbg("StylePlayerSection: class color applied for (secret) coloredPlayerName="..addon.dbgSafeValue(coloredPlayerName))
+			end
+
+		end
+
+		-- Generate clickable player link with class color
+		if m.sender_name and string.sub(m.chat_type or "", 1, 7) ~= "MONSTER" and
+		    string.sub(m.chat_type or "", 1, 18) ~= "RAID_BOSS_EMOTE" and
+		    m.chat_type ~= "CHANNEL_NOTICE" and m.chat_type ~= "CHANNEL_NOTICE_USER" then
+
+			local linkTarget = m.sender_name
+			local displayText = coloredPlayerName
+
+			-- Add timerunning icon if available, checks for secret values just in case
+			displayText = addTimeRunningIcon(m.player_guid, displayText)
+
+			local playerLink
+			if m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
+				if m.arg13 then
+					playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
+				else
+					playerLink = "[" .. displayText .. "]"
+				end
+			else
+				playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
+			end
+
+			m.player_link = playerLink
+			m.styled_player_name = displayText
+			if addon and addon.dbg then
+				addon.dbg("StylePlayerSection: class-colored player_link created="..addon.dbgSafeValue(playerLink).." styled_player_name="..addon.dbgSafeValue(displayText))
+			end
+		end
 		return
 	end
-	if not m.player_name or m.player_name == "" then
+
+	if not m.player_name or (not addon.isSecretValue(m.player_name) and m.player_name == "") then
 		return
 	end
 
@@ -90,18 +175,14 @@ local function StylePlayerSection(m)
 
 	-- Always look up player info for level, even if we have extracted color
 	local playerInfo = nil
-	local nameToLookup = m.player_name or m.player_link
-	if nameToLookup then
-		local cleanName = string.gsub(string.lower(nameToLookup), "[^%a%d]", "")
-		playerInfo = addon.playerListByName and addon.playerListByName[cleanName]
+	local fallbackPlayerName = m.player_name_with_realm
 
-		if not playerInfo then
-			-- Fallback to original name if cleanName lookup fails
-			playerInfo = addon.playerListByName and addon.playerListByName[nameToLookup]
-		end
+	-- Use getPlayerInfo to lookup player in table
+	if addon.getPlayerInfo then
+		playerInfo = addon.getPlayerInfo(m.player_guid, fallbackPlayerName, m.player_name, m.server_name)
 
 		if addon and addon.dbg then
-			addon.dbg("-->player list lookup: name="..addon.dbgSafeValue(nameToLookup).." clean="..addon.dbgSafeValue(cleanName).." found="..tostring(playerInfo and "yes" or "no"))
+			addon.dbg("-->player list lookup: guid="..addon.dbgSafeValue(m.player_guid).." name="..addon.dbgSafeValue(m.player_name).." fallback="..addon.dbgSafeValue(fallbackPlayerName).." found="..tostring(playerInfo and "yes" or "no"))
 			if playerInfo then
 				addon.dbg("-->playerInfo: level="..addon.dbgSafeValue(playerInfo.level or "nil").." class="..addon.dbgSafeValue(playerInfo.class or "nil"))
 			end
@@ -182,20 +263,60 @@ local function StylePlayerSection(m)
 		end
 	end
 
-	-- Construct styled player name directly without templates
-	if coloredLevel ~= "" then
-		-- Format: [70:Xruptor]
-		m.styled_player_name = "["..coloredLevel..":"..coloredPlayerName.."]"
+	-- Construct styled player name as a clickable link
+	-- Generate the clickable player link with level and class color
+	if m.sender_name and string.sub(m.chat_type or "", 1, 7) ~= "MONSTER" and
+	    string.sub(m.chat_type or "", 1, 18) ~= "RAID_BOSS_EMOTE" and
+	    m.chat_type ~= "CHANNEL_NOTICE" and m.chat_type ~= "CHANNEL_NOTICE_USER" then
+
+		local linkTarget = m.sender_name
+		local displayText = coloredPlayerName
+
+		-- Add level prefix if available
+		if coloredLevel ~= "" then
+			displayText = coloredLevel..":"..coloredPlayerName
+		end
+
+		-- Add timerunning icon if available, checks for secret values just in case
+		displayText = addTimeRunningIcon(m.player_guid, displayText)
+
+		local playerLink
+		if m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
+			if m.arg13 then
+				playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
+			else
+				playerLink = "[" .. displayText .. "]"
+			end
+		else
+			playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
+		end
+
+		m.player_link = playerLink
+		m.styled_player_name = playerLink
 		if addon and addon.dbg then
-			addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(coloredLevel)..":"..addon.dbgSafeValue(m.player_name).."]")
-			addon.dbg("-->Final styled name result: "..addon.dbgSafeValue(m.styled_player_name))
+			addon.dbg("-->clickable player_link created: "..addon.dbgSafeValue(playerLink))
+			if coloredLevel ~= "" then
+				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(coloredLevel)..":"..addon.dbgSafeValue(m.player_name).."]")
+			else
+				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(m.player_name).."] (no level)")
+			end
 		end
 	else
-		-- Format: [Xruptor]
-		m.styled_player_name = "["..coloredPlayerName.."]"
-		if addon and addon.dbg then
-			addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(m.player_name).."] (no level)")
-			addon.dbg("-->Final styled name result: "..addon.dbgSafeValue(m.styled_player_name))
+		-- Fallback: non-clickable styled player name for non-player messages
+		if coloredLevel ~= "" then
+			-- Format: [70:Xruptor]
+			m.styled_player_name = "["..coloredLevel..":"..coloredPlayerName.."]"
+			if addon and addon.dbg then
+				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(coloredLevel)..":"..addon.dbgSafeValue(m.player_name).."]")
+				addon.dbg("-->Final styled name result: "..addon.dbgSafeValue(m.styled_player_name))
+			end
+		else
+			-- Format: [Xruptor]
+			m.styled_player_name = "["..coloredPlayerName.."]"
+			if addon and addon.dbg then
+				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(m.player_name).."] (no level)")
+				addon.dbg("-->Final styled name result: "..addon.dbgSafeValue(m.styled_player_name))
+			end
 		end
 	end
 
