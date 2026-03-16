@@ -30,6 +30,9 @@ local function dbg(msg)
 end
 
 --apparently you can do tostring() on secret values and they will print out in chat, but you cannot copy it to a copyframe, a placeholder would have to be used
+--so hilariously for some reason doing string concatenating with secret values works.
+--In addition I've found that tostring() also works fine with secret values.  Which seems to be because tostring() is a lua function and you are still technically doing string conversions.
+--Oh also using lower() seems to work too on secret values.
 local doSafeToString = function(v)
 	local fn = tostring
 	if type(fn) == "function" then
@@ -51,6 +54,7 @@ local function safeValue(v, depth)
 	if t == "string" then
 		if addon.isSecretValue(v) then
 			local boolChk, safeToString = doSafeToString(v)
+			--using string concat on secret values works, look at doSafeToString() for more info
 			return "<secret-string>"..(boolChk and " ¦¦¦ "..safeToString)
 		end
 		if not addon.canAccessValue(v) then
@@ -122,6 +126,7 @@ end
 local function safeSub(v, startPos, length)
 	if addon.isSecretValue and addon.isSecretValue(v) then
 		local boolChk, safeToString = doSafeToString(v)
+		--using string concat on secret values works, look at doSafeToString() for more info
 		return "<secret-string>"..(boolChk and " ¦¦¦ "..safeToString)
 	end
 	if addon.canAccessValue and not addon.canAccessValue(v) then
@@ -154,6 +159,50 @@ local function debugPrint(...)
 	end
 	dbg(line)
 end
+
+-- ============================================================================
+-- CHAT LOCKDOWN AND ENCOUNTER DEBUG FUNCTIONS
+-- ============================================================================
+
+-- Tracking variable for chat lockdown state
+local _chatLockdownLast = nil
+
+-- Debug-only: Chat lockdown state probe (does NOT enable/disable hooks).
+function addon:CheckChatLockdownState()
+	if not self.dbg then return end
+	if not (_G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown) then
+		return
+	end
+	local isLocked = _G.C_ChatInfo.InChatMessagingLockdown()
+	if _chatLockdownLast == isLocked then
+		return
+	end
+	_chatLockdownLast = isLocked
+	self.dbg("ChatLockdown: state=" .. (self.dbgSafeBool and self.dbgSafeBool(isLocked) or tostring(isLocked)))
+
+	if self.DebugChatHandlerState then
+		self:DebugChatHandlerState("chat-lockdown-change")
+	end
+end
+
+-- Debug-only: Encounter start hook (does NOT enable/disable hooks).
+function addon:OnEncounterStart()
+	if not self.dbg then return end
+	self.dbg("OnEncounterStart: encounter started (debug only, no hook changes)")
+	if self.DebugChatHandlerState then
+		self:DebugChatHandlerState("encounter-start")
+	end
+end
+
+-- Debug-only: Encounter end hook (does NOT enable/disable hooks).
+function addon:OnEncounterEnd()
+	if not self.dbg then return end
+	self.dbg("OnEncounterEnd: encounter ended (debug only, no hook changes)")
+	if self.DebugChatHandlerState then
+		self:DebugChatHandlerState("encounter-end")
+	end
+end
+
 
 -- ============================================================================
 -- EXPORT FUNCTIONS TO ADDON

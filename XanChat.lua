@@ -392,28 +392,53 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 	addon.dbg("ChatFrame_MessageEventHandler: frame is managed by xanChat")
 
+	--if it's a secret value there is a lot of things we can't do.  We can't use type() or string manipulation on secret values.
+	--What we can do is utilize it in blizzard functions as arguments with no issues, do tostring() and even concatenating them together with other strings
+	--so when dealing with secret values we have to be VERY careful.  The player styling below doesn't do anything other then grab the class color using a blizzard function passing a secret value that is the class.
+	--Then it wraps it together in a color code, again using a blizzard function.  Finally we attach the short channel type prefix or type_prefix followed by the messagae.
 	if isSecretPayload then
 		addon.dbg("ChatFrame_MessageEventHandler: secret payload detected, using local safe rendering")
 		self:DebugChatHandlerState("secret-payload")
 
+		--this parseEvent is specially designed to take secret values into account very carefully for arg1, arg2 and arg12.  arg11 is used to grab a GUID if arg12 is not available.
 		local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
-		local s = type(parsedMessage) == "table" and parsedMessage or addon.sectionOriginal or {}
+		local m = type(parsedMessage) == "table" and parsedMessage or addon.sectionOriginal or {}
 
-		local infoRow = s.INFO or info or (_G.ChatTypeInfo and _G.ChatTypeInfo.SYSTEM) or {}
+		local infoRow = m.INFO or info or {}
 		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
 
 		-- Generate clickable player link using StylePlayerSection for secret payloads
-		addon.StylePlayerSection(s)
+		addon.StylePlayerSection(m)
+		--NOTE: WE CANNOT do channel shortening on secret values payloads because it uses gsub() to do it.  This is not possible with secret values as gsub() is not allowed.
+		--Therefore we cannot do applyShortChannelNamesToSections() during a boss encounter or chat lockdown.
 
-		-- Use the clickable player_link that StylePlayerSection generated
-		local textToDisplay = (s.player_link or "") .. (s.player_link and ": " or "") .. (arg1 or "")
-		addon.dbg("ChatFrame_MessageEventHandler: secret local output=" .. addon.dbgSafeValue(textToDisplay))
-		this:AddMessage(textToDisplay, outR, outG, outB, outID)
-		addon.dbg("ChatFrame_MessageEventHandler: secret local output added, returning true")
+		-- Use the clickable player_link that StylePlayerSection generated.  This one would be a secret value return so we can only do string concatenating
+		local textToDisplay = (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
+		local isSecretText = addon.isSecretValue(textToDisplay)
+
+		addon.dbg("ChatFrame_MessageEventHandler: secret output value=" .. addon.dbgSafeValue(textToDisplay) .. " len=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) .. " isSecretText=" .. tostring(isSecretText))
+		if not isSecretText then
+			--if the string wasn't a secret value then somehow we failed in our initial isSecretPayload check?  That doesn't make sense but hey it happens!
+			--That's the only reason we can do (textToDisplay == "") because string comparisons with secret values will always fail with an error.  You can't do string comparisons with secret values.
+			if not addon.isSafeString or not addon.isSafeString(textToDisplay) or textToDisplay == "" then
+				addon.dbg("ChatFrame_MessageEventHandler: secret output empty or unsafe, skipping display")
+				return true
+			end
+		end
+
+		-- Add chat type prefix if applicable, we can do this with secret keys as we are only adding concatenating strings together
+		textToDisplay = ((m.type_prefix and (m.type_prefix .. " ")) or "")..(textToDisplay or "")
+
+		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
+		--Just output the text we created from scratch.  We can't send anything back to the blizzard original message handlers, because they will ALWAYS error out with a secret value error.
+		--It's usually an Ambiguate error because passing back the string with the secret value as the player name or any modifications causes it to error out.
+		--In general over countless attempts, it's extremely if not impossible to callback to the blizzard handler without it causing an error when dealing with secret values.
+		--That is why we use a custom AddMessage() instead.
+		this:AddMessage(textToDisplay, outR, outG, outB, outID, m.ACCESSID, m.TYPEID)
 		return true
 	end
 
-	if not isSecretPayload and type(arg1) == "string" and string.find(arg1, "\r", 1, true) then
+	if type(arg1) == "string" and string.find(arg1, "\r", 1, true) then
 		addon.dbg("ChatFrame_MessageEventHandler: cleaning carriage returns from message")
 		arg1 = string.gsub(arg1, "\r", " ")
 	end
@@ -433,7 +458,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		addon.dbg("ChatFrame_MessageEventHandler: split returned boolean, passing through")
 		return true
 	end
-	if not isSecretPayload and not info then
+	if not info then
 		addon.dbg("ChatFrame_MessageEventHandler: split failed for non-secret, passthrough")
 		return addon.callOriginalMessageHandler(self, this, event, ...)
 	end
@@ -456,67 +481,24 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		addon.fireCallback(addon.EVENTS.FRAME_MESSAGE, m, this, resolvedEvent)
 	end
 
-	-- Branch: non-secret uses proxy capture, secret uses direct output
-	if not isSecretPayload then
-		addon.dbg("ChatFrame_MessageEventHandler: NON-SECRET path, using proxy capture")
-		local proxyFrame = addon:CreateProxy(this)
-		m.CAPTUREOUTPUT = proxyFrame
-		addon.captureState.proxy = proxyFrame
-		handlerResult = addon.callOriginalMessageHandler(self, proxyFrame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
-		addon:RestoreProxy()
-		m.OUTPUT = addon.captureState.text
-		addon.dbg("ChatFrame_MessageEventHandler: proxy capture result: " .. addon.dbgValue(m.OUTPUT))
-	else
-		addon.dbg("ChatFrame_MessageEventHandler: SECRET path, using direct output")
-		handlerResult = true
-		m.OUTPUT = arg1 or ""
-	end
+	-- Non-secret path uses proxy capture
+	addon.dbg("ChatFrame_MessageEventHandler: NON-SECRET path, using proxy capture")
+	local proxyFrame = addon:CreateProxy(this)
+	m.CAPTUREOUTPUT = proxyFrame
+	addon.captureState.proxy = proxyFrame
+	handlerResult = addon.callOriginalMessageHandler(self, proxyFrame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+	addon:RestoreProxy()
+	m.OUTPUT = addon.captureState.text
+	addon.dbg("ChatFrame_MessageEventHandler: proxy capture result: " .. addon.dbgValue(m.OUTPUT))
 
 	m.CAPTUREOUTPUT = false
 	addon.captureState.proxy = nil
 
-	if not isSecretPayload and type(m.OUTPUT) ~= "string" then
+	if type(m.OUTPUT) ~= "string" then
 		addon.dbg("ChatFrame_MessageEventHandler: capture miss, passthrough")
 		addon.resetCaptureState()
 		m.CAPTUREOUTPUT = nil
 		return addon.callOriginalMessageHandler(self, this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
-	end
-
-	if isSecretPayload then
-		local infoRow = m.INFO or info or {}
-		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
-		local textToDisplay = m.OUTPUT
-		local isSecretText = addon.isSecretValue and addon.isSecretValue(textToDisplay)
-		addon.dbg("ChatFrame_MessageEventHandler: secret output value=" .. addon.dbgSafeValue(textToDisplay) .. " len=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) .. " isSecretText=" .. tostring(isSecretText))
-		if not isSecretText then
-			if not addon.isSafeString or not addon.isSafeString(textToDisplay) or textToDisplay == "" then
-				addon.dbg("ChatFrame_MessageEventHandler: secret output empty or unsafe, skipping display")
-				addon.resetCaptureState()
-				m.CAPTUREOUTPUT = nil
-				return handlerResult
-			end
-		end
-		local senderName = nil
-		if _G.UnitName then
-			senderName = _G.UnitName("player")
-		end
-		local chatType = m.CHATTYPE or (type(resolvedEvent) == "string" and string.sub(resolvedEvent, 10) or nil)
-		local chatGet = chatType and _G["CHAT_" .. chatType .. "_GET"] or nil
-		if senderName and type(chatGet) == "string" then
-			local ok, prefix = pcall(string.format, chatGet, "[" .. senderName .. "]")
-			if ok and prefix then
-				textToDisplay = prefix .. (textToDisplay or "")
-			end
-		end
-		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
-		this:AddMessage(textToDisplay, outR, outG, outB, outID, m.ACCESSID, m.TYPEID)
-		if addon.fireCallback then
-			addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
-		end
-		addon.dbg("ChatFrame_MessageEventHandler: cleanup and return")
-		addon.resetCaptureState()
-		m.CAPTUREOUTPUT = nil
-		return handlerResult
 	end
 
 	if type(m.message_text) ~= "string" then
@@ -1004,6 +986,13 @@ function addon:OnEnable()
 	self:EnableAddon()
 	self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
 	self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
+
+	-- Initialize Instance Warning module
+	if addon.InitInstanceWarning then
+		addon.InitInstanceWarning()
+		addon.dbg("OnEnable: Instance Warning module initialized")
+	end
+
 	if _G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown then
 		if not self._chatLockdownTicker then
 			self._chatLockdownTicker = self:NewTicker(0.5, function()
@@ -1026,6 +1015,13 @@ function addon:OnDisable()
 	end
 	self:UnregisterEvent("ENCOUNTER_START", "OnEncounterStart")
 	self:UnregisterEvent("ENCOUNTER_END", "OnEncounterEnd")
+
+	-- Shutdown Instance Warning module
+	if addon.ShutdownInstanceWarning then
+		addon.ShutdownInstanceWarning()
+		addon.dbg("OnDisable: Instance Warning module shut down")
+	end
+
 	if self._chatLockdownTicker then
 		self:CancelTicker(self._chatLockdownTicker)
 		self._chatLockdownTicker = nil
@@ -1065,32 +1061,6 @@ function addon.uninstallTempWindowHook()
 		_G.FCF_OpenTemporaryWindow = addon._origFCF_OpenTemporaryWindow
 	end
 	addon._tempWindowHookInstalled = nil
-end
-
--- Debug-only: Chat lockdown state probe (does NOT enable/disable hooks).
-function addon:CheckChatLockdownState()
-	if not (_G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown) then
-		return
-	end
-	local isLocked = _G.C_ChatInfo.InChatMessagingLockdown()
-	if addon._chatLockdownLast == isLocked then
-		return
-	end
-	addon._chatLockdownLast = isLocked
-	addon.dbg("ChatLockdown: state=" .. (addon.dbgSafeBool and addon.dbgSafeBool(isLocked) or tostring(isLocked)))
-	self:DebugChatHandlerState("chat-lockdown-change")
-end
-
--- Debug-only: Encounter start hook (does NOT enable/disable hooks).
-function addon:OnEncounterStart()
-	addon.dbg("OnEncounterStart: encounter started (debug only, no hook changes)")
-	self:DebugChatHandlerState("encounter-start")
-end
-
--- Debug-only: Encounter end hook (does NOT enable/disable hooks).
-function addon:OnEncounterEnd()
-	addon.dbg("OnEncounterEnd: encounter ended (debug only, no hook changes)")
-	self:DebugChatHandlerState("encounter-end")
 end
 
 function addon:EnableAddon()

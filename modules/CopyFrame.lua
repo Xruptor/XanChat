@@ -150,11 +150,11 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 		chatMsg = (addon.safestr_bool(chatMsg) and addon.L.ProtectedSecretValue) or chatMsg
 
 		-- fix situations where links end the color prematurely
-		if (r and g and b and chatTypeID) then
-			local colorCode = RGBToColorCode(r, g, b)
-			chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
-			chatMsg = colorCode..chatMsg
-		end
+		-- if (r and g and b and chatTypeID) then
+		-- 	local colorCode = RGBToColorCode(r, g, b)
+		-- 	chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
+		-- 	chatMsg = colorCode..chatMsg
+		-- end
 
 		if (i == startPos) then
 			lineText = unescape(chatMsg).."|r"

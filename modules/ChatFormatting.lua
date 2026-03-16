@@ -51,6 +51,7 @@ local function prepareWorkingSections()
 	return sectionWorking
 end
 
+--This function should not be called for secret values as there is a lot of string modications done here.  Especially gsub() which doesn't work with secret values.
 local function FormatChatMessage(message)
 	if addon and addon.dbg then
 		addon.dbg("FormatChatMessage: building chat text with direct construction")

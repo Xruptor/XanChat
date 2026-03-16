@@ -50,5 +50,6 @@ modules/CopyFrame.lua
 modules/ChatSettings.lua
 modules/ChatFrameSetup.lua
 modules/EditBoxHistory.lua
+modules/InstanceWarning.lua
 
 XanChat.lua

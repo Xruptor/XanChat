@@ -236,11 +236,11 @@ local function restoreSettings(chatFrame)
 
 	if db.windowChannels then
 		-- remove current window channels
-		local oldWindowChannels = {}
+		--local oldWindowChannels = {}
 		if _G.GetChatWindowChannels then
 			for k = 1, #_G.GetChatWindowChannels(frameID) do
 				local ch = _G.GetChatWindowChannels(frameID)[k]
-				oldWindowChannels[k] = ch
+				--oldWindowChannels[k] = ch
 				if _G.RemoveChatWindowChannel then
 					_G.RemoveChatWindowChannel(frameID, ch)
 				end

@@ -14,6 +14,7 @@ local function isInAnyInstance()
 	return _G.select(1, _G.IsInInstance())
 end
 
+--this is a MUCH better way to test for secret values, because of the issecretvalue functions fails, you get a true false with no errors.
 local isSecretValue = function(v)
 	local fn = _G.issecretvalue
 	if type(fn) == "function" then
@@ -67,6 +68,7 @@ end
 
 -- Returns the original value if it's NOT safe to process (secret/inaccessible/not-string)
 -- Returns false if the value IS safe to process
+-- The reason we do this is because we don't want a placeholder returned.  We only want to return the string when true when not safe.
 local function isNotSafeStr(v)
 	if isSecretValue(v) then return v end
 	if not canAccessValue(v) then return v end

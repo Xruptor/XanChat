@@ -22,8 +22,8 @@ L.DisableChatEnterLeaveNotice = "禁用聊天频道 (|cFF99CC33进入/离开/更
 L.ProtectedChannel = "¡¡频道受暴雪保护，禁止插件修改。¡¡"
 L.ProtectedSecretValue = "¡¡聊天消息包含<秘密值>。暴雪禁止访问。¡¡"
 
-L.ChatFeaturesDisabledInstance = "xanChat：在副本中因限制而禁用部分功能。"
-L.ChatFeaturesDisabledLockdown = "xanChat：由于战斗限制，部分聊天功能已禁用。"
+L.ChatFeaturesDisabledInstance = "xanChat：由于暴雪限制，在副本中可能会禁用部分功能。"
+L.ChatFeaturesDisabledLockdown = "xanChat：由于暴雪战斗限制，部分聊天功能可能会被禁用。"
 L.ChatFeaturesEnabled = "xanChat: 聊天功能已重新启用。"
 L.ChatSettingsLockedRestricted = "xanChat: 在战斗/副本限制期间设置已锁定。"
 

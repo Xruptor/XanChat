@@ -23,8 +23,8 @@ L.DisableChatEnterLeaveNotice = "Channel-Benachhrichtigungen (|cFF99CC33Beitrete
 L.ProtectedChannel = "¡¡Channel ist von Blizzard geschützt. Addon-Zugriff ist nicht erlaut.¡¡"
 L.ProtectedSecretValue = "¡¡Chatnachricht enthält <geheime Werte>. Der Zugriff wird von Blizzard untersagt.¡¡"
 
-L.ChatFeaturesDisabledInstance = "xanChat: Einige Funktionen sind in Instanzen wegen Einschränkungen deaktiviert."
-L.ChatFeaturesDisabledLockdown = "xanChat: Einige Chat-Funktionen sind aufgrund von Begegnungsbeschränkungen deaktiviert."
+L.ChatFeaturesDisabledInstance = "xanChat: Einige Funktionen können in Instanzen aufgrund von Einschränkungen durch Blizzard deaktiviert sein."
+L.ChatFeaturesDisabledLockdown = "xanChat: Einige Chat-Funktionen können aufgrund von Begegnungsbeschränkungen durch Blizzard deaktiviert sein."
 L.ChatFeaturesEnabled = "xanChat: Chat-Funktionen wieder aktiviert."
 L.ChatSettingsLockedRestricted = "xanChat: Einstellungen sind während Begegnungs-/Instanzbeschränkungen gesperrt."
 

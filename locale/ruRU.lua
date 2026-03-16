@@ -22,8 +22,8 @@ L.DisableChatEnterLeaveNotice = "Отключить уведомления о в
 L.ProtectedChannel = "¡¡Канал защищен Blizzard. Доступ аддона запрещен.¡¡"
 L.ProtectedSecretValue = "¡¡Сообщение чата содержит <секретные значения>. Доступ запрещен Blizzard.¡¡"
 
-L.ChatFeaturesDisabledInstance = "xanChat: Некоторые функции отключены в подземельях из-за ограничений."
-L.ChatFeaturesDisabledLockdown = "xanChat: Некоторые функции чата отключены из-за ограничений боя."
+L.ChatFeaturesDisabledInstance = "xanChat: Некоторые функции могут быть отключены в подземельях из-за ограничений Blizzard."
+L.ChatFeaturesDisabledLockdown = "xanChat: Некоторые функции чата могут быть отключены из-за ограничений боя Blizzard."
 L.ChatFeaturesEnabled = "xanChat: Функции чата снова включены."
 L.ChatSettingsLockedRestricted = "xanChat: Настройки заблокированы во время ограничений боя/инстанса."
 

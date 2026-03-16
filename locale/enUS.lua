@@ -23,8 +23,8 @@ L.ProtectedChannel = "¡¡Channel is protected by Blizzard. Addon access is proh
 L.ProtectedSecretValue = "¡¡Chat message contains <secret values>. Access is prohibited by Blizzard.¡¡"
 
 --C_ChatInfo.InChatMessagingLockdown()
-L.ChatFeaturesDisabledInstance = "xanChat: Some features disabled due to restrictions while in instances."
-L.ChatFeaturesDisabledLockdown = "xanChat: Some chat features are disabled due to encounter restrictions."
+L.ChatFeaturesDisabledInstance = "xanChat: Some features may be disabled due to restrictions while in instances by Blizzard."
+L.ChatFeaturesDisabledLockdown = "xanChat: Some chat features may be disabled due to encounter restrictions by Blizzard."
 L.ChatFeaturesEnabled = "xanChat: Chat features re-enabled."
 L.ChatSettingsLockedRestricted = "xanChat: Settings are locked during encounter/instance restrictions."
 

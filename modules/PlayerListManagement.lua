@@ -12,7 +12,7 @@ addon.L = (private and private.L) or addon.L or {}
 -- PLAYER LIST MANAGEMENT
 -- ============================================================================
 
-local PLAYERLIST_MAX = 1500
+local PLAYERLIST_MAX = 1000
 
 --strips and removes all whitespace characters.  "Area 52" -> "area52"
 local function stripAndLowercase(text)
@@ -69,6 +69,9 @@ end
 
 --WE CANNOT DO SECRET VALUE LOOKUPS ON TABLES!!!!!!  So don't do it!
 --Otherwise I would have stored the secret values in a table as well.
+--Again Player List Management is NOT used for secret values for comparisons, inclusion, insertion or anything dealing with the player name tables found in this module.
+--The reason is once again, you cannot use secret values at all for any kind of table lookup or comparison.  Secret Values cannot be compared to anything!
+--So anything dealing with secret values must be done by hand or using Blizzard WOW Api functions as they are the only ones that can accept secret values and modify them.
 local function getPlayerInfo(guid, nameWithRealm, playerName, serverName)
 	if not addon then return end
 
