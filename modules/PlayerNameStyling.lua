@@ -44,13 +44,16 @@ local function wrapInColor(text, r, g, b)
 	return "|c"..hexColor..text.."|r"
 end
 
-local function addTimeRunningIcon(guid, stylizedName)
+local function addTimeRunningIcon(guid, stylizedName, isSecret)
 	if not stylizedName then return "" end
 	if not guid then return stylizedName end
-	if addon.isSecretValue(guid) then return stylizedName end
+	-- Skip timerunning icons during secret value lockdowns (boss encounters)
+	if isSecret then return stylizedName end
 	if type(guid) ~= "string" then return stylizedName end
 	if not _G.C_ChatInfo or not _G.C_ChatInfo.IsTimerunningPlayer then return stylizedName end
 	if not _G.TimerunningUtil or not  _G.TimerunningUtil.AddSmallIcon then return stylizedName end
+	-- Only add timerunning icon if the player is currently a timerunning player
+	if not _G.C_ChatInfo.IsTimerunningPlayer(guid) then return stylizedName end
 
 	stylizedName = _G.TimerunningUtil.AddSmallIcon(stylizedName)
 	return stylizedName
@@ -67,46 +70,52 @@ local function StylePlayerSection(m)
 	-- During a boss encounter or a chat lockdown we don't want to process certain events as they will get broken because of their special formatting.
 	---------------------------
 	-- Skip styling for special events during secret value lockdowns to prevent issues
-	-- Based on patterns from Prat and Chattynator that skip processing these event types
 	local chatType = m.chat_type or ""
 	if isSecret then
 		local skipStyling = false
-		-- Skip achievement events (they have special formatting and don't need styling)
-		if chatType == "ACHIEVEMENT" or chatType == "GUILD_ACHIEVEMENT" then
-			skipStyling = true
 		-- Skip all Battle.net toast events (friend online/offline, broadcasts, etc.)
-		elseif string.sub(chatType, 1, 15) == "BN_INLINE_TOAST" then
+		if string.sub(chatType, 1, 15) == "BN_INLINE_TOAST" then
 			skipStyling = true
 		-- Skip Battle.net whisper events that might be system messages
-		elseif chatType == "BN_WHISPER_PLAYER_OFFLINE" then
+		end
+		if chatType == "BN_WHISPER_PLAYER_OFFLINE" then
 			skipStyling = true
 		-- Skip system messages during secret lockdown (friend status, server messages, etc.)
-		elseif chatType == "SYSTEM" then
+		end
+		if chatType == "SYSTEM" then
 			skipStyling = true
 		-- Skip AFK/DND status messages
-		elseif chatType == "AFK" or chatType == "DND" then
+		end
+		if chatType == "AFK" or chatType == "DND" then
 			skipStyling = true
 		-- Skip addon messages and error messages
-		elseif chatType == "ADDON" or chatType == "ERRORS" then
+		end
+		if chatType == "ADDON" or chatType == "ERRORS" then
 			skipStyling = true
 		-- Skip channel notice messages
-		elseif chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
+		end
+		if chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
 			skipStyling = true
 		-- Skip trade skills and profession messages
-		elseif chatType == "TRADESKILLS" then
+		end
+		if chatType == "TRADESKILLS" then
 			skipStyling = true
 		-- Skip pet information messages
-		elseif chatType == "PET_INFO" then
+		end
+		if chatType == "PET_INFO" then
 			skipStyling = true
 		-- Skip combat info messages (XP, faction, honor, etc.)
-		elseif chatType == "COMBAT_MISC_INFO" or chatType == "COMBAT_XP_GAIN" or
+		end
+		if chatType == "COMBAT_MISC_INFO" or chatType == "COMBAT_XP_GAIN" or
 		       chatType == "COMBAT_FACTION_CHANGE" or chatType == "COMBAT_HONOR_GAIN" then
 			skipStyling = true
 		-- Skip ignored messages
-		elseif chatType == "IGNORED" then
+		end
+		if chatType == "IGNORED" then
 			skipStyling = true
 		-- Skip ping messages
-		elseif chatType == "PING" then
+		end
+		if chatType == "PING" then
 			skipStyling = true
 		end
 
@@ -177,16 +186,36 @@ local function StylePlayerSection(m)
 			local linkTarget = m.sender_name
 			local displayText = coloredPlayerName
 
-			-- Add timerunning icon if available, checks for secret values just in case
-			displayText = addTimeRunningIcon(m.player_guid, displayText)
+			-- Add timerunning icon if available (excluded during secret value lockdowns)
+			displayText = addTimeRunningIcon(m.player_guid, displayText, isSecret)
 
 			local playerLink
-			if m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
+			-- Handle achievement events during secret values with simplified link format
+			if m.chat_type == "ACHIEVEMENT" or m.chat_type == "GUILD_ACHIEVEMENT" then
+				playerLink = string.format("|Hplayer:%s|h[%s]|h", linkTarget, displayText)
+			-- Handle community channels during secret values with special community link format
+			elseif m.chat_type == "COMMUNITIES_CHANNEL" then
+				local isBattleNetCommunity = m.arg13 ~= nil and m.arg13 ~= 0
+				local messageInfo, clubId, streamId = _G.C_Club.GetInfoFromLastCommunityChatLine()
+				if messageInfo ~= nil then
+					if isBattleNetCommunity then
+						playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s:%s|h[%s]|h",
+							linkTarget, m.arg13, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
+					else
+						playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s|h[%s]|h",
+							linkTarget, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
+					end
+				else
+					playerLink = "[" .. displayText .. "]"
+				end
+			-- Handle Battle.net whisper events
+			elseif m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
 				if m.arg13 then
 					playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
 				else
 					playerLink = "[" .. displayText .. "]"
 				end
+			-- Handle regular player links
 			else
 				playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
 			end
@@ -343,18 +372,38 @@ local function StylePlayerSection(m)
 			displayText = coloredLevel..":"..coloredPlayerName
 		end
 
-		-- Add timerunning icon if available, checks for secret values just in case
-		displayText = addTimeRunningIcon(m.player_guid, displayText)
+		-- Add timerunning icon if available (excluded during secret value lockdowns)
+		displayText = addTimeRunningIcon(m.player_guid, displayText, false)
 
 		local playerLink
-		if m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
+		-- Handle achievement events with simplified link format
+		if m.chat_type == "ACHIEVEMENT" or m.chat_type == "GUILD_ACHIEVEMENT" then
+			playerLink = string.format("|Hplayer:%s:h[%s]|h", linkTarget, displayText)
+		-- Handle community channels with special community link format
+		elseif m.chat_type == "COMMUNITIES_CHANNEL" then
+			local isBattleNetCommunity = m.arg13 ~= nil and m.arg13 ~= 0
+			local messageInfo, clubId, streamId = _G.C_Club.GetInfoFromLastCommunityChatLine()
+			if messageInfo ~= nil then
+				if isBattleNetCommunity then
+					playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s:%s|h[%s]|h",
+						linkTarget, m.arg13, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
+				else
+					playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s|h[%s]|h",
+						linkTarget, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
+				end
+			else
+				playerLink = "[" .. displayText .. "]"
+			end
+		-- Handle Battle.net whisper events
+		elseif m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
 			if m.arg13 then
 				playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
 			else
 				playerLink = "[" .. displayText .. "]"
 			end
+		-- Handle regular player links
 		else
-			playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
+			playerLink = string.format("|Hplayer:%s:%s:%s:%s:h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
 		end
 
 		m.player_link = playerLink
