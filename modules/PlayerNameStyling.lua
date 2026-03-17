@@ -64,7 +64,68 @@ local function StylePlayerSection(m)
 	if not addon then return end
 	local isSecret = addon.isSecretValue(m.player_name)
 
-	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) or isSecret then
+	-- During a boss encounter or a chat lockdown we don't want to process certain events as they will get broken because of their special formatting.
+	---------------------------
+	-- Skip styling for special events during secret value lockdowns to prevent issues
+	-- Based on patterns from Prat and Chattynator that skip processing these event types
+	local chatType = m.chat_type or ""
+	if isSecret then
+		local skipStyling = false
+		-- Skip achievement events (they have special formatting and don't need styling)
+		if chatType == "ACHIEVEMENT" or chatType == "GUILD_ACHIEVEMENT" then
+			skipStyling = true
+		-- Skip all Battle.net toast events (friend online/offline, broadcasts, etc.)
+		elseif string.sub(chatType, 1, 15) == "BN_INLINE_TOAST" then
+			skipStyling = true
+		-- Skip Battle.net whisper events that might be system messages
+		elseif chatType == "BN_WHISPER_PLAYER_OFFLINE" then
+			skipStyling = true
+		-- Skip system messages during secret lockdown (friend status, server messages, etc.)
+		elseif chatType == "SYSTEM" then
+			skipStyling = true
+		-- Skip AFK/DND status messages
+		elseif chatType == "AFK" or chatType == "DND" then
+			skipStyling = true
+		-- Skip addon messages and error messages
+		elseif chatType == "ADDON" or chatType == "ERRORS" then
+			skipStyling = true
+		-- Skip channel notice messages
+		elseif chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
+			skipStyling = true
+		-- Skip trade skills and profession messages
+		elseif chatType == "TRADESKILLS" then
+			skipStyling = true
+		-- Skip pet information messages
+		elseif chatType == "PET_INFO" then
+			skipStyling = true
+		-- Skip combat info messages (XP, faction, honor, etc.)
+		elseif chatType == "COMBAT_MISC_INFO" or chatType == "COMBAT_XP_GAIN" or
+		       chatType == "COMBAT_FACTION_CHANGE" or chatType == "COMBAT_HONOR_GAIN" then
+			skipStyling = true
+		-- Skip ignored messages
+		elseif chatType == "IGNORED" then
+			skipStyling = true
+		-- Skip ping messages
+		elseif chatType == "PING" then
+			skipStyling = true
+		end
+
+		if skipStyling then
+			if addon and addon.dbg then
+				addon.dbg("StylePlayerSection: skipping special event during secret lockdown: "..addon.dbgSafeValue(chatType))
+			end
+			return
+		end
+	end
+
+	-- Check filter list to see if this event type should be styled, when an event is checked that means we want to process it.  When unchecked that means we don't
+	-- want to apply any styling to those events.
+	local shouldStyle = true
+	if addon.searchFilterList and addon.isFilterListEnabled then
+		shouldStyle = addon:searchFilterList(m.chat_type, m.message_text or "")
+	end
+
+	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) or isSecret or not shouldStyle then
 		-- Even if player chat style is disabled, we still need to generate player_link for clickable names
 		if not m.player_name or (not isSecret and m.player_name == "") then
 			return
@@ -146,6 +207,11 @@ local function StylePlayerSection(m)
 	-- Extract class color from Blizzard-formatted output text
 	local extractedClassColor = nil
 	if m.OUTPUT and type(m.OUTPUT) == "string" then
+		-- Break early if player name is empty or nil to prevent empty brackets
+		if not m.player_name or (not addon.isSecretValue(m.player_name) and m.player_name == "") then
+			return
+		end
+
 		-- Look for class color in the formatted output around the player name
 		-- Blizzard formats player names like |cffRRGGBB[PlayerName]|r or just |cffRRGGBBPlayerName|r
 		local playerNamePattern = string.gsub(m.player_name, "([%-%^%$%(%)%%%[%]%.%*%+%?])", "%%%1")

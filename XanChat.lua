@@ -837,6 +837,8 @@ function addon:OnLoad()
 	end
 
 	if addon.IsRetail and XCHT_DB.moveSocialButtonToBottom then
+		--the ChatAlertFrame is actually the frame to the left of the chat frame that has things like the social button and such
+		--it's used to show small alerts for the chat frame as well.  Repositoning this also changes where the achivement toasts will show up.
 		if ChatAlertFrame then
 			ChatAlertFrame:ClearAllPoints()
 			ChatAlertFrame:SetPoint("TOPLEFT", ChatFrame1, "BOTTOMLEFT", -33, -60)
@@ -857,13 +859,13 @@ function addon:OnLoad()
 		if ChatFrameChannelButton then ChatFrameChannelButton:Hide() end
 	end
 
-	-- Remove annoying guild loot messages by replacing them with original ones
-	if YOU_LOOT_MONEY then
-		_G["YOU_LOOT_MONEY_GUILD"] = YOU_LOOT_MONEY
-	end
-	if LOOT_MONEY_SPLIT then
-		_G["LOOT_MONEY_SPLIT_GUILD"] = LOOT_MONEY_SPLIT
-	end
+	-- -- Remove annoying guild loot messages by replacing them with original ones
+	-- if YOU_LOOT_MONEY then
+	-- 	_G["YOU_LOOT_MONEY_GUILD"] = YOU_LOOT_MONEY
+	-- end
+	-- if LOOT_MONEY_SPLIT then
+	-- 	_G["LOOT_MONEY_SPLIT_GUILD"] = LOOT_MONEY_SPLIT
+	-- end
 
 	-- Setup all chat frames
 	if NUM_CHAT_WINDOWS then
