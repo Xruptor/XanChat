@@ -1,3 +1,13 @@
+--[[
+	config.lua - UI configuration system for XanChat
+	Refactored for:
+	- Simplified checkbox/button binding logic
+	- Consolidated redundant nil checks
+	- Better early returns
+	- Improved slider handling
+	- More efficient config object tracking
+]]
+
 local ADDON_NAME, private = ...
 local addon = _G[ADDON_NAME]
 
@@ -6,36 +16,34 @@ addon.L = (private and private.L) or addon.L or {}
 
 addon.configFrame = CreateFrame("frame", ADDON_NAME.."_config_eventFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 local configFrame = addon.configFrame
-
 local L = addon.L
 local floor = math.floor
-local configObjList = {}
 
+-- Track configuration objects for lock functionality
+local configObjList = {}
 local lastObject = {}
 
-local function addConfigEntry(frameParentName, objEntry, adjustX, adjustY, isCustom, ignoreLock, customStartYPoint)
+-- ============================================================================
+-- UI CREATION HELPERS
+-- ============================================================================
 
+local function addConfigEntry(frameParentName, objEntry, adjustX, adjustY, isCustom, ignoreLock, customStartYPoint)
 	if not ignoreLock then
 		table.insert(configObjList, objEntry)
 	end
 
 	objEntry:ClearAllPoints()
 
-	if not isCustom then
-		if not lastObject[frameParentName] then
-			if not customStartYPoint then
-				objEntry:SetPoint("TOPLEFT", 20, -135)
-			else
-				objEntry:SetPoint("TOPLEFT", 20, customStartYPoint)
-			end
-		else
-			local point, relativeTo, relativePoint, xOfs, yOfs = lastObject[frameParentName]:GetPoint()
-			objEntry:SetPoint("TOPLEFT", adjustX or 0, (yOfs + adjustY) or -30)
-		end
-
-		lastObject[frameParentName] = objEntry
-	else
+	if isCustom then
 		objEntry:SetPoint("TOPLEFT", adjustX, adjustY)
+	else
+		if not lastObject[frameParentName] then
+			objEntry:SetPoint("TOPLEFT", 20, customStartYPoint or -135)
+		else
+			local _, _, _, yOfs = lastObject[frameParentName]:GetPoint()
+			objEntry:SetPoint("TOPLEFT", adjustX or 0, (yOfs + (adjustY or -30)))
+		end
+		lastObject[frameParentName] = objEntry
 	end
 end
 
@@ -68,7 +76,7 @@ local sliderIndex = 0
 local function createSlider(parentFrame, displayText, minVal, maxVal)
 	sliderIndex = sliderIndex + 1
 
-	local SliderBackdrop  = {
+	local SliderBackdrop = {
 		bgFile = "Interface\\Buttons\\UI-SliderBar-Background",
 		edgeFile = "Interface\\Buttons\\UI-SliderBar-Border",
 		tile = true, tileSize = 8, edgeSize = 8,
@@ -111,6 +119,7 @@ local colorPickerIndex = 0
 local function createColorPicker(parentFrame, dbObj, objName, displayText)
 	colorPickerIndex = colorPickerIndex + 1
 
+	-- Color conversion helpers
 	local function ToRGBA(hex)
 		return tonumber('0x'..string.sub(hex, 3, 4), 10) / 255,
 			tonumber('0x'..string.sub(hex, 5, 6), 10) / 255,
@@ -135,10 +144,6 @@ local function createColorPicker(parentFrame, dbObj, objName, displayText)
 		end
 
 		self.Swatch:SetVertexColor(r, g, b, a)
-
-		--save values
-		--r, g, b, a, value
-		--value is hex
 		dbObj[objName] = value
 	end
 
@@ -151,10 +156,8 @@ local function createColorPicker(parentFrame, dbObj, objName, displayText)
 		ColorPickerFrame.hasOpacity = false
 		ColorPickerFrame.func = function()
 			local r, g, b = ColorPickerFrame:GetColorRGB()
-			local a = 1
-			Update(self, ToHex(r, g, b, a))
+			Update(self, ToHex(r, g, b, 1))
 		end
-
 		ColorPickerFrame.opacityFunc = ColorPickerFrame.func
 		ColorPickerFrame.cancelFunc = function()
 			Update(self, ToHex(r, g, b, a))
@@ -172,21 +175,20 @@ local function createColorPicker(parentFrame, dbObj, objName, displayText)
 	text:SetPoint("LEFT", Swatch, "RIGHT", 5, 0)
 	text:SetText(displayText)
 
-	--update to initial color stored
 	Update(Button, dbObj[objName])
 
 	return Button
 end
 
+-- ============================================================================
+-- UI STATE MANAGEMENT
+-- ============================================================================
+
 local function setEnabled(objType, obj, switch)
-	if objType == "checkbox" then
+	if objType == "checkbox" and obj then
 		obj:SetEnabled(switch)
 		if obj.Text then
-			if switch then
-				obj.Text:SetTextColor(1, 1, 1) --white
-			else
-				obj.Text:SetTextColor(128/255, 128/255, 128/255) --gray
-			end
+			obj.Text:SetTextColor(switch and 1 or 0.5, switch and 1 or 0.5, switch and 1 or 0.5)
 		end
 	end
 end
@@ -199,16 +201,17 @@ end
 
 local function bindToggle(btn, key, opts)
 	opts = opts or {}
+
 	btn:SetScript("OnShow", function()
 		btn:SetChecked(XCHT_DB[key])
 		if opts.onShow then opts.onShow(btn) end
 	end)
+
 	btn.func = function()
-		local newValue = not XCHT_DB[key]
-		XCHT_DB[key] = newValue
-		if opts.onToggle then opts.onToggle(newValue, btn) end
+		XCHT_DB[key] = not XCHT_DB[key]
+		if opts.onToggle then opts.onToggle(not XCHT_DB[key], btn) end
 		if opts.messageOn or opts.messageOff then
-			DEFAULT_CHAT_FRAME:AddMessage(newValue and opts.messageOn or opts.messageOff)
+			DEFAULT_CHAT_FRAME:AddMessage(XCHT_DB[key] and opts.messageOn or opts.messageOff)
 		end
 		if opts.showReload then
 			showReloadPopup()
@@ -217,19 +220,19 @@ local function bindToggle(btn, key, opts)
 	btn:SetScript("OnClick", btn.func)
 end
 
-local function LoadAboutFrame()
+-- ============================================================================
+-- FRAME CREATION
+-- ============================================================================
 
-	--Code inspired from tekKonfigAboutPanel
+local function LoadAboutFrame()
 	local about = CreateFrame("Frame", ADDON_NAME.."AboutPanel", InterfaceOptionsFramePanelContainer, BackdropTemplateMixin and "BackdropTemplate")
 	about.name = ADDON_NAME
 	about:Hide()
 
-    local fields = {"Version", "Author"}
 	local getMetadata = addon.GetAddOnMetadata or (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 	local notes = getMetadata and getMetadata(ADDON_NAME, "Notes") or ""
 
-    local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-
+	local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -16)
 	title:SetText(ADDON_NAME)
 
@@ -243,31 +246,34 @@ local function LoadAboutFrame()
 	subtitle:SetText(notes)
 
 	local anchor
-	for _,field in pairs(fields) do
+	for _, field in ipairs({"Version", "Author"}) do
 		local val = getMetadata and getMetadata(ADDON_NAME, field)
 		if val then
-			local title = about:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-			title:SetWidth(75)
-			if not anchor then title:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -8)
-			else title:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6) end
-			title:SetJustifyH("RIGHT")
-			title:SetText(field:gsub("X%-", ""))
+			local titleLabel = about:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+			titleLabel:SetWidth(75)
+			if not anchor then
+				titleLabel:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -8)
+			else
+				titleLabel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6)
+			end
+			titleLabel:SetJustifyH("RIGHT")
+			titleLabel:SetText(field:gsub("X%-", ""))
 
-			local detail = about:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-			detail:SetPoint("LEFT", title, "RIGHT", 4, 0)
-			detail:SetPoint("RIGHT", -16, 0)
-			detail:SetJustifyH("LEFT")
-			detail:SetText(val)
+			local detailLabel = about:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+			detailLabel:SetPoint("LEFT", titleLabel, "RIGHT", 4, 0)
+			detailLabel:SetPoint("RIGHT", -16, 0)
+			detailLabel:SetJustifyH("LEFT")
+			detailLabel:SetText(val)
 
-			anchor = title
+			anchor = titleLabel
 		end
 	end
 
 	if InterfaceOptions_AddCategory then
 		InterfaceOptions_AddCategory(about)
 	else
-		local category, layout = _G.Settings.RegisterCanvasLayoutCategory(about, about.name);
-		_G.Settings.RegisterAddOnCategory(category);
+		local category = _G.Settings.RegisterCanvasLayoutCategory(about, about.name)
+		_G.Settings.RegisterAddOnCategory(category)
 		addon.settingsCategory = category
 		if category and category.GetID then
 			addon.settingsCategoryID = category:GetID()
@@ -278,14 +284,12 @@ local function LoadAboutFrame()
 end
 
 local function LoadAdditionalSettings(childFrameName, parentFrameName)
-
 	local addSettings = CreateFrame("Frame", ADDON_NAME..childFrameName.."Panel", InterfaceOptionsFramePanelContainer, BackdropTemplateMixin and "BackdropTemplate")
 	addSettings.name = childFrameName
-	addSettings.parent = parentFrameName  --this is very important as it creates frame groups
+	addSettings.parent = parentFrameName
 	addSettings:Hide()
 
-    local title = addSettings:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-
+	local title = addSettings:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -16)
 	title:SetText(ADDON_NAME)
 
@@ -300,32 +304,31 @@ local function LoadAdditionalSettings(childFrameName, parentFrameName)
 
 	if InterfaceOptions_AddCategory then
 		InterfaceOptions_AddCategory(addSettings)
-	else
-		if addon.settingsCategory then
-			--local category = _G.Settings.GetCategory(addon.settingsCategory)
-			local subcategory = _G.Settings.RegisterCanvasLayoutSubcategory(addon.settingsCategory, addSettings, addSettings.name)
-			addon.addSettingsCategory = subcategory
-		end
+	elseif addon.settingsCategory then
+		local subcategory = _G.Settings.RegisterCanvasLayoutSubcategory(addon.settingsCategory, addSettings, addSettings.name)
+		addon.addSettingsCategory = subcategory
 	end
 
 	return addSettings
 end
 
+-- ============================================================================
+-- MAIN ENABLE FUNCTION
+-- ============================================================================
 
 function configFrame:EnableConfig()
-
 	addon.aboutPanel = LoadAboutFrame()
 	addon.additionalSettings = LoadAdditionalSettings(L.AdditionalSettings, ADDON_NAME)
 
+	-- Sticky Channels List button
 	local btnStickyChannelsList = createButton(addon.aboutPanel, L.EditStickyChannelsListHeader)
-	btnStickyChannelsList.func = function()
+	btnStickyChannelsList:SetScript("OnClick", function()
 		if addon.stickyChannelsList then addon.stickyChannelsList:Show() end
-	end
-	btnStickyChannelsList:SetScript("OnClick", btnStickyChannelsList.func)
-
+	end)
 	addConfigEntry(addon.aboutPanel.name, btnStickyChannelsList, 403, -20, true)
 	addon.aboutPanel.btnStickyChannelsList = btnStickyChannelsList
 
+	-- Lock Chat Settings checkbox
 	local btnLockChatSettings = createCheckbutton(addon.aboutPanel, "|cFF99CC33"..L.LockChatSettingsInfo.."|r")
 	bindToggle(btnLockChatSettings, "lockChatSettings", {
 		messageOn = L.LockChatSettingsOn,
@@ -334,10 +337,10 @@ function configFrame:EnableConfig()
 			configFrame:DoLock()
 		end,
 	})
-
 	addConfigEntry(addon.aboutPanel.name, btnLockChatSettings, 20, -110, true, true)
 	addon.aboutPanel.btnLockChatSettings = btnLockChatSettings
 
+	-- Retail-only options
 	if addon.IsRetail then
 		local btnSocial = createCheckbutton(addon.aboutPanel, L.SocialInfo)
 		bindToggle(btnSocial, "hideSocial", {
@@ -345,7 +348,6 @@ function configFrame:EnableConfig()
 			messageOff = L.SocialOn,
 			showReload = true,
 		})
-
 		addConfigEntry(addon.aboutPanel.name, btnSocial, 20, -22)
 		addon.aboutPanel.btnSocial = btnSocial
 
@@ -355,246 +357,92 @@ function configFrame:EnableConfig()
 			messageOff = L.MoveSocialButtonOff,
 			showReload = true,
 		})
-
 		addConfigEntry(addon.aboutPanel.name, btnMoveSocialButton, 45, -22)
 		addon.aboutPanel.btnMoveSocialButton = btnMoveSocialButton
-
 	end
 
-	local btnChatMenu = createCheckbutton(addon.aboutPanel, L.ChatMenuButtonInfo)
-	bindToggle(btnChatMenu, "hideChatMenuButton", {
-		messageOn = L.ChatMenuButtonOff,
-		messageOff = L.ChatMenuButtonOn,
-		showReload = true,
-	})
+	-- Common chat options
+	local options = {
+		{ key = "hideChatMenuButton", info = L.ChatMenuButtonInfo, messageOn = L.ChatMenuButtonOff, messageOff = L.ChatMenuButtonOn, reload = true },
+		{ key = "hideScroll", info = L.ScrollInfo, messageOn = L.ScrollOff, messageOff = L.ScrollOn, reload = true },
+		{ key = "hideSideButtonBars", info = L.HideScrollBarsInfo, messageOn = L.HideScrollBarsOn, messageOff = L.HideScrollBarsOff, reload = true },
+		{ key = "shortNames", info = L.ShortNamesInfo, messageOn = L.ShortNamesOn, messageOff = L.ShortNamesOff, reload = true },
+		{ key = "editBoxTop", info = L.EditBoxInfo, messageOn = L.EditBoxTop, messageOff = L.EditBoxBottom, reload = true },
+		{ key = "hideTabs", info = L.TabsInfo, messageOn = L.TabsOff, messageOff = L.TabsOn, reload = true },
+		{ key = "addFontOutline", info = L.OutlineInfo, messageOn = L.OutlineOn, messageOff = L.OutlineOff, reload = true },
+		{ key = "addFontShadow", info = L.ShadowInfo, messageOn = L.ShadowOn, messageOff = L.ShadowOff, reload = true },
+		{ key = "hideVoice", info = L.VoiceInfo, messageOn = L.VoiceOff, messageOff = L.VoiceOn, reload = true },
+		{ key = "hideEditboxBorder", info = L.EditBoxBorderInfo, messageOn = L.EditBoxBorderOff, messageOff = L.EditBoxBorderOn, reload = true, onToggle = function() XCHT_DB.enableSimpleEditbox = false end },
+		{ key = "enableSimpleEditbox", info = L.SimpleEditBoxInfo, messageOn = L.SimpleEditBoxOn, messageOff = L.SimpleEditBoxOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox) end, onToggle = function(val, btn) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, val) end },
+		{ key = "enableSEBDesign", info = L.SEBDesignInfo, messageOn = L.SEBDesignOn, messageOff = L.SEBDesignOff, reload = true },
+		{ key = "enableEditboxAdjusted", info = L.AdjustedEditboxInfo, messageOn = L.AdjustedEditboxOn, messageOff = L.AdjustedEditboxOff, reload = true },
+		{ key = "enableCopyButton", info = L.CopyPasteInfo, messageOn = L.CopyPasteOn, messageOff = L.CopyPasteOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton) end, onToggle = function(val, btn) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, val) end },
+		{ key = "enableCopyButtonLeft", info = L.CopyPasteLeftInfo, messageOn = L.CopyPasteLeftOn, messageOff = L.CopyPasteLeftOff, reload = true },
+		{ key = "enableChatTextFade", info = L.ChatTextFadeInfo, messageOn = L.ChatTextFadeOn, messageOff = L.ChatTextFadeOff, reload = true },
+		{ key = "disableChatFrameFade", info = L.ChatFrameFadeInfo, messageOn = L.ChatFrameFadeOn, messageOff = L.ChatFrameFadeOff, reload = true },
+		{ key = "enablePlayerChatStyle", info = L.PlayerChatStyleInfo, messageOn = L.PlayerChatStyleOn, messageOff = L.PlayerChatStyleOff },
+	}
 
-	addConfigEntry(addon.aboutPanel.name, btnChatMenu, 20, -22)
-	addon.aboutPanel.btnChatMenu = btnChatMenu
+	-- Create all options
+	for _, opt in ipairs(options) do
+		local btn = createCheckbutton(addon.aboutPanel, opt.info)
+		bindToggle(btn, opt.key, {
+			messageOn = opt.messageOn,
+			messageOff = opt.messageOff,
+			showReload = opt.reload,
+			onToggle = opt.onToggle,
+			onShow = opt.onShow,
+		})
+		addConfigEntry(addon.aboutPanel.name, btn, 20, -22)
+		addon.aboutPanel["btn"..opt.key] = btn
+	end
 
-	local btnScroll = createCheckbutton(addon.aboutPanel, L.ScrollInfo)
-	bindToggle(btnScroll, "hideScroll", {
-		messageOn = L.ScrollOff,
-		messageOff = L.ScrollOn,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnScroll, 20, -22)
-	addon.aboutPanel.btnScroll = btnScroll
-
-	local btnHideSideBars = createCheckbutton(addon.aboutPanel, L.HideScrollBarsInfo)
-	bindToggle(btnHideSideBars, "hideSideButtonBars", {
-		messageOn = L.HideScrollBarsOn,
-		messageOff = L.HideScrollBarsOff,
-		showReload = true,
-	})
-	
-	addConfigEntry(addon.aboutPanel.name, btnHideSideBars, 20, -22)
-	addon.aboutPanel.btnHideSideBars = btnHideSideBars
-
-	local btnShortNames = createCheckbutton(addon.aboutPanel, L.ShortNamesInfo)
-	bindToggle(btnShortNames, "shortNames", {
-		messageOn = L.ShortNamesOn,
-		messageOff = L.ShortNamesOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnShortNames, 20, -22)
-	addon.aboutPanel.btnShortNames = btnShortNames
-
-	local btnEditBox = createCheckbutton(addon.aboutPanel, L.EditBoxInfo)
-	bindToggle(btnEditBox, "editBoxTop", {
-		messageOn = L.EditBoxTop,
-		messageOff = L.EditBoxBottom,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnEditBox, 20, -22)
-	addon.aboutPanel.btnEditBox = btnEditBox
-
-	local btnTabs = createCheckbutton(addon.aboutPanel, L.TabsInfo)
-	bindToggle(btnTabs, "hideTabs", {
-		messageOn = L.TabsOff,
-		messageOff = L.TabsOn,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnTabs, 20, -22)
-	addon.aboutPanel.btnTabs = btnTabs
-
-	local btnFontOutline = createCheckbutton(addon.aboutPanel, L.OutlineInfo)
-	bindToggle(btnFontOutline, "addFontOutline", {
-		messageOn = L.OutlineOn,
-		messageOff = L.OutlineOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnFontOutline, 20, -22)
-	addon.aboutPanel.btnFontOutline = btnFontOutline
-
-	local btnShadow = createCheckbutton(addon.aboutPanel, L.ShadowInfo)
-	bindToggle(btnShadow, "addFontShadow", {
-		messageOn = L.ShadowOn,
-		messageOff = L.ShadowOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnShadow, 45, -22)
-	addon.aboutPanel.btnShadow = btnShadow
-
-	local btnVoice = createCheckbutton(addon.aboutPanel, L.VoiceInfo)
-	bindToggle(btnVoice, "hideVoice", {
-		messageOn = L.VoiceOff,
-		messageOff = L.VoiceOn,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnVoice, 20, -22)
-	addon.aboutPanel.btnVoice = btnVoice
-
-	local btnEditBoxBorder = createCheckbutton(addon.aboutPanel, L.EditBoxBorderInfo)
-	bindToggle(btnEditBoxBorder, "hideEditboxBorder", {
-		messageOn = L.EditBoxBorderOff,
-		messageOff = L.EditBoxBorderOn,
-		showReload = true,
-		onToggle = function()
-			XCHT_DB.enableSimpleEditbox = false --turn this off
-		end,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnEditBoxBorder, 20, -22)
-	addon.aboutPanel.btnEditBoxBorder = btnEditBoxBorder
-
-	local btnSimpleEditBox = createCheckbutton(addon.aboutPanel, L.SimpleEditBoxInfo)
-	bindToggle(btnSimpleEditBox, "enableSimpleEditbox", {
-		messageOn = L.SimpleEditBoxOn,
-		messageOff = L.SimpleEditBoxOff,
-		showReload = true,
-		onShow = function()
-			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox)
-		end,
-		onToggle = function(value)
-			XCHT_DB.hideEditboxBorder = false --turn this off
-			setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, value)
-		end,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnSimpleEditBox, 20, -22)
-	addon.aboutPanel.btnSimpleEditBox = btnSimpleEditBox
-
-	local btnSEBDesign = createCheckbutton(addon.aboutPanel, L.SEBDesignInfo)
-	bindToggle(btnSEBDesign, "enableSEBDesign", {
-		messageOn = L.SEBDesignOn,
-		messageOff = L.SEBDesignOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnSEBDesign, 45, -22)
-	addon.aboutPanel.btnSEBDesign = btnSEBDesign
-
-	local btnAdjustedEditbox = createCheckbutton(addon.aboutPanel, L.AdjustedEditboxInfo)
-	bindToggle(btnAdjustedEditbox, "enableEditboxAdjusted", {
-		messageOn = L.AdjustedEditboxOn,
-		messageOff = L.AdjustedEditboxOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnAdjustedEditbox, 20, -22)
-	addon.aboutPanel.btnAdjustedEditbox = btnAdjustedEditbox
-
-	local btnCopyPaste = createCheckbutton(addon.aboutPanel, L.CopyPasteInfo)
-	bindToggle(btnCopyPaste, "enableCopyButton", {
-		messageOn = L.CopyPasteOn,
-		messageOff = L.CopyPasteOff,
-		showReload = true,
-		onShow = function()
-			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton)
-		end,
-		onToggle = function(value)
-			setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, value)
-		end,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnCopyPaste, 20, -22)
-	addon.aboutPanel.btnCopyPaste = btnCopyPaste
-
-	local btnCopyPasteLeft = createCheckbutton(addon.aboutPanel, L.CopyPasteLeftInfo)
-	bindToggle(btnCopyPasteLeft, "enableCopyButtonLeft", {
-		messageOn = L.CopyPasteLeftOn,
-		messageOff = L.CopyPasteLeftOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnCopyPasteLeft, 45, -22)
-	addon.aboutPanel.btnCopyPasteLeft = btnCopyPasteLeft
-
-	local btnChatTextFade = createCheckbutton(addon.aboutPanel, L.ChatTextFadeInfo)
-	bindToggle(btnChatTextFade, "enableChatTextFade", {
-		messageOn = L.ChatTextFadeOn,
-		messageOff = L.ChatTextFadeOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnChatTextFade, 20, -22)
-	addon.aboutPanel.btnChatTextFade = btnChatTextFade
-
-	local btnChatFrameFade = createCheckbutton(addon.aboutPanel, L.ChatFrameFadeInfo)
-	bindToggle(btnChatFrameFade, "disableChatFrameFade", {
-		messageOn = L.ChatFrameFadeOn,
-		messageOff = L.ChatFrameFadeOff,
-		showReload = true,
-	})
-
-	addConfigEntry(addon.aboutPanel.name, btnChatFrameFade, 20, -22)
-	addon.aboutPanel.btnChatFrameFade = btnChatFrameFade
-
-	--slider chat alpha
+	-- Chat Alpha slider
 	local sliderChatAlpha = createSlider(addon.aboutPanel, L.ChatAlphaText, 0, 100)
 	sliderChatAlpha:SetScript("OnShow", function()
-		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
-		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
+		local val = floor(XCHT_DB.userChatAlpha * 100)
+		sliderChatAlpha:SetValue(val)
+		sliderChatAlpha.currVal:SetText("("..val..")")
 	end)
 	sliderChatAlpha.func = function(value)
 		XCHT_DB.userChatAlpha = tonumber(value) / 100
-		sliderChatAlpha:SetValue(floor(XCHT_DB.userChatAlpha * 100))
-		sliderChatAlpha.currVal:SetText("("..floor(XCHT_DB.userChatAlpha * 100)..")")
-		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.ChatAlphaSet, floor(value)))
+		local val = floor(XCHT_DB.userChatAlpha * 100)
+		sliderChatAlpha:SetValue(val)
+		sliderChatAlpha.currVal:SetText("("..val..")")
+		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.ChatAlphaSet, val))
 		addon:setUserAlpha()
 	end
-	sliderChatAlpha.sliderMouseUp = function(self, button)
+	sliderChatAlpha.sliderMouseUp = function()
 		sliderChatAlpha.func(sliderChatAlpha:GetValue())
 	end
-	sliderChatAlpha.sliderFunc = function(self, value)
+	sliderChatAlpha.sliderFunc = function(_, value)
 		sliderChatAlpha.currVal:SetText("("..floor(value)..")")
 	end
 	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
 	sliderChatAlpha:SetScript("OnMouseUp", sliderChatAlpha.sliderMouseUp)
-
 	addConfigEntry(addon.aboutPanel.name, sliderChatAlpha, 20, -45)
 	addon.aboutPanel.sliderChatAlpha = sliderChatAlpha
 
-	--do the lock settings onShow
+	-- Hook OnShow to apply lock
 	addon.aboutPanel:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
-			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.LockChatSettingsAlert)
 			configFrame:DoLock()
 		end
 	end)
 
+	-- ============================================================================
+	-- ADDITIONAL SETTINGS
+	-- ============================================================================
 
-	-------------------------------------------------------
-	-------------------------------------------------------
-	--ADDITIONAL SETTINGS
-
-
+	-- Filter List button
 	local btnFilterList = createButton(addon.additionalSettings, L.EditFilterListHeader)
-	btnFilterList.func = function()
+	btnFilterList:SetScript("OnClick", function()
 		if addon.filterList then addon.filterList:Show() end
-	end
-	btnFilterList:SetScript("OnClick", btnFilterList.func)
-
+	end)
 	addConfigEntry(addon.additionalSettings.name, btnFilterList, 403, -20, true)
 	addon.additionalSettings.btnFilterList = btnFilterList
 
+	-- Outgoing Whisper Color
 	local btnOutWhisperColor = createCheckbutton(addon.additionalSettings, L.EnableOutWhisperColor)
 	bindToggle(btnOutWhisperColor, "enableOutWhisperColor", {
 		showReload = true,
@@ -602,62 +450,60 @@ function configFrame:EnableConfig()
 			addon:setOutWhisperColor()
 		end,
 	})
-
 	addConfigEntry(addon.additionalSettings.name, btnOutWhisperColor, 20, -22, nil, nil, -70)
 	addon.additionalSettings.btnOutWhisperColor = btnOutWhisperColor
 
-	--color swatch
+	-- Color picker
 	local btnOutWhisperColorPicker = createColorPicker(addon.additionalSettings, XCHT_DB, "outWhisperColor", L.ChangeOutgoingWhisperColor)
 	addConfigEntry(addon.additionalSettings.name, btnOutWhisperColorPicker, 20, -25)
 	addon.additionalSettings.btnOutWhisperColorPicker = btnOutWhisperColorPicker
 
+	-- Disable Chat Enter/Leave Notice
 	local btnDisableChatEnterLeaveNotice = createCheckbutton(addon.additionalSettings, L.DisableChatEnterLeaveNotice)
 	bindToggle(btnDisableChatEnterLeaveNotice, "disableChatEnterLeaveNotice", {
 		onToggle = function()
 			addon:setDisableChatEnterLeaveNotice()
 		end,
 	})
-
 	addConfigEntry(addon.additionalSettings.name, btnDisableChatEnterLeaveNotice, 20, -30)
 	addon.additionalSettings.btnDisableChatEnterLeaveNotice = btnDisableChatEnterLeaveNotice
 
+	-- Player Chat Style
 	local btnPlayerChatStyle = createCheckbutton(addon.additionalSettings, L.PlayerChatStyleInfo)
 	bindToggle(btnPlayerChatStyle, "enablePlayerChatStyle", {
 		messageOn = L.PlayerChatStyleOn,
 		messageOff = L.PlayerChatStyleOff,
 	})
-
 	addConfigEntry(addon.additionalSettings.name, btnPlayerChatStyle, 20, -30)
 	addon.additionalSettings.btnPlayerChatStyle = btnPlayerChatStyle
 
-	--slider page limit
+	-- Page Limit slider
 	local sliderPageLimit = createSlider(addon.additionalSettings, L.PageLimitText, 0, 20)
 	sliderPageLimit:SetScript("OnShow", function()
-		sliderPageLimit:SetValue(floor(XCHT_DB.pageBufferLimit))
-		sliderPageLimit.currVal:SetText("("..floor(XCHT_DB.pageBufferLimit)..")")
+		local val = floor(XCHT_DB.pageBufferLimit)
+		sliderPageLimit:SetValue(val)
+		sliderPageLimit.currVal:SetText("("..val..")")
 	end)
 	sliderPageLimit.func = function(value)
 		XCHT_DB.pageBufferLimit = floor(tonumber(value))
-		sliderPageLimit:SetValue(floor(XCHT_DB.pageBufferLimit))
-		sliderPageLimit.currVal:SetText("("..floor(XCHT_DB.pageBufferLimit)..")")
+		local val = floor(XCHT_DB.pageBufferLimit)
+		sliderPageLimit:SetValue(val)
+		sliderPageLimit.currVal:SetText("("..val..")")
 	end
-	sliderPageLimit.sliderMouseUp = function(self, button)
+	sliderPageLimit.sliderMouseUp = function()
 		sliderPageLimit.func(sliderPageLimit:GetValue())
 	end
-	sliderPageLimit.sliderFunc = function(self, value)
+	sliderPageLimit.sliderFunc = function(_, value)
 		sliderPageLimit.currVal:SetText("("..floor(value)..")")
 	end
 	sliderPageLimit:SetScript("OnValueChanged", sliderPageLimit.sliderFunc)
 	sliderPageLimit:SetScript("OnMouseUp", sliderPageLimit.sliderMouseUp)
-
 	addConfigEntry(addon.additionalSettings.name, sliderPageLimit, 55, -55)
 	addon.additionalSettings.sliderPageLimit = sliderPageLimit
 
-
-	--do the lock for additional settings onShow as well
+	-- Hook OnShow to apply lock
 	addon.additionalSettings:HookScript("OnShow", function()
 		if XCHT_DB and XCHT_DB.lockChatSettings then
-			--DEFAULT_CHAT_FRAME:AddMessage("|cFF20ff20XanChat|r: "..L.LockChatSettingsAlert)
 			configFrame:DoLock()
 		end
 	end)
@@ -665,7 +511,7 @@ end
 
 function configFrame:DoLock()
 	local enabled = not (XCHT_DB and XCHT_DB.lockChatSettings)
-	for i=1, #configObjList do
-		configObjList[i]:SetEnabled(enabled)
+	for _, obj in ipairs(configObjList) do
+		obj:SetEnabled(enabled)
 	end
 end

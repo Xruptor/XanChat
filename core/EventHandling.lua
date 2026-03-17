@@ -1,5 +1,11 @@
 --[[
 	EventHandling.lua - Core event handling for XanChat
+	Refactored for:
+	- Improved efficiency with consolidated nil checks
+	- Removed redundant early returns
+	- Simplified function flow
+	- Better variable naming and clarity
+	- Fixed unused variables
 ]]
 
 local ADDON_NAME, private = ...
@@ -15,49 +21,46 @@ addon.L = (private and private.L) or addon.L or {}
 local EventProcessingType = {
 	Full = 1,          -- Apply all processing: patterns + sections + formatting
 	PatternsOnly = 2,   -- Apply only pattern matching on captured text
-	OutputOnly = 3       -- Use only the captured Blizzard output, no xanChat processing
+	OutputOnly = 3       -- Use only captured Blizzard output, no xanChat processing
 }
+
+local CHAT_MSG_PREFIX = "CHAT_MSG"
+
+-- ============================================================================
+-- HELPER FUNCTIONS
+-- ============================================================================
+
+local function getEventSubtype(event)
+	return event and string.sub(event, 1, 8) or ""
+end
+
+local function isChatMessageEvent(event)
+	if type(event) ~= "string" then
+		return false
+	end
+	return getEventSubtype(event) == CHAT_MSG_PREFIX
+end
 
 -- ============================================================================
 -- EVENT HANDLING
 -- ============================================================================
 
 local function EventIsProcessed(event)
-	if not addon then
-		if addon and addon.dbg then
-			addon.dbg("EventIsProcessed: addon is nil, returning OutputOnly")
-		end
-		return EventProcessingType.OutputOnly
-	end
-
 	-- Default to Full processing for all CHAT_MSG events
-	local eventType = type(event)
-	local eventSub = (eventType == "string") and string.sub(event, 1, 8) or ""
-	local isChatMsg = eventType == "string" and eventSub == "CHAT_MSG"
-
-	if addon and addon.dbg then
-		addon.dbg("EventIsProcessed: event="..tostring(event).." type="..tostring(eventType).." sub="..tostring(eventSub).." isChatMsg="..tostring(isChatMsg))
-	end
-
-	if isChatMsg then
+	if isChatMessageEvent(event) then
 		return EventProcessingType.Full
-	else
-		return EventProcessingType.OutputOnly
 	end
+	return EventProcessingType.OutputOnly
 end
 
 local function callOriginalMessageHandler(self, frame, event, ...)
-	if addon and addon.dbg then
-		addon.dbg("callOriginalMessageHandler: event="..tostring(event).." _chatEventHooked="..tostring(self._chatEventHooked))
-	end
-
 	if self._chatEventHooked == "global" then
 		-- Use AceHook's stored original for global hook
 		if self.hooks and self.hooks._G and self.hooks._G.ChatFrame_MessageEventHandler then
 			return self.hooks._G.ChatFrame_MessageEventHandler(frame, event, ...)
 		end
 	elseif self._chatEventHooked == "frame" and frame then
-		local frameName = frame and frame.GetName and frame:GetName()
+		local frameName = frame.GetName and frame:GetName()
 		if frameName and self._hooks[frameName] then
 			-- Call the original function stored in self._hooks
 			return self._hooks[frameName](frame, event, ...)
@@ -68,12 +71,13 @@ end
 
 local function callOriginalMessageHandlerSecure(self, frame, event, ...)
 	local original
+
 	if self._chatEventHooked == "global" then
 		if self.hooks and self.hooks._G and self.hooks._G.ChatFrame_MessageEventHandler then
 			original = self.hooks._G.ChatFrame_MessageEventHandler
 		end
 	elseif self._chatEventHooked == "frame" and frame then
-		local frameName = frame and frame.GetName and frame:GetName()
+		local frameName = frame.GetName and frame:GetName()
 		if frameName and self._hooks[frameName] then
 			original = self._hooks[frameName]
 		end
@@ -83,31 +87,28 @@ local function callOriginalMessageHandlerSecure(self, frame, event, ...)
 		return nil
 	end
 
+	-- Use securecall if available to properly handle protected functions
 	local secureCall = _G.securecallfunction or _G.securecall
-	if secureCall then
-		return secureCall(original, frame, event, ...)
-	end
-
-	return original(frame, event, ...)
+	return secureCall and secureCall(original, frame, event, ...) or original(frame, event, ...)
 end
 
 local function shouldRunPatternPass(isSecretPayload, mode)
-	if isSecretPayload then
-		return false
-	end
-	return mode == EventProcessingType.Full or mode == EventProcessingType.PatternsOnly
+	return not isSecretPayload and (mode == EventProcessingType.Full or mode == EventProcessingType.PatternsOnly)
 end
 
 local function runFrameMessageFilters(frame, event, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14)
-	if string.sub(event or "", 1, 8) ~= "CHAT_MSG" then
+	if not isChatMessageEvent(event) then
 		return false, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14
 	end
+
 	if not (_G.ChatFrameUtil and _G.ChatFrameUtil.ProcessMessageEventFilters) then
 		return false, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14
 	end
+
 	local discard = false
 	discard, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14 =
 		_G.ChatFrameUtil.ProcessMessageEventFilters(frame, event, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14)
+
 	return discard, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14
 end
 
@@ -121,4 +122,3 @@ addon.shouldRunPatternPass = shouldRunPatternPass
 addon.runFrameMessageFilters = runFrameMessageFilters
 addon.EventIsProcessed = EventIsProcessed
 addon.EventProcessingType = EventProcessingType
-

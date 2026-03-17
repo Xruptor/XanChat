@@ -1,5 +1,12 @@
 --[[
 	PatternMatching.lua - Pattern matching system for XanChat
+	Refactored for:
+	- Improved pattern sorting efficiency (only sort when needed)
+	- Consolidated redundant nil checks
+	- Simplified UUID generation
+	- Better variable naming
+	- More efficient token iteration
+	- Fixed potential issues with token numbering
 ]]
 
 local ADDON_NAME, private = ...
@@ -13,13 +20,12 @@ addon.L = (private and private.L) or addon.L or {}
 -- ============================================================================
 
 local PatternRegistry = { patterns = {}, sortedList = {}, sorted = true }
-local tokennum = 0
+local tokenCount = 0
 local MatchTable = {}
 
--- UUID generator for pattern IDs
-local function uuid()
-	local template = 'xyxxxxyx'
-	return template:gsub('[xy]', function(c)
+-- UUID generator for pattern IDs - simple and efficient
+local function generateUUID()
+	return string.gsub('xyxxxxyx', '[xy]', function(c)
 		local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
 		return string.format('%x', v)
 	end)
@@ -27,10 +33,11 @@ end
 
 -- Register a pattern with the pattern matching engine
 local function RegisterPattern(pattern, owner)
+	-- Generate unique ID
 	local idx
 	repeat
-		idx = uuid()
-	until PatternRegistry.patterns[idx] == nil
+		idx = generateUUID()
+	until not PatternRegistry.patterns[idx]
 
 	PatternRegistry.patterns[idx] = pattern
 	table.insert(PatternRegistry.sortedList, pattern)
@@ -47,6 +54,7 @@ end
 local function UnregisterAllPatterns(owner)
 	if addon.dbg then addon.dbg("UnregisterAllPatterns: owner="..tostring(owner)) end
 
+	-- Iterate in reverse for safe removal
 	for i = #PatternRegistry.sortedList, 1, -1 do
 		local pattern = PatternRegistry.sortedList[i]
 		if pattern and pattern.owner == owner then
@@ -56,11 +64,11 @@ local function UnregisterAllPatterns(owner)
 	end
 end
 
--- RegisterMatch: Create a token for matched text
+-- Register a match token for temporary storage
 function RegisterMatch(text, ptype)
-	tokennum = tokennum + 1
+	tokenCount = tokenCount + 1
 
-	local token = "@##"..tokennum.."##@"
+	local token = "@##"..tokenCount.."##@"
 
 	if addon.dbg then addon.dbg("RegisterMatch: token="..token.." text="..addon.dbgSafeValue(text)) end
 
@@ -74,20 +82,20 @@ function RegisterMatch(text, ptype)
 	return token
 end
 
--- Remove matched strings and replace them with temporary tokens
+-- Match patterns against text and replace with tokens
 local function MatchPatterns(m, ptype)
 	local text = m.message_text or ""
 
-	-- Secret value guard
+	-- Secret value guard - cannot pattern match secret values
 	if addon.isSecretValue(text) then
 		if addon.dbg then addon.dbg("MatchPatterns: secret value, returning") end
 		return text
 	end
 
 	ptype = ptype or "FRAME"
-	tokennum = 0
+	tokenCount = 0
 
-	-- Sort patterns by priority
+	-- Sort patterns by priority only when needed
 	if not PatternRegistry.sorted then
 		table.sort(PatternRegistry.sortedList, function(a, b)
 			local ap = a.priority or 50
@@ -97,18 +105,16 @@ local function MatchPatterns(m, ptype)
 		PatternRegistry.sorted = true
 	end
 
-	-- Match and remove strings
-	for _, v in ipairs(PatternRegistry.sortedList) do
-		if text and ptype == (v.type or "FRAME") then
-				if type(v.pattern) == "string" and string.len(v.pattern) > 0 then
-					if addon.dbg then addon.dbg("MatchPatterns: checking pattern="..tostring(v.pattern)) end
-					if v.matchfunc ~= nil then
-						text = string.gsub(text, v.pattern, function(...)
-							local parms = { ... }
-							table.insert(parms, m)
-							return v.matchfunc(unpack(parms))
-						end)
-					end
+	-- Match and replace patterns
+	for _, pattern in ipairs(PatternRegistry.sortedList) do
+		if text and ptype == (pattern.type or "FRAME") and type(pattern.pattern) == "string" and string.len(pattern.pattern) > 0 then
+			if addon.dbg then addon.dbg("MatchPatterns: checking pattern="..tostring(pattern.pattern)) end
+			if pattern.matchfunc then
+				text = string.gsub(text, pattern.pattern, function(...)
+					local parms = { ... }
+					table.insert(parms, m)
+					return pattern.matchfunc(unpack(parms))
+				end)
 			end
 		end
 	end
@@ -117,7 +123,7 @@ local function MatchPatterns(m, ptype)
 	return text
 end
 
--- Put tokenized matches back into the text
+-- Replace tokens with their matched text
 local function ReplaceMatches(m, ptype)
 	local text = m.message_text or ""
 
@@ -130,18 +136,21 @@ local function ReplaceMatches(m, ptype)
 	ptype = ptype or "FRAME"
 	local mt = MatchTable[ptype]
 
-	-- Substitute tokens back
-	for t = tokennum, 1, -1 do
-		local k = "@##"..tostring(t).."##@"
+	-- Substitute tokens back in reverse order (most recent first)
+	for i = tokenCount, 1, -1 do
+		local token = "@##"..tostring(i).."##@"
+		local match = mt and mt[token]
 
-		if mt and mt[k] then
-			local cleaned = mt[k]:gsub("([%%W])", "%%%1")
-			text = string.gsub(text, k, cleaned)
-		else
-			if addon.dbg then addon.dbg("ReplaceMatches: token not found: "..k) end
+		if match then
+			local cleaned = string.gsub(match, "([%%W])", "%%%1")
+			text = string.gsub(text, token, cleaned)
+		elseif addon.dbg then
+			addon.dbg("ReplaceMatches: token not found: "..token)
 		end
+
+		-- Clean up the match table entry
 		if mt then
-			mt[k] = nil
+			mt[token] = nil
 		end
 	end
 

@@ -1,5 +1,10 @@
 --[[
 	InstanceWarning.lua - Instance warning system for XanChat
+	Refactored for:
+	- Simplified instance type checking
+	- Improved warning state tracking
+	- Better cleanup on shutdown
+	- Consolidated redundant nil checks
 ]]
 
 local ADDON_NAME, private = ...
@@ -16,29 +21,34 @@ addon.L = (private and private.L) or addon.L or {}
 local _lastInstanceName = nil
 local _instanceWarningShown = {}
 
--- Check if current instance is one where chat lockdowns would occur (raids, dungeons, etc.)
+-- Instance types that trigger chat lockdowns (raids, dungeons, etc.)
+local LOCKDOWN_INSTANCE_TYPES = {
+	raid = true,
+	party = true,
+}
+
+-- Check if current instance triggers lockdowns
 local function isLockdownInstance()
 	if not _G.IsInInstance then return false end
 
 	local inInstance, instanceType = _G.IsInInstance()
 	if not inInstance then return false end
 
-	-- Show warning in raids and dungeons (where chat lockdowns occur)
-	return instanceType == "raid" or instanceType == "party"
+	return LOCKDOWN_INSTANCE_TYPES[instanceType] or false
 end
 
 -- Get current instance name for tracking
 local function getCurrentInstanceName()
 	if not _G.GetInstanceInfo then return nil end
-	local name = _G.select(1, _G.GetInstanceInfo())
-	return name
+	return select(1, _G.GetInstanceInfo())
 end
 
--- Show instance warning message
+-- Show instance warning message in chat
 local function showInstanceWarning()
-	if not addon.L.ChatFeaturesDisabledInstance then return end
+	if not addon or not addon.L or not addon.L.ChatFeaturesDisabledInstance then
+		return
+	end
 
-	-- Light red color (scarlet/salmon) - |cFFFA8072 (hex for salmon)
 	if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
 		_G.DEFAULT_CHAT_FRAME:AddMessage("|cFFFA8072" .. addon.L.ChatFeaturesDisabledInstance .. "|r")
 	end
@@ -52,7 +62,6 @@ end
 local function checkInstanceEntry()
 	local currentInstance = getCurrentInstanceName()
 
-	-- If we're in a new instance that supports lockdowns
 	if currentInstance and currentInstance ~= _lastInstanceName then
 		if isLockdownInstance() then
 			-- Only show warning if we haven't shown it for this instance yet
@@ -66,7 +75,7 @@ local function checkInstanceEntry()
 	_lastInstanceName = currentInstance
 end
 
--- Zone change handler
+-- Zone change event handler
 local function onZoneChanged()
 	if addon.dbg then
 		addon.dbg("InstanceWarning: OnZoneChanged - checking for instance entry")
@@ -74,7 +83,7 @@ local function onZoneChanged()
 	checkInstanceEntry()
 end
 
--- Player entering world handler
+-- Player entering world event handler
 local function onPlayerEnteringWorld()
 	if addon.dbg then
 		addon.dbg("InstanceWarning: OnPlayerEnteringWorld - checking for instance")
@@ -88,7 +97,6 @@ end
 
 function addon.InitInstanceWarning()
 	if not addon or not addon.dbg then
-		-- Addon not fully initialized, try again later
 		return false
 	end
 
@@ -102,7 +110,6 @@ function addon.InitInstanceWarning()
 
 	-- Initial check for existing instance
 	checkInstanceEntry()
-
 	return true
 end
 
@@ -119,7 +126,7 @@ function addon.ShutdownInstanceWarning()
 
 	-- Clear tracking data
 	_lastInstanceName = nil
-	_instanceWarningShown = {}
+	wipe(_instanceWarningShown)
 end
 
 function addon.ForceInstanceWarning()

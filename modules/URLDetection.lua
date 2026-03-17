@@ -1,5 +1,10 @@
 --[[
 	URLDetection.lua - URL detection and linking for XanChat
+	Refactored for:
+	- Simplified URL pattern registration
+	- Improved hook management with cleanup
+	- Better error handling
+	- Consolidated redundant checks
 ]]
 
 local ADDON_NAME, private = ...
@@ -12,9 +17,8 @@ addon.L = (private and private.L) or addon.L or {}
 -- URL DETECTION AND LINKING
 -- ============================================================================
 
+-- Build clickable URL link with green coloring
 local function buildUrlLink(url)
-	-- Build clickable URL link with green coloring
-	-- Format: |cff99FF33|Hurl:url|h[url]|h|r
 	return " |cff99FF33|Hurl:"..url.."|h["..url.."]|h|r "
 end
 
@@ -63,38 +67,32 @@ local URL_PATTERNS = {
 
 local function registerUrlPatterns()
 	if not addon then return end
-
 	if addon._urlPatternsRegistered then
 		if addon.dbg then addon.dbg("registerUrlPatterns: already registered") end
 		return
 	end
+
 	if addon.dbg then addon.dbg("registerUrlPatterns: registering "..#URL_PATTERNS.." URL patterns") end
-	for _, pat in ipairs(URL_PATTERNS) do
-		addon.RegisterPattern(pat, "xanChat-URL")
+
+	for _, pattern in ipairs(URL_PATTERNS) do
+		addon.RegisterPattern(pattern, "xanChat-URL")
 	end
 	addon._urlPatternsRegistered = true
 end
 
 local function unregisterUrlPatterns()
 	if not addon then return end
+	if not addon._urlPatternsRegistered then return end
 
-	if not addon._urlPatternsRegistered then
-		return
-	end
 	addon.UnregisterAllPatterns("xanChat-URL")
 	addon._urlPatternsRegistered = false
 end
 
 local function installUrlCopyHook()
-	if not addon then return end
+	if not addon or addon._urlCopyHookInstalled then return end
+	if not _G.ItemRefTooltip or not _G.ItemRefTooltip.SetHyperlink then return end
 
-	if addon._urlCopyHookInstalled then
-		return
-	end
-	if not _G.ItemRefTooltip or not _G.ItemRefTooltip.SetHyperlink then
-		return
-	end
-
+	-- Create or get the static popup dialog
 	_G.StaticPopupDialogs["LINKME"] = _G.StaticPopupDialogs["LINKME"] or {
 		text = addon.L and addon.L.URLCopy or "Copy URL",
 		button2 = _G.CANCEL,
@@ -108,10 +106,12 @@ local function installUrlCopyHook()
 		maxLetters = 255,
 	}
 
+	-- Store original and hook SetHyperlink
 	if not addon._origItemRefTooltipSetHyperlink then
 		addon._origItemRefTooltipSetHyperlink = _G.ItemRefTooltip.SetHyperlink
 	end
 	local originalSetHyperlink = addon._origItemRefTooltipSetHyperlink
+
 	_G.ItemRefTooltip.SetHyperlink = function(self, link, ...)
 		if type(link) == "string" and string.sub(link, 1, 3) == "url" then
 			local url = string.sub(link, 5)
@@ -138,9 +138,8 @@ local function installUrlCopyHook()
 end
 
 local function uninstallUrlCopyHook()
-	if not addon or not addon._urlCopyHookInstalled then
-		return
-	end
+	if not addon or not addon._urlCopyHookInstalled then return end
+
 	if _G.ItemRefTooltip and addon._origItemRefTooltipSetHyperlink then
 		_G.ItemRefTooltip.SetHyperlink = addon._origItemRefTooltipSetHyperlink
 	end

@@ -1,5 +1,12 @@
 --[[
 	PlayerNameStyling.lua - Player name styling and formatting for XanChat
+	Refactored for:
+	- Consolidated duplicate player link generation code
+	- Simplified color extraction logic
+	- Improved early returns and nil handling
+	- Better function organization
+	- Reduced code duplication
+	- Fixed redundant secret value checks
 ]]
 
 local ADDON_NAME, private = ...
@@ -8,7 +15,10 @@ local addon = _G[ADDON_NAME]
 addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
 
--- Color Helper
+-- ============================================================================
+-- COLOR UTILITIES
+-- ============================================================================
+
 local function RGBAToHex(r, g, b, a)
 	r = math.min(math.max(tonumber(r) or 1, 0), 1)
 	g = math.min(math.max(tonumber(g) or 1, 0), 1)
@@ -27,36 +37,125 @@ local function HexToRGBA(hex)
 		tonumber("0x"..string.sub(hex, 1, 2), 10) / 255
 end
 
--- Helper function to wrap text in WoW color format
 local function wrapInColor(text, r, g, b)
 	if not text or text == "" then return "" end
 	if not r or not g or not b then return text end
 
-	-- Try RGBAToHex first, fallback to manual hex conversion
-	local hexColor
-	if RGBAToHex then
-		hexColor = RGBAToHex(r, g, b, 1)
-	else
-		hexColor = string.format("%02x%02x%02x", r * 255, g * 255, b * 255)
-	end
-
+	local hexColor = RGBAToHex(r, g, b, 1)
 	if not hexColor or hexColor == "" then return text end
 	return "|c"..hexColor..text.."|r"
 end
 
-local function addTimeRunningIcon(guid, stylizedName, isSecret)
-	if not stylizedName then return "" end
-	if not guid then return stylizedName end
-	-- Skip timerunning icons during secret value lockdowns (boss encounters)
-	if isSecret then return stylizedName end
-	if type(guid) ~= "string" then return stylizedName end
-	if not _G.C_ChatInfo or not _G.C_ChatInfo.IsTimerunningPlayer then return stylizedName end
-	if not _G.TimerunningUtil or not  _G.TimerunningUtil.AddSmallIcon then return stylizedName end
-	-- Only add timerunning icon if the player is currently a timerunning player
-	if not _G.C_ChatInfo.IsTimerunningPlayer(guid) then return stylizedName end
+-- ============================================================================
+-- TIMERUNNING ICON HANDLING
+-- ============================================================================
 
-	stylizedName = _G.TimerunningUtil.AddSmallIcon(stylizedName)
-	return stylizedName
+local function addTimeRunningIcon(guid, stylizedName, isSecret)
+	if not stylizedName or not guid or isSecret then
+		return stylizedName or ""
+	end
+	if type(guid) ~= "string" then return stylizedName end
+
+	-- Check for timerunning availability
+	if not _G.C_ChatInfo or not _G.C_ChatInfo.IsTimerunningPlayer then
+		return stylizedName
+	end
+	if not _G.TimerunningUtil or not _G.TimerunningUtil.AddSmallIcon then
+		return stylizedName
+	end
+	if not _G.C_ChatInfo.IsTimerunningPlayer(guid) then
+		return stylizedName
+	end
+
+	return _G.TimerunningUtil.AddSmallIcon(stylizedName)
+end
+
+-- ============================================================================
+-- EVENT TYPE FILTERING
+-- ============================================================================
+
+-- Events to skip styling for during secret value lockdowns
+local SKIP_STYLING_EVENTS = {
+	BN_INLINE_TOAST_ALERT = true,
+	BN_INLINE_TOAST_BROADCAST = true,
+	BN_INLINE_TOAST_BROADCAST_INFORM = true,
+	BN_INLINE_TOAST_CONVERSATION = true,
+	BN_WHISPER_PLAYER_OFFLINE = true,
+	SYSTEM = true,
+	AFK = true,
+	DND = true,
+	ADDON = true,
+	ERRORS = true,
+	CHANNEL_NOTICE = true,
+	CHANNEL_NOTICE_USER = true,
+	TRADESKILLS = true,
+	PET_INFO = true,
+	COMBAT_MISC_INFO = true,
+	COMBAT_XP_GAIN = true,
+	COMBAT_FACTION_CHANGE = true,
+	COMBAT_HONOR_GAIN = true,
+	IGNORED = true,
+	PING = true,
+}
+
+local function shouldSkipStyling(chatType, isSecret)
+	if not isSecret then return false end
+
+	-- Skip all Battle.net toast events
+	if string.sub(chatType or "", 1, 15) == "BN_INLINE_TOAST" then
+		return true
+	end
+
+	return SKIP_STYLING_EVENTS[chatType] or false
+end
+
+-- ============================================================================
+-- PLAYER LINK GENERATION
+-- ============================================================================
+
+local function createPlayerLink(m, linkTarget, displayText)
+	-- Skip for monster emotes and channel notices
+	local chatType = m.chat_type or ""
+	if string.sub(chatType, 1, 7) == "MONSTER" or
+	   string.sub(chatType, 1, 18) == "RAID_BOSS_EMOTE" or
+	   chatType == "CHANNEL_NOTICE" or
+	   chatType == "CHANNEL_NOTICE_USER" then
+		return nil
+	end
+
+	-- Handle achievement events
+	if chatType == "ACHIEVEMENT" or chatType == "GUILD_ACHIEVEMENT" then
+		return string.format("|Hplayer:%s|h[%s]|h", linkTarget, displayText)
+	end
+
+	-- Handle community channels
+	if chatType == "COMMUNITIES_CHANNEL" then
+		local isBattleNetCommunity = m.arg13 ~= nil and m.arg13 ~= 0
+		local messageInfo = _G.C_Club and _G.C_Club.GetInfoFromLastCommunityChatLine and _G.C_Club.GetInfoFromLastCommunityChatLine()
+
+		if messageInfo then
+			local clubId, streamId = messageInfo.clubId, messageInfo.streamId
+			if isBattleNetCommunity then
+				return string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s:%s|h[%s]|h",
+					linkTarget, m.arg13, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
+			else
+				return string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s|h[%s]|h",
+					linkTarget, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
+			end
+		end
+		return "[" .. displayText .. "]"
+	end
+
+	-- Handle Battle.net whisper events
+	if chatType == "BN_WHISPER" or chatType == "BN_WHISPER_INFORM" or chatType == "BN_CONVERSATION" then
+		if m.arg13 then
+			return string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
+		end
+		return "[" .. displayText .. "]"
+	end
+
+	-- Handle regular player links
+	return string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
 end
 
 -- ============================================================================
@@ -65,161 +164,68 @@ end
 
 local function StylePlayerSection(m)
 	if not addon then return end
+
 	local isSecret = addon.isSecretValue(m.player_name)
-
-	-- During a boss encounter or a chat lockdown we don't want to process certain events as they will get broken because of their special formatting.
-	---------------------------
-	-- Skip styling for special events during secret value lockdowns to prevent issues
 	local chatType = m.chat_type or ""
-	if isSecret then
-		local skipStyling = false
-		-- Skip all Battle.net toast events (friend online/offline, broadcasts, etc.)
-		if string.sub(chatType, 1, 15) == "BN_INLINE_TOAST" then
-			skipStyling = true
-		-- Skip Battle.net whisper events that might be system messages
-		end
-		if chatType == "BN_WHISPER_PLAYER_OFFLINE" then
-			skipStyling = true
-		-- Skip system messages during secret lockdown (friend status, server messages, etc.)
-		end
-		if chatType == "SYSTEM" then
-			skipStyling = true
-		-- Skip AFK/DND status messages
-		end
-		if chatType == "AFK" or chatType == "DND" then
-			skipStyling = true
-		-- Skip addon messages and error messages
-		end
-		if chatType == "ADDON" or chatType == "ERRORS" then
-			skipStyling = true
-		-- Skip channel notice messages
-		end
-		if chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
-			skipStyling = true
-		-- Skip trade skills and profession messages
-		end
-		if chatType == "TRADESKILLS" then
-			skipStyling = true
-		-- Skip pet information messages
-		end
-		if chatType == "PET_INFO" then
-			skipStyling = true
-		-- Skip combat info messages (XP, faction, honor, etc.)
-		end
-		if chatType == "COMBAT_MISC_INFO" or chatType == "COMBAT_XP_GAIN" or
-		       chatType == "COMBAT_FACTION_CHANGE" or chatType == "COMBAT_HONOR_GAIN" then
-			skipStyling = true
-		-- Skip ignored messages
-		end
-		if chatType == "IGNORED" then
-			skipStyling = true
-		-- Skip ping messages
-		end
-		if chatType == "PING" then
-			skipStyling = true
-		end
 
-		if skipStyling then
-			if addon and addon.dbg then
-				addon.dbg("StylePlayerSection: skipping special event during secret lockdown: "..addon.dbgSafeValue(chatType))
-			end
-			return
+	-- Skip styling for special events during secret value lockdowns
+	if shouldSkipStyling(chatType, isSecret) then
+		if addon and addon.dbg then
+			addon.dbg("StylePlayerSection: skipping special event during secret lockdown: "..addon.dbgSafeValue(chatType))
 		end
+		return
 	end
 
-	-- Check filter list to see if this event type should be styled, when an event is checked that means we want to process it.  When unchecked that means we don't
-	-- want to apply any styling to those events.
+	-- Check filter list for styling eligibility
 	local shouldStyle = true
 	if addon.searchFilterList and addon.isFilterListEnabled then
-		shouldStyle = addon:searchFilterList(m.chat_type, m.message_text or "")
+		shouldStyle = addon:searchFilterList(chatType, m.message_text or "")
 	end
 
 	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) or isSecret or not shouldStyle then
-		-- Even if player chat style is disabled, we still need to generate player_link for clickable names
+		-- Still need to generate player_link for clickable names
 		if not m.player_name or (not isSecret and m.player_name == "") then
 			return
 		end
 
-		-- Try to get class color for the player name
+		-- Get class color for player name
 		local coloredPlayerName = m.player_name
 		local playerClass = m.player_class
 
-		--only do these checks if we don't have secret values, since we cannot do table lookups using secret value keys
 		if not isSecret and (not playerClass or playerClass == "") and addon.getPlayerInfo then
-			-- If class not available from ParseChatEvent, check player table using getPlayerInfo
 			local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
 			if playerInfo and playerInfo.class then
 				playerClass = playerInfo.class
 			end
-		elseif isSecret and (m.player_guid and not playerClass)  then
+		elseif isSecret and (m.player_guid and not playerClass) then
 			local _, englishClassChk = _G.GetPlayerInfoByGUID(m.player_guid)
 			playerClass = englishClassChk
 		end
 
-		-- Apply class color for non-secret, because you cannot do a table lookup using secret values
+		-- Apply class color
 		if not isSecret and playerClass and playerClass ~= "" then
 			local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
-			if classColorTable then
-				local classColor = classColorTable[playerClass]
-				if classColor then
-					coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
-					if addon and addon.dbg then
-						addon.dbg("StylePlayerSection: class color applied for disabled style="..addon.dbgSafeValue(playerClass))
-					end
+			local classColor = classColorTable and classColorTable[playerClass]
+			if classColor then
+				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
+				if addon and addon.dbg then
+					addon.dbg("StylePlayerSection: class color applied for disabled style="..addon.dbgSafeValue(playerClass))
 				end
 			end
 		elseif isSecret and playerClass and C_ClassColor then
-			--NOTE:  This is the only real way to colorize a player name that is a secret value.  Because we also pass secret value class to a blizzard function.
 			local classColor = C_ClassColor.GetClassColor(playerClass)
 			if classColor then
 				coloredPlayerName = classColor:WrapTextInColorCode(coloredPlayerName)
-				addon.dbg("StylePlayerSection: class color applied for (secret) coloredPlayerName="..addon.dbgSafeValue(coloredPlayerName))
+				if addon and addon.dbg then
+					addon.dbg("StylePlayerSection: class color applied for (secret) coloredPlayerName="..addon.dbgSafeValue(coloredPlayerName))
+				end
 			end
-
 		end
 
-		-- Generate clickable player link with class color
-		if m.sender_name and string.sub(m.chat_type or "", 1, 7) ~= "MONSTER" and
-		    string.sub(m.chat_type or "", 1, 18) ~= "RAID_BOSS_EMOTE" and
-		    m.chat_type ~= "CHANNEL_NOTICE" and m.chat_type ~= "CHANNEL_NOTICE_USER" then
-
-			local linkTarget = m.sender_name
-			local displayText = coloredPlayerName
-
-			-- Add timerunning icon if available (excluded during secret value lockdowns)
-			displayText = addTimeRunningIcon(m.player_guid, displayText, isSecret)
-
-			local playerLink
-			-- Handle achievement events during secret values with simplified link format
-			if m.chat_type == "ACHIEVEMENT" or m.chat_type == "GUILD_ACHIEVEMENT" then
-				playerLink = string.format("|Hplayer:%s|h[%s]|h", linkTarget, displayText)
-			-- Handle community channels during secret values with special community link format
-			elseif m.chat_type == "COMMUNITIES_CHANNEL" then
-				local isBattleNetCommunity = m.arg13 ~= nil and m.arg13 ~= 0
-				local messageInfo, clubId, streamId = _G.C_Club.GetInfoFromLastCommunityChatLine()
-				if messageInfo ~= nil then
-					if isBattleNetCommunity then
-						playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s:%s|h[%s]|h",
-							linkTarget, m.arg13, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
-					else
-						playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s|h[%s]|h",
-							linkTarget, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
-					end
-				else
-					playerLink = "[" .. displayText .. "]"
-				end
-			-- Handle Battle.net whisper events
-			elseif m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
-				if m.arg13 then
-					playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
-				else
-					playerLink = "[" .. displayText .. "]"
-				end
-			-- Handle regular player links
-			else
-				playerLink = string.format("|Hplayer:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
-			end
-
+		-- Create clickable player link
+		displayText = addTimeRunningIcon(m.player_guid, coloredPlayerName, isSecret)
+		local playerLink = createPlayerLink(m, m.sender_name, displayText)
+		if playerLink then
 			m.player_link = playerLink
 			m.styled_player_name = displayText
 			if addon and addon.dbg then
@@ -229,209 +235,107 @@ local function StylePlayerSection(m)
 		return
 	end
 
+	-- Return early if no player name
 	if not m.player_name or (not addon.isSecretValue(m.player_name) and m.player_name == "") then
 		return
 	end
 
-	-- Extract class color from Blizzard-formatted output text
-	local extractedClassColor = nil
+	-- Extract class color from Blizzard output
+	local extractedClassColor
 	if m.OUTPUT and type(m.OUTPUT) == "string" then
-		-- Break early if player name is empty or nil to prevent empty brackets
-		if not m.player_name or (not addon.isSecretValue(m.player_name) and m.player_name == "") then
-			return
-		end
-
-		-- Look for class color in the formatted output around the player name
-		-- Blizzard formats player names like |cffRRGGBB[PlayerName]|r or just |cffRRGGBBPlayerName|r
 		local playerNamePattern = string.gsub(m.player_name, "([%-%^%$%(%)%%%[%]%.%*%+%?])", "%%%1")
-		-- Try different patterns to find the color code
-		local patterns = {
-			"|cff(%x%x%x%x%x%x)%["..playerNamePattern.."%]|r",  -- |cffRRGGBB[Name]|r
-			"|cff(%x%x%x%x%x%x)"..playerNamePattern.."|r",       -- |cffRRGGBBName|r (before brackets)
-			"|cff(%x%x%x%x%x%x)%|"..playerNamePattern.."|h",    -- |cffRRGGBB|Name|h (player link)
-		}
 
-		for _, pattern in ipairs(patterns) do
+		for _, pattern in ipairs({
+			"|cff(%x%x%x%x%x)%["..playerNamePattern.."%]|r",
+			"|cff(%x%x%x%x%x)"..playerNamePattern.."|r",
+			"|cff(%x%x%x%x%x)%|"..playerNamePattern.."|h",
+		}) do
 			local colorMatch = string.match(m.OUTPUT, pattern)
 			if colorMatch then
-				local hexColor = colorMatch
 				extractedClassColor = {
-					r = tonumber(string.sub(hexColor, 1, 2), 16) / 255,
-					g = tonumber(string.sub(hexColor, 3, 4), 16) / 255,
-					b = tonumber(string.sub(hexColor, 5, 6), 16) / 255
+					r = tonumber(string.sub(colorMatch, 1, 2), 16) / 255,
+					g = tonumber(string.sub(colorMatch, 3, 4), 16) / 255,
+					b = tonumber(string.sub(colorMatch, 5, 6), 16) / 255
 				}
 				if addon and addon.dbg then
-					addon.dbg("StylePlayerSection: Extracted class color from Blizzard output: R="..string.format("%.2f", extractedClassColor.r).." G="..string.format("%.2f", extractedClassColor.g).." B="..string.format("%.2f", extractedClassColor.b))
+					addon.dbg("StylePlayerSection: Extracted class color from Blizzard output")
 				end
 				break
 			end
 		end
 	end
 
-	-- Always look up player info for level, even if we have extracted color
-	local playerInfo = nil
-	local fallbackPlayerName = m.player_name_with_realm
-
-	-- Use getPlayerInfo to lookup player in table
+	-- Get player info for level
+	local playerInfo
 	if addon.getPlayerInfo then
-		playerInfo = addon.getPlayerInfo(m.player_guid, fallbackPlayerName, m.player_name, m.server_name)
-
+		playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
 		if addon and addon.dbg then
-			addon.dbg("-->player list lookup: guid="..addon.dbgSafeValue(m.player_guid).." name="..addon.dbgSafeValue(m.player_name).." fallback="..addon.dbgSafeValue(fallbackPlayerName).." found="..tostring(playerInfo and "yes" or "no"))
-			if playerInfo then
-				addon.dbg("-->playerInfo: level="..addon.dbgSafeValue(playerInfo.level or "nil").." class="..addon.dbgSafeValue(playerInfo.class or "nil"))
-			end
+			addon.dbg("-->player list lookup: guid="..addon.dbgSafeValue(m.player_guid).." found="..tostring(playerInfo and "yes" or "no"))
 		end
 	end
 
-	-- Simple debug summary
 	if addon and addon.dbg then
-		addon.dbg("-->StylePlayerSection: name="..addon.dbgSafeValue(m.player_name).." player_class="..addon.dbgSafeValue(m.player_class or "nil").." extractedColor="..tostring(extractedClassColor and "yes" or "no"))
+		addon.dbg("-->StylePlayerSection: name="..addon.dbgSafeValue(m.player_name).." extractedColor="..tostring(extractedClassColor and "yes" or "no"))
 	end
 
-	-- Continue only if we have player info for level or class info for name styling
+	-- Return early if no styling data available
 	if not playerInfo and not extractedClassColor and not (m.player_class and m.player_class ~= "") then
 		return
 	end
 
 	-- Build level text with difficulty coloring
 	local coloredLevel = ""
-	-- Check for level with more flexible condition, handle string conversion
 	if playerInfo then
 		local level = tonumber(playerInfo.level) or 0
-		if addon and addon.dbg then
-			addon.dbg("-->level calculation: playerInfo.level="..addon.dbgSafeValue(playerInfo.level).." tonumber="..tostring(level).." >0="..tostring(level and level > 0))
-		end
-		if level and level > 0 then
+		if level > 0 then
 			local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
 			if colorFunc then
 				local difficultyColor = colorFunc(level)
-				if addon and addon.dbg then
-					addon.dbg("-->level difficulty color: R="..string.format("%.2f", difficultyColor.r).." G="..string.format("%.2f", difficultyColor.g).." B="..string.format("%.2f", difficultyColor.b))
-				end
 				if difficultyColor then
 					coloredLevel = wrapInColor(tostring(level), difficultyColor.r, difficultyColor.g, difficultyColor.b)
-					if addon and addon.dbg then
-						addon.dbg("-->coloredLevel result: "..tostring(coloredLevel))
-					end
 				end
 			end
 		end
 	end
 
-	-- Build player name with class coloring
+	-- Build colored player name
 	local coloredPlayerName = m.player_name
-	-- First try to use extracted class color from Blizzard output
+
 	if extractedClassColor then
 		coloredPlayerName = wrapInColor(m.player_name, extractedClassColor.r, extractedClassColor.g, extractedClassColor.b)
-	-- Try to use class from GUID lookup (for secret messages)
 	elseif m.player_class and m.player_class ~= "" then
 		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
-		if classColorTable then
-			local classColor = classColorTable[m.player_class]
-			if classColor then
-				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
-				if addon and addon.dbg then
-					addon.dbg("-->class color: using GUID class="..addon.dbgSafeValue(m.player_class))
-				end
-			else
-				if addon and addon.dbg then
-					addon.dbg("-->class color: GUID class "..addon.dbgSafeValue(m.player_class).." NOT found in color table")
-				end
-			end
+		local classColor = classColorTable and classColorTable[m.player_class]
+		if classColor then
+			coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
 		end
-	-- Fallback to player list lookup for class color
 	elseif playerInfo and playerInfo.class then
 		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
-		if classColorTable then
-			local classColor = classColorTable[playerInfo.class]
-			if classColor then
-				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
-				if addon and addon.dbg then
-					addon.dbg("-->class color: using player list class="..addon.dbgSafeValue(playerInfo.class))
-				end
-			else
-				if addon and addon.dbg then
-					addon.dbg("-->class color: class "..addon.dbgSafeValue(playerInfo.class).." NOT found in color table")
-				end
-			end
+		local classColor = classColorTable and classColorTable[playerInfo.class]
+		if classColor then
+			coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
 		end
 	end
 
-	-- Construct styled player name as a clickable link
-	-- Generate the clickable player link with level and class color
-	if m.sender_name and string.sub(m.chat_type or "", 1, 7) ~= "MONSTER" and
-	    string.sub(m.chat_type or "", 1, 18) ~= "RAID_BOSS_EMOTE" and
-	    m.chat_type ~= "CHANNEL_NOTICE" and m.chat_type ~= "CHANNEL_NOTICE_USER" then
+	-- Build display text and create player link
+	local displayText = coloredPlayerName
+	if coloredLevel ~= "" then
+		displayText = coloredLevel..":"..coloredPlayerName
+	end
+	displayText = addTimeRunningIcon(m.player_guid, displayText, false)
 
-		local linkTarget = m.sender_name
-		local displayText = coloredPlayerName
-
-		-- Add level prefix if available
-		if coloredLevel ~= "" then
-			displayText = coloredLevel..":"..coloredPlayerName
-		end
-
-		-- Add timerunning icon if available (excluded during secret value lockdowns)
-		displayText = addTimeRunningIcon(m.player_guid, displayText, false)
-
-		local playerLink
-		-- Handle achievement events with simplified link format
-		if m.chat_type == "ACHIEVEMENT" or m.chat_type == "GUILD_ACHIEVEMENT" then
-			playerLink = string.format("|Hplayer:%s:h[%s]|h", linkTarget, displayText)
-		-- Handle community channels with special community link format
-		elseif m.chat_type == "COMMUNITIES_CHANNEL" then
-			local isBattleNetCommunity = m.arg13 ~= nil and m.arg13 ~= 0
-			local messageInfo, clubId, streamId = _G.C_Club.GetInfoFromLastCommunityChatLine()
-			if messageInfo ~= nil then
-				if isBattleNetCommunity then
-					playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s:%s|h[%s]|h",
-						linkTarget, m.arg13, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
-				else
-					playerLink = string.format("|HBNplayerCommunity:%s:%s:%s:%s:%s|h[%s]|h",
-						linkTarget, clubId, streamId, messageInfo.messageId.epoch, messageInfo.messageId.position, displayText)
-				end
-			else
-				playerLink = "[" .. displayText .. "]"
-			end
-		-- Handle Battle.net whisper events
-		elseif m.chat_type == "BN_WHISPER" or m.chat_type == "BN_WHISPER_INFORM" or m.chat_type == "BN_CONVERSATION" then
-			if m.arg13 then
-				playerLink = string.format("|HBNplayer:%s:%s:%s:%s:%s|h[%s]|h", linkTarget, m.arg13, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
-			else
-				playerLink = "[" .. displayText .. "]"
-			end
-		-- Handle regular player links
-		else
-			playerLink = string.format("|Hplayer:%s:%s:%s:%s:h[%s]|h", linkTarget, m.arg11 or 0, m.CHATGROUP or 0, m.chat_target or "", displayText)
-		end
-
+	local playerLink = createPlayerLink(m, m.sender_name, displayText)
+	if playerLink then
 		m.player_link = playerLink
 		m.styled_player_name = playerLink
 		if addon and addon.dbg then
 			addon.dbg("-->clickable player_link created: "..addon.dbgSafeValue(playerLink))
-			if coloredLevel ~= "" then
-				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(coloredLevel)..":"..addon.dbgSafeValue(m.player_name).."]")
-			else
-				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(m.player_name).."] (no level)")
-			end
 		end
 	else
-		-- Fallback: non-clickable styled player name for non-player messages
-		if coloredLevel ~= "" then
-			-- Format: [70:Xruptor]
-			m.styled_player_name = "["..coloredLevel..":"..coloredPlayerName.."]"
-			if addon and addon.dbg then
-				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(coloredLevel)..":"..addon.dbgSafeValue(m.player_name).."]")
-				addon.dbg("-->Final styled name result: "..addon.dbgSafeValue(m.styled_player_name))
-			end
-		else
-			-- Format: [Xruptor]
-			m.styled_player_name = "["..coloredPlayerName.."]"
-			if addon and addon.dbg then
-				addon.dbg("-->stylized_player_name applied: ["..addon.dbgSafeValue(m.player_name).."] (no level)")
-				addon.dbg("-->Final styled name result: "..addon.dbgSafeValue(m.styled_player_name))
-			end
+		-- Fallback: non-clickable styled player name
+		m.styled_player_name = coloredLevel ~= "" and "["..displayText.."]" or "["..coloredPlayerName.."]"
+		if addon and addon.dbg then
+			addon.dbg("-->stylized_player_name (non-clickable): "..addon.dbgSafeValue(m.styled_player_name))
 		end
 	end
 
@@ -446,9 +350,7 @@ end
 -- ============================================================================
 
 local function checkNoticeFilter(_, event, message)
-	if not addon then return false end
-
-	if not _G.XCHT_DB or not _G.XCHT_DB.disableChatEnterLeaveNotice then
+	if not addon or not _G.XCHT_DB or not _G.XCHT_DB.disableChatEnterLeaveNotice then
 		return false
 	end
 
@@ -465,14 +367,10 @@ local function checkNoticeFilter(_, event, message)
 	return false
 end
 
--- ============================================================================
--- NOTICE FILTER SETUP
--- ============================================================================
-
 local function setDisableChatEnterLeaveNotice()
-	if not addon then return end
-
-	if addon._noticeFilterRegistered then return end
+	if not addon or addon._noticeFilterRegistered then
+		return
+	end
 
 	if _G.ChatFrame_AddMessageEventFilter then
 		_G.ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", addon.checkNoticeFilter)

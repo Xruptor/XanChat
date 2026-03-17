@@ -1,5 +1,12 @@
 --[[
 	ChatFormatting.lua - Direct chat text construction system for XanChat
+	Refactored for:
+	- Eliminated per-call function creation (getValue helper)
+	- Simplified string concatenation and trimming
+	- Removed redundant nil checks
+	- Better variable naming
+	- More efficient whitespace handling
+	- Removed unnecessary conditional logic
 ]]
 
 local ADDON_NAME, private = ...
@@ -16,116 +23,119 @@ if addon and addon.dbg then
 	addon.dbg("chat_composition_system_init")
 end
 
--- All possible data keys that can be populated from a chat event.
+-- All possible data keys that can be populated from a chat event
 local CHAT_DATA_KEYS = {
-    "prefix_text", "type_prefix", "channel_link", "channel_number", "channel_name", "zone_name",
-    "player_flag", "timerunner", "player_link", "player_guid", "player_name", "player_name_with_realm", "player_class", "non_player_name", "server_name", "server_separator",
-    "type_postfix", "language", "mobile_icon", "message_text", "postfix_text", "styled_player_name", "PRE", "POST"
+	"prefix_text", "type_prefix", "channel_link", "channel_number", "channel_name", "zone_name",
+	"player_flag", "timerunner", "player_link", "player_guid", "player_name", "player_name_with_realm", "player_class", "non_player_name", "server_name", "server_separator",
+	"type_postfix", "language", "mobile_icon", "message_text", "postfix_text", "styled_player_name", "PRE", "POST"
 }
 
--- Buffers for composition. 'sectionOriginal' and 'sectionWorking' are used to maintain compatibility
--- with other parts of the addon that expect these names.
+-- Buffers for composition
 local sectionOriginal = {}
 local sectionWorking = { ORG = sectionOriginal }
 
+-- Helper to safely trim strings and handle secret values
+local function getSafeValue(field, m)
+	local value = m and m[field]
+	if not value then return "" end
+	if addon.isSecretValue(value) then return "" end
+	if not addon.canAccessValue(value) then return "" end
+	if type(value) ~= "string" then return "" end
+
+	-- Trim leading and trailing whitespace
+	return string.match(value, "^%s*(.-)%s*$") or ""
+end
+
+-- Reset section buffer to empty state
 local function resetSectionBuffer(buffer)
 	if addon and addon.dbg then
 		addon.dbg("resetSectionBuffer: clearing buffer")
 	end
-	for k in pairs(buffer) do
-		buffer[k] = nil
-	end
+	wipe(buffer)
 	for i = 1, #CHAT_DATA_KEYS do
 		buffer[CHAT_DATA_KEYS[i]] = ""
 	end
 end
 
+-- Prepare working sections by copying from original
 local function prepareWorkingSections()
 	if addon and addon.dbg then
 		addon.dbg("prepareWorkingSections: copying sectionOriginal to sectionWorking")
 	end
-	-- Copy all fields from sectionOriginal to sectionWorking
 	for k, v in pairs(sectionOriginal) do
 		sectionWorking[k] = v
 	end
 	return sectionWorking
 end
 
---This function should not be called for secret values as there is a lot of string modications done here.  Especially gsub() which doesn't work with secret values.
+-- Do not call this for secret values (string modifications like gsub don't work with secret values)
 local function FormatChatMessage(message)
 	if addon and addon.dbg then
 		addon.dbg("FormatChatMessage: building chat text with direct construction")
-		addon.dbg("FormatChatMessage: channel_name="..addon.dbgSafeValue(message and message.channel_name or sectionWorking.channel_name or "nil"))
-		addon.dbg("FormatChatMessage: styled_player_name="..addon.dbgSafeValue(message and message.styled_player_name or sectionWorking.styled_player_name or "nil"))
 	end
+
 	if message ~= nil and message ~= false then
 		sectionWorking = message
 	end
 	local m = sectionWorking
 
-	-- Helper function to safely get and trim values
-	local function getValue(field)
-		local value = m[field] or ""
-		if addon.isSecretValue(value) then return "" end
-		if not addon.canAccessValue(value) then return "" end
-		if type(value) ~= "string" then return "" end
-		return value:gsub("^%s+", ""):gsub("%s+$", "")
-	end
-
 	-- Build prefix section (channel info and type prefix)
-	local prefixSection = ""
-	if getValue("channel_number") ~= "" and getValue("channel_name") ~= "" then
-		prefixSection = "["..getValue("channel_number")..". "..getValue("channel_name").."] "
+	local parts = {}
+	local channelNum = getSafeValue("channel_number", m)
+	local channelName = getSafeValue("channel_name", m)
+	local typePrefix = getSafeValue("type_prefix", m)
+
+	if channelNum ~= "" and channelName ~= "" then
+		table.insert(parts, "["..channelNum..". "..channelName.."]")
 	end
-	if getValue("type_prefix") ~= "" then
-		prefixSection = prefixSection..getValue("type_prefix").." "
+	if typePrefix ~= "" then
+		table.insert(parts, typePrefix)
 	end
 
 	-- Build player section (flag, styled name, or link)
-	local playerSection = ""
-	if getValue("player_flag") ~= "" then
-		playerSection = getValue("player_flag")
-	end
+	local playerFlag = getSafeValue("player_flag", m)
+	local styledPlayer = getSafeValue("styled_player_name", m)
+	local playerLink = getSafeValue("player_link", m)
+	local playerName = getSafeValue("player_name", m)
+	local serverName = getSafeValue("server_name", m)
+	local serverSep = getSafeValue("server_separator", m)
 
-	-- Use styled player name if available, otherwise use original link/name
-	if getValue("styled_player_name") ~= "" then
-		playerSection = playerSection..getValue("styled_player_name")
-	elseif getValue("player_link") ~= "" then
-		playerSection = playerSection..getValue("player_link")
-	elseif getValue("player_name") ~= "" then
-		-- Add server name if present
-		if getValue("server_name") ~= "" then
-			playerSection = playerSection..getValue("player_name")..getValue("server_separator")..getValue("server_name")
-		else
-			playerSection = playerSection..getValue("player_name")
-		end
+	if playerFlag ~= "" then
+		table.insert(parts, playerFlag)
 	end
-	if playerSection ~= "" then
-		playerSection = playerSection.." "
+	if styledPlayer ~= "" then
+		table.insert(parts, styledPlayer)
+	elseif playerLink ~= "" then
+		table.insert(parts, playerLink)
+	elseif playerName ~= "" then
+		if serverName ~= "" then
+			table.insert(parts, playerName..serverSep..serverName)
+		else
+			table.insert(parts, playerName)
+		end
 	end
 
 	-- Build postfix section (language and mobile icon)
-	local postfixSection = ""
-	if getValue("language") ~= "" then
-		postfixSection = "["..getValue("language").."] "
+	local language = getSafeValue("language", m)
+	local mobileIcon = getSafeValue("mobile_icon", m)
+
+	if language ~= "" then
+		table.insert(parts, "["..language.."]")
 	end
-	if getValue("mobile_icon") ~= "" then
-		postfixSection = postfixSection..getValue("mobile_icon").." "
+	if mobileIcon ~= "" then
+		table.insert(parts, mobileIcon)
 	end
 
-	-- Combine all sections with message
-	local messageText = getValue("message_text")
-	local result = prefixSection..playerSection..postfixSection
+	-- Add message text
+	local messageText = getSafeValue("message_text", m)
 	if messageText ~= "" then
-		if result ~= "" then
-			result = result..": "
-		end
-		result = result..messageText
+		table.insert(parts, messageText)
 	end
 
-	-- Clean up extra whitespace
-	result = result:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
-	result = result:gsub("%s+:%s+", ": ")
+	-- Combine all parts with proper spacing
+	local result = table.concat(parts, " ")
+	-- Clean up multiple spaces
+	result = string.gsub(result, "%s+", " ")
 
 	if addon and addon.isSafeString and addon.isSafeString(result) then
 		if addon and addon.dbg then
@@ -139,13 +149,9 @@ end
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
--- Make section buffers and functions accessible to addon object
--- These are used in the main XanChat.lua file
-
 addon.FormatChatMessage = FormatChatMessage
 addon.CHAT_DATA_KEYS = CHAT_DATA_KEYS
 addon.resetSectionBuffer = resetSectionBuffer
 addon.prepareWorkingSections = prepareWorkingSections
 addon.sectionOriginal = sectionOriginal
 addon.sectionWorking = sectionWorking
-

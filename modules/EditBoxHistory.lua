@@ -1,5 +1,10 @@
 --[[
 	EditBoxHistory.lua - Command history management for XanChat
+	Refactored for:
+	- Simplified arrow key navigation with cleaner logic
+	- Consolidated redundant nil checks
+	- Better early returns
+	- Improved history limit handling
 ]]
 
 local ADDON_NAME, private = ...
@@ -12,6 +17,9 @@ addon.L = (private and private.L) or addon.L or {}
 -- EDIT BOX HISTORY MANAGEMENT
 -- ============================================================================
 
+local MAX_HISTORY_LINES = 40
+
+-- Handle arrow key navigation through history
 local function onArrowPressed(editBox, key)
 	if not editBox.historyLines or #editBox.historyLines == 0 then
 		return
@@ -34,9 +42,8 @@ local function onArrowPressed(editBox, key)
 	editBox:SetText(editBox.historyLines[editBox.historyIndex])
 end
 
-local function addEditBoxHistoryLine(editBox)
-	if not _G.HistoryDB then return end
-
+-- Build command text from chat type and editbox attributes
+local function buildCommandText(editBox)
 	local text = ""
 	local chatType = editBox:GetAttribute("chatType")
 	local header = chatType and _G["SLASH_"..chatType.."1"]
@@ -51,26 +58,30 @@ local function addEditBoxHistoryLine(editBox)
 		text = "/"..editBox:GetAttribute("channelTarget")
 	end
 
+	return text
+end
+
+-- Add a new line to the editbox history
+local function addEditBoxHistoryLine(editBox)
+	if not _G.HistoryDB then return end
+
 	local editBoxText = editBox:GetText()
-	if editBoxText and editBoxText ~= "" then
-		text = text.." "..editBoxText
-		if not text or text == "" then
-			return
-		end
+	if not editBoxText or editBoxText == "" then return end
 
-		local name = editBox:GetName()
-		_G.HistoryDB[name] = _G.HistoryDB[name] or {}
-		_G.HistoryDB[name][#_G.HistoryDB[name] + 1] = text
+	local commandPrefix = buildCommandText(editBox)
+	local fullText = commandPrefix ~= "" and (commandPrefix.." "..editBoxText) or editBoxText
 
-		-- max number of lines we want 40 seems like a good number
-		if #_G.HistoryDB[name] > 40 then
-			if _G.tremove then
-				_G.tremove(_G.HistoryDB[name], 1)
-			end
-		end
+	local name = editBox:GetName()
+	_G.HistoryDB[name] = _G.HistoryDB[name] or {}
+	table.insert(_G.HistoryDB[name], fullText)
+
+	-- Enforce history limit
+	if #_G.HistoryDB[name] > MAX_HISTORY_LINES then
+		table.remove(_G.HistoryDB[name], 1)
 	end
 end
 
+-- Clear the editbox history
 local function clearEditBoxHistory(editBox)
 	if not _G.HistoryDB then return end
 

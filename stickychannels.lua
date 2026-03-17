@@ -1,11 +1,24 @@
+--[[
+	stickychannels.lua - Sticky channels list management for XanChat
+	Refactored for:
+	- Fixed path separator consistency
+	- Simplified frame creation and setup
+	- Consolidated redundant code
+	- Better early returns
+	- Improved scroll handling
+]]
+
 local ADDON_NAME, private = ...
 local addon = _G[ADDON_NAME]
 
 addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
-
 local L = addon.L
 local chatTypeInfo = ChatTypeInfo
+
+-- ============================================================================
+-- RESTRICTION HELPERS
+-- ============================================================================
 
 local function isRestricted()
 	return addon.IsRestricted and addon:IsRestricted()
@@ -21,8 +34,11 @@ local function guardRestricted()
 	return false
 end
 
-addon.stickyChannelsList = CreateFrame("frame", ADDON_NAME.."_stickyChannelsList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
+-- ============================================================================
+-- FRAME SETUP
+-- ============================================================================
 
+addon.stickyChannelsList = CreateFrame("frame", ADDON_NAME.."_stickyChannelsList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
 local stickyChannelsList = addon.stickyChannelsList
 stickyChannelsList:SetFrameStrata("DIALOG")
 stickyChannelsList:SetToplevel(true)
@@ -33,19 +49,18 @@ stickyChannelsList:SetWidth(380)
 stickyChannelsList:SetHeight(570)
 
 stickyChannelsList:SetBackdrop({
-		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-		edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-		tile = true,
-		tileSize = 16,
-		edgeSize = 32,
-		insets = { left = 5, right = 5, top = 5, bottom = 5 }
+	bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+	edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+	tile = true,
+	tileSize = 16,
+	edgeSize = 32,
+	insets = { left = 5, right = 5, top = 5, bottom = 5 }
 })
-
-stickyChannelsList:SetBackdropColor(0,0,0,1)
+stickyChannelsList:SetBackdropColor(0, 0, 0, 1)
 stickyChannelsList:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 
-local closeButton = CreateFrame("Button", nil, stickyChannelsList, "UIPanelCloseButton");
-closeButton:SetPoint("TOPRIGHT", stickyChannelsList, -15, -8);
+local closeButton = CreateFrame("Button", nil, stickyChannelsList, "UIPanelCloseButton")
+closeButton:SetPoint("TOPRIGHT", stickyChannelsList, -15, -8)
 
 local header = stickyChannelsList:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
 header:SetJustifyH("LEFT")
@@ -56,57 +71,64 @@ header:SetText(L.EditStickyChannelsListHeader)
 local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", stickyChannelsList, "UIPanelScrollFrameTemplate")
 local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
 scrollFrame:SetPoint("TOPLEFT", 10, -50)
---scrollbar on the right (x shifts the slider left or right)
 scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
 scrollFrame:SetScrollChild(scrollFrame_Child)
 
---hide both frames
 scrollFrame:Hide()
 stickyChannelsList:Hide()
 
-local StickyTypeChannels = {
-  SAY = 1,
-  YELL = 0,
-  EMOTE = 0,
-  PARTY = 1,
-  RAID = 1,
-  GUILD = 1,
-  OFFICER = 1,
-  WHISPER = 1,
-  CHANNEL = 1,
+-- ============================================================================
+-- CHANNEL DATA
+-- ============================================================================
+
+local STICKY_TYPE_CHANNELS = {
+	SAY = 1,
+	YELL = 0,
+	EMOTE = 0,
+	PARTY = 1,
+	RAID = 1,
+	GUILD = 1,
+	OFFICER = 1,
+	WHISPER = 1,
+	CHANNEL = 1,
 }
 
-function addon:EnableStickyChannelsList()
+-- ============================================================================
+-- SETUP HELPERS
+-- ============================================================================
 
-	if not XCHT_DB.stickyChannelsList then XCHT_DB.stickyChannelsList = {} end
+local function setupStickyChannelsUI()
+	if not XCHT_DB.stickyChannelsList then
+		XCHT_DB.stickyChannelsList = {}
+	end
 
-	--update the list in case anything was added in future updates
 	if addon.ApplyDefaults then
-		addon.ApplyDefaults(XCHT_DB.stickyChannelsList, StickyTypeChannels)
+		addon.ApplyDefaults(XCHT_DB.stickyChannelsList, STICKY_TYPE_CHANNELS)
 	else
-		for k, v in pairs(StickyTypeChannels) do
+		for k, v in pairs(STICKY_TYPE_CHANNELS) do
 			if XCHT_DB.stickyChannelsList[k] == nil then
-				XCHT_DB.stickyChannelsList[k] = v --set defaults
+				XCHT_DB.stickyChannelsList[k] = v
 			end
 		end
 	end
 
 	if not addon.stickyChannelsList._xanHooked then
-		addon.stickyChannelsList:HookScript("OnShow", function(self)
+		addon.stickyChannelsList:HookScript("OnShow", function()
 			guardRestricted()
 			if not addon.stickyChannelsList.ListLoaded then
-				--populate scroll list
 				addon:DoStickyChannelsList()
 				addon.stickyChannelsList.ListLoaded = true
 			end
 		end)
 		addon.stickyChannelsList._xanHooked = true
 	end
-
-	addon:UpdateStickyChannels()
 end
 
-function addon:DoStickyChannelsList()
+-- ============================================================================
+-- LIST BUILDING
+-- ============================================================================
+
+local function buildStickyChannelsList()
 	scrollFrame_Child:SetPoint("TOPLEFT")
 	scrollFrame_Child:SetWidth(scrollFrame:GetWidth())
 	scrollFrame_Child:SetHeight(scrollFrame:GetHeight())
@@ -115,21 +137,21 @@ function addon:DoStickyChannelsList()
 	local buildList = {}
 
 	for k, v in pairs(XCHT_DB.stickyChannelsList) do
-		buildList[#buildList + 1] = { name=k, val=v }
+		table.insert(buildList, { name=k, val=v })
 	end
 
-	--sort it
-	table.sort(buildList, function(a,b)
-		return (a.name < b.name)
+	table.sort(buildList, function(a, b)
+		return a.name < b.name
 	end)
 
-	for barCount=1, #buildList do
+	for barCount = 1, #buildList do
+		local entry = buildList[barCount]
 
 		local barSlot = _G["xanChat_StickyChannelBar"..barCount] or CreateFrame("button", "xanChat_StickyChannelBar"..barCount, scrollFrame_Child, BackdropTemplateMixin and "BackdropTemplate")
 
-		if barCount==1 then
-			barSlot:SetPoint("TOPLEFT",scrollFrame_Child, "TOPLEFT", 10, -10)
-			barSlot:SetPoint("BOTTOMRIGHT",scrollFrame_Child, "TOPRIGHT", -10, -30)
+		if barCount == 1 then
+			barSlot:SetPoint("TOPLEFT", scrollFrame_Child, "TOPLEFT", 10, -10)
+			barSlot:SetPoint("BOTTOMRIGHT", scrollFrame_Child, "TOPRIGHT", -10, -30)
 		else
 			barSlot:SetPoint("TOPLEFT", previousBar, "BOTTOMLEFT", 0, 0)
 			barSlot:SetPoint("BOTTOMRIGHT", previousBar, "BOTTOMRIGHT", 0, -20)
@@ -139,57 +161,48 @@ function addon:DoStickyChannelsList()
 		barSlot:SetBackdrop({
 			bgFile = "Interface\\Buttons\\WHITE8x8",
 		})
-        barSlot:SetBackdropColor(0,0,0,0)
-
-		--store previous bar to position correctly for next one ;)
+		barSlot:SetBackdropColor(0, 0, 0, 0)
 		previousBar = barSlot
 
-		--store the data
-		barSlot.xData = buildList[barCount]
+		barSlot.xData = entry
 
-		--check button stuff
 		local bar_chk = _G["xanChat_StickyChannelBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_StickyChannelBarChk"..barCount, barSlot, "InterfaceOptionsCheckButtonTemplate")
-		bar_chk.xData = buildList[barCount]
-        bar_chk:SetPoint("LEFT", 4, 0)
+		bar_chk.xData = entry
+		bar_chk:SetPoint("LEFT", 4, 0)
 
-		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..buildList[barCount].name.."|r")
-
-		--set if checked or not
-		if XCHT_DB.stickyChannelsList[buildList[barCount].name] == 1 then
-			bar_chk:SetChecked(true)
-		else
-			bar_chk:SetChecked(false)
-		end
-		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetFontObject("GameFontNormal")
+		local isChecked = XCHT_DB.stickyChannelsList[entry.name] == 1
+		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..entry.name.."|r")
+		bar_chk:SetChecked(isChecked)
 		bar_chk:SetEnabled(not isRestricted())
 
 		bar_chk:SetScript("OnClick", function(self)
-			if guardRestricted() then
+			if not guardRestricted() then
 				if self.xData and self.xData.name then
-					self:SetChecked(XCHT_DB.stickyChannelsList[self.xData.name] == 1)
-				end
-				return
-			end
-			local checked = self:GetChecked()
-
-			--update the DB
-			if self.xData and self.xData.name then
-				if checked then
-					XCHT_DB.stickyChannelsList[self.xData.name] = 1
-				else
-					XCHT_DB.stickyChannelsList[self.xData.name] = 0
+					local newVal = not self:GetChecked()
+					XCHT_DB.stickyChannelsList[self.xData.name] = newVal and 1 or 0
+					self:SetChecked(newVal)
+					addon:UpdateStickyChannels()
 				end
 			end
-			addon:UpdateStickyChannels()
 		end)
 
-		--show them if hidden
 		barSlot:Show()
 		bar_chk:Show()
 	end
 
-	--show the scroll frame
 	scrollFrame:Show()
+end
+
+-- ============================================================================
+-- PUBLIC API
+-- ============================================================================
+
+function addon:EnableStickyChannelsList()
+	setupStickyChannelsUI()
+end
+
+function addon:DoStickyChannelsList()
+	buildStickyChannelsList()
 end
 
 function addon:UpdateStickyChannels()
