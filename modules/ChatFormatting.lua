@@ -97,7 +97,17 @@ local function FormatChatMessage(message)
 	local typePrefix = getSafeValue("type_prefix", m)
 
 	if channelNum ~= "" and channelName ~= "" then
-		table.insert(parts, "["..channelNum..". "..channelName.."]")
+		-- Use short channel name format if enabled: "[1] [Gen]" instead of "[1. General]"
+		local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
+		if useShortNames then
+			-- Make the entire shortened channel string clickable: |Hchannel:1|h[1] Gen|h
+			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum.."] "..channelName.."|h")
+		else
+			-- Original format with clickable entire channel: |Hchannel:1|h[1. General]|h
+			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h")
+		end
+	elseif addon and addon.dbg then
+		addon.dbg("FormatChatMessage: channelNum="..tostring(channelNum).." channelName="..tostring(channelName))
 	end
 	if typePrefix ~= "" then
 		table.insert(parts, typePrefix)

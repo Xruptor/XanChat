@@ -26,6 +26,13 @@ end
 -- SECRET VALUE PROTECTION
 -- ============================================================================
 
+local function SafeType(v)
+	local ok, result = pcall(_G.type, v)
+	if ok then return result end
+	-- If type() failed, it's likely a secret value
+	return nil
+end
+
 -- issecretvalue fails by raising an error on secret values
 -- This is the safe way to test for secret values without causing errors
 local function isSecretValue(v)
@@ -65,7 +72,7 @@ end
 -- Check if a value is a safe, accessible string
 -- Removed redundant isNotSafeStr (logic was inverted and confusing)
 local function isSafeString(v)
-	return not isSecretValue(v) and canAccessValue(v) and type(v) == "string"
+	return not isSecretValue(v) and canAccessValue(v) and SafeType(v) == "string"
 end
 
 -- Return safe string representation for display
@@ -76,7 +83,7 @@ local function safestr(v)
 	if not canAccessValue(v) then
 		return "<inaccessible-string>"
 	end
-	if type(v) ~= "string" then
+	if SafeType(v) ~= "string" then
 		return ""
 	end
 	return v
@@ -84,7 +91,7 @@ end
 
 -- Return boolean indicating if value requires safe string handling
 local function safestr_bool(v)
-	return isSecretValue(v) or not canAccessValue(v) or type(v) ~= "string"
+	return isSecretValue(v) or not canAccessValue(v) or SafeType(v) ~= "string"
 end
 
 -- ============================================================================
@@ -98,3 +105,4 @@ addon.canAccessValue = canAccessValue
 addon.isSafeString = isSafeString
 addon.safestr = safestr
 addon.safestr_bool = safestr_bool
+addon.SafeType = SafeType

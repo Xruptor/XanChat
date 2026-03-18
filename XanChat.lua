@@ -259,27 +259,173 @@ function addon:DebugChatHandlerState(context)
 	addon.dbg(table.concat(debugParts))
 end
 
+-- ============================================================================
+-- CHANNEL INFORMATION EXTRACTION
+-- ============================================================================
+
+-- Helper function to extract channel number from string
+-- Tries multiple patterns to find the channel number in various formats
+function addon.extractChannelNumberFromString(str)
+	if not str or type(str) ~= "string" then return nil end
+
+	-- Try various patterns for channel number:
+	-- 1. |Hchannel:1|h or |Hchannel:CHANNEL:1|h
+	-- 2. [1. prefix in bracketed text like [1. General]
+	-- 3. Just [1] bracketed number
+	return str:match("|Hchannel:(%d+)|h") or
+	       str:match("|Hchannel:CHANNEL:(%d+)|h") or
+	       str:match("|Hchannel:channel:(%d+)|h") or
+	       str:match("^%[(%d+)%..*%]") or
+	       str:match("%[(%d+)%s")
+end
+
+-- Helper function to extract channel name from bracketed content
+-- Works with formats like: |Hchannel:1|h[1. General - Zone]|h
+function addon.extractChannelNameFromString(str, channelNum)
+	if not str or type(str) ~= "string" or not channelNum then return "" end
+
+	-- Try to extract from hyperlink bracketed content: |Hchannel:1|h[1. General - Zone]|h
+	local bracketMatch = str:match("|Hchannel:"..channelNum.."|h%[(.-%])|h")
+	if bracketMatch then
+		-- Remove leading number and any zone suffix, keep the channel name
+		local name = bracketMatch:gsub("^"..channelNum.."[%. ]*", ""):gsub("[%s%-].*$", "")
+		return name:gsub("^%s+", ""):gsub("%s+$", "")
+	end
+
+	return ""
+end
+
+-- ============================================================================
+-- UNIFIED CHANNEL EXTRACTION
+-- ============================================================================
+
+-- Unified function to extract channel info from multiple sources
+-- Populates m.channel_number and m.channel_name if found
+-- Uses SafeType() to handle secret values gracefully
+-- Returns true if extraction was attempted, false otherwise
+function addon.extractChannelInfoFromSources(m, sources)
+	if not m or not m.channel_number then return false end
+
+	local extractedNum = m.channel_number
+	local extractedName = m.channel_name or ""
+
+	-- Try each source in order until we find channel info
+	for _, source in ipairs(sources) do
+		-- Skip if source is empty or nil
+		if not source or source == "" then
+			-- continue to next source
+		else
+			-- Use SafeType() to check type without errors on secret values
+			local sourceType = addon.SafeType and addon.SafeType(source) or type(source)
+
+			-- If channel number already found, only extract name
+			if extractedNum and extractedNum ~= "" then
+				if sourceType == "string" then
+					-- Try to extract channel name from this source
+					local nameFromSource = addon.extractChannelNameFromString(source, extractedNum)
+					if nameFromSource and nameFromSource ~= "" then
+						extractedName = nameFromSource
+						break
+					end
+				end
+			else
+				-- Try to extract channel number from this source
+				if sourceType == "number" then
+					extractedNum = tostring(source)
+				elseif sourceType == "string" then
+					local numFromSource = addon.extractChannelNumberFromString(source)
+					if numFromSource and numFromSource ~= "" then
+						extractedNum = numFromSource
+						-- Also try to extract name from the same source
+						local nameFromSource = addon.extractChannelNameFromString(source, extractedNum)
+						if nameFromSource and nameFromSource ~= "" then
+							extractedName = nameFromSource
+						end
+						break
+					end
+				end
+			end
+		end
+	end
+
+	-- Update m with extracted values
+	if extractedNum and extractedNum ~= "" and (not m.channel_number or m.channel_number == "") then
+		m.channel_number = extractedNum
+	end
+	if extractedName and extractedName ~= "" and (not m.channel_name or m.channel_name == "") then
+		m.channel_name = extractedName
+	end
+
+	return extractedNum and extractedNum ~= "" or extractedName and extractedName ~= ""
+end
+
+-- ============================================================================
+-- DEFERRED CHANNEL EXTRACTION (from OUTPUT)
+-- ============================================================================
+
+-- Unified function to handle deferred channel extraction from OUTPUT
+-- Called when channel info wasn't available in args but might be in OUTPUT
+function addon.extractChannelFromOutputIfDeferred(m)
+	if not m or not m.deferredChannelExtraction then return false end
+	local sourceType = addon.SafeType and addon.SafeType(m.OUTPUT) or type(m.OUTPUT)
+
+	if m.deferredChannelExtraction and sourceType == "string" and m.OUTPUT ~= "" then
+		local numFromOutput = addon.extractChannelNumberFromString(m.OUTPUT)
+		if numFromOutput then
+			m.channel_number = numFromOutput
+			if not m.channel_name or m.channel_name == "" then
+				m.channel_name = addon.extractChannelNameFromString(m.OUTPUT, numFromOutput)
+			end
+			m.deferredChannelExtraction = false
+			addon.dbg("ChatFrame_MessageEventHandler: extracted channel number from OUTPUT="..tostring(numFromOutput))
+			return true
+		end
+	end
+
+	return false
+end
+
+-- ============================================================================
+-- LEGACY CHANNEL INFO EXTRACTION (extractChannelInfo)
+-- ============================================================================
+
 -- Extract channel information into section
 local function extractChannelInfo(s, arg7, arg8, arg9, arg10, chatGroup)
 	if not s then return end
 
-	if not (type(arg8) == "string" and arg8 ~= "") and chatGroup ~= "BN_CONVERSATION" then
-		return
-	end
+	-- Clear channel extraction flag first
+	s.deferredChannelExtraction = nil
 
+	-- Special handling for BN_CONVERSATION channels
 	if chatGroup == "BN_CONVERSATION" then
-		s.channel_number = tostring((_G.MAX_WOW_CHAT_CHANNELS or 20) + (tonumber(arg8) or 0))
+		local bnChannelNum = tonumber(arg8) or 0
+		s.channel_number = tostring((_G.MAX_WOW_CHAT_CHANNELS or 20) + bnChannelNum)
 		if _G.CHAT_BN_CONVERSATION_SEND then
 			s.channel_name = string.match(_G.CHAT_BN_CONVERSATION_SEND or "", "%d%.%s+(.+)")
 		end
-	else
-		local channelNum = tonumber(arg8) or tonumber(arg7) or tonumber(arg9) or tonumber(arg10) or 0
-		if channelNum > 0 then
-			s.channel_number = tostring(channelNum)
-			if type(arg9) == "string" and arg9 ~= "" then
-				s.channel_name = arg9
-			end
-		end
+		return
+	end
+
+	-- For channel events, build list of sources to try in order
+	-- Priority: arg8 (primary), then arg7, arg9, arg10
+	local sources = {}
+	if arg8 then table.insert(sources, arg8) end
+	if arg7 then table.insert(sources, arg7) end
+	if arg9 then table.insert(sources, arg9) end
+	if arg10 then table.insert(sources, arg10) end
+
+	-- Use unified function to extract from all sources
+	local found = addon.extractChannelInfoFromSources(s, sources)
+
+	-- If still no channel number and this is a CHANNEL event, mark for deferred extraction
+	-- This handles channel notice events where OUTPUT contains the info but args don't
+	if not found and chatGroup == "CHANNEL" then
+		s.channel_number = ""
+		s.channel_name = ""
+		s.deferredChannelExtraction = true
+	elseif not found then
+		s.channel_number = ""
+		s.channel_name = ""
 	end
 end
 
@@ -524,13 +670,52 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		local infoRow = m.INFO or info or {}
 		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
 
+		addon.dbg("ChatFrame_MessageEventHandler: initial colors from infoRow - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID).." event="..tostring(event))
+
+		-- Extract channel info from args if not already set (using unified function)
+		if not m.channel_number or m.channel_number == "" then
+			local argsSources = {arg7, arg9, arg10}
+			addon.extractChannelInfoFromSources(m, argsSources)
+		end
+
+		-- Try to extract from OUTPUT if deferred extraction is set
+		-- We can use string.match on secret values (just not gsub())
+		addon.extractChannelFromOutputIfDeferred(m)
+
 		-- During lockdown, get proper colors from ChatTypeInfo if not already set
-		if outR == 1 and outG == 1 and outB == 1 and _G.ChatTypeInfo and _G.ChatTypeInfo[event] then
-			local chatTypeInfo = _G.ChatTypeInfo[event]
-			outR = chatTypeInfo.r or 1
-			outG = chatTypeInfo.g or 1
-			outB = chatTypeInfo.b or 1
-			outID = chatTypeInfo.id or 0
+		-- For channel events, also check if we can get channel-specific colors
+		if outR == 1 and outG == 1 and outB == 1 then
+			if _G.ChatTypeInfo and _G.ChatTypeInfo[event] then
+				local chatTypeInfo = _G.ChatTypeInfo[event]
+				outR = chatTypeInfo.r or 1
+				outG = chatTypeInfo.g or 1
+				outB = chatTypeInfo.b or 1
+				outID = chatTypeInfo.id or 0
+				addon.dbg("ChatFrame_MessageEventHandler: fallback colors from ChatTypeInfo - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID))
+			elseif m.channel_number and m.channel_number ~= "" and _G.GetChannelColor then
+				-- For channel events, try to get channel-specific color
+				local channelNum = tonumber(m.channel_number)
+				if channelNum and channelNum > 0 then
+					local r, g, b = _G.GetChannelColor(channelNum)
+					if r and g and b then
+						outR, outG, outB = r, g, b
+						addon.dbg("ChatFrame_MessageEventHandler: channel-specific color - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." channel="..tostring(channelNum))
+					end
+				end
+			end
+		end
+
+		-- Build channel info for display during lockdown
+		local channelInfo = ""
+		if m.channel_number and m.channel_number ~= "" then
+			local channelNum = m.channel_number
+			local channelName = m.channel_name or ""
+
+			if channelName and channelName ~= "" then
+				channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h "
+			else
+				channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum.."]|h "
+			end
 		end
 
 		-- Generate clickable player link using StylePlayerSection for secret payloads
@@ -541,7 +726,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		-- Use the clickable player_link that StylePlayerSection generated.
 		-- This one would be a secret value return so we can only do string concatenation
-		local textToDisplay = (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
+		local textToDisplay = channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
 		local isSecretText = addon.isSecretValue and addon.isSecretValue(textToDisplay)
 
 		addon.dbg("ChatFrame_MessageEventHandler: secret output len=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) .. " isSecretText=" .. tostring(isSecretText))
@@ -616,6 +801,9 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		addon:RestoreProxy()
 		m.OUTPUT = addon.captureState.text
 		addon.dbg("ChatFrame_MessageEventHandler: proxy capture result length=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(m.OUTPUT) or 0))
+
+		-- If channel number extraction was deferred, extract it now from OUTPUT
+		addon.extractChannelFromOutputIfDeferred(m)
 	end
 
 	m.CAPTUREOUTPUT = false
@@ -639,6 +827,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		local textToDisplay = m.OUTPUT
 		local applyPatterns = addon.shouldRunPatternPass and addon.shouldRunPatternPass(isSecretPayload, processMode)
 
+		addon.dbg("ChatFrame_MessageEventHandler: initial colors from infoRow - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID).." event="..tostring(event).." resolvedEvent="..tostring(resolvedEvent))
 		addon.dbg("ChatFrame_MessageEventHandler: applyPatterns=" .. tostring(applyPatterns))
 
 		if applyPatterns then
@@ -685,13 +874,15 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		--   - CHAT_MSG_CHANNEL_NOTICE_USER (arg1 = notice type for user actions)
 		--   - CHAT_MSG_CHANNEL_JOIN (arg1 = notice type for joins)
 		--   - CHAT_MSG_CHANNEL_LEAVE (arg1 = notice type for leaves)
+		--   - CHAT_MSG_BN_INLINE_TOAST_ALERT (arg1 = notice type like "FRIEND_OFFLINE", "FRIEND_ONLINE")
 		local isChannelNoticeEvent = resolvedEvent == "CHAT_MSG_CHANNEL_NOTICE" or
 			resolvedEvent == "CHAT_MSG_CHANNEL_NOTICE_USER" or
 			resolvedEvent == "CHAT_MSG_CHANNEL_JOIN" or
-			resolvedEvent == "CHAT_MSG_CHANNEL_LEAVE"
+			resolvedEvent == "CHAT_MSG_CHANNEL_LEAVE" or
+			resolvedEvent == "CHAT_MSG_BN_INLINE_TOAST_ALERT"
 
 		if isChannelNoticeEvent then
-			addon.dbg("ChatFrame_MessageEventHandler: using Blizzard output for channel notice event")
+			addon.dbg("ChatFrame_MessageEventHandler: using Blizzard output for channel/notice event")
 			textToDisplay = (m.PRE or "") .. (m.OUTPUT or "") .. (m.POST or "")
 		elseif processMode == (addon.EventProcessingType and addon.EventProcessingType.Full) then
 			addon.dbg("ChatFrame_MessageEventHandler: using Full processing mode")
@@ -726,7 +917,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			local isCensored = arg11 and _G.C_ChatInfo and _G.C_ChatInfo.IsChatLineCensored(arg11)
 			local visibleText = isCensored and (arg1 or "") or textToDisplay
 
-			addon.dbg("ChatFrame_MessageEventHandler: isCensored=" .. tostring(isCensored))
+			addon.dbg("ChatFrame_MessageEventHandler: captured colors - R="..tostring(capturedR).." G="..tostring(capturedG).." B="..tostring(capturedB).." ID="..tostring(capturedID).." isCensored="..tostring(isCensored))
 
 			if isCensored then
 				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
