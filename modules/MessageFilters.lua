@@ -26,7 +26,7 @@ local FILTER_EVENTS = {
 
 -- Check if a message should be suppressed based on settings
 local function shouldSuppressJoinLeaveMessage(event, text)
-	if not (_G.XCHT_DB and _G.XHT_DB.disableChatEnterLeaveNotice) then
+	if not (_G.XCHT_DB and _G.XCHT_DB.disableChatEnterLeaveNotice) then
 		return false
 	end
 
@@ -40,12 +40,15 @@ local function shouldSuppressJoinLeaveMessage(event, text)
 
 	-- Filter system messages for join/leave
 	if event == "CHAT_MSG_SYSTEM" and type(text) == "string" then
-		if string.find(text, "|Hplayer:", 1, true) then
-			if string.find(text, "has joined", 1, true) or string.find(text, "has left", 1, true) then
-				if addon and addon.dbg then
-					addon.dbg("shouldSuppressJoinLeaveMessage: suppressing system join/leave message")
+		-- Skip secret values as string.find is not allowed on them
+		if not (addon.isSecretValue and addon.isSecretValue(text)) then
+			if string.find(text, "|Hplayer:", 1, true) then
+				if string.find(text, "has joined", 1, true) or string.find(text, "has left", 1, true) then
+					if addon and addon.dbg then
+						addon.dbg("shouldSuppressJoinLeaveMessage: suppressing system join/leave message")
+					end
+					return true
 				end
-				return true
 			end
 		end
 	end

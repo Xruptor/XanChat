@@ -25,7 +25,7 @@ local MAX_TABLE_ITEMS = 10
 -- Basic debug output to chat
 local function dbg(msg)
 	if not msg then return end
-	if not (addon.debugChat or (_G.XCHT_DB and _G.XHT_DB.debugChat)) then return end
+	if not (addon.debugChat or (_G.XCHT_DB and _G.XCHT_DB.debugChat)) then return end
 	if not (_G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage) then return end
 
 	pcall(_G.DEFAULT_CHAT_FRAME.AddMessage, _G.DEFAULT_CHAT_FRAME, DEBUG_PREFIX..": "..msg)
@@ -156,7 +156,7 @@ end
 
 -- Multi-argument debug print with safe value conversion
 local function debugPrint(...)
-	if not (addon.debugChat or (_G.XCHT_DB and _G.XHT_DB.debugChat)) then return end
+	if not (addon.debugChat or (_G.XCHT_DB and _G.XCHT_DB.debugChat)) then return end
 
 	local out = {}
 	for i = 1, select("#", ...) do

@@ -129,19 +129,28 @@ local function configureEditbox(editBox, frameName, chatFrame)
 		}
 	end
 
+	-- Apply backdrop mixin if needed (for newer WoW versions)
+	if not editBox.SetBackdrop and _G.Mixin and _G.BackdropTemplateMixin then
+		_G.Mixin(editBox, _G.BackdropTemplateMixin)
+	end
+
 	-- Apply simple editbox design or normal design
 	if _G.XCHT_DB.enableSimpleEditbox then
 		editBox.left:SetAlpha(0)
 		editBox.right:SetAlpha(0)
 		editBox.mid:SetAlpha(0)
 
-		if not editBox.SetBackdrop and _G.Mixin and _G.BackdropTemplateMixin then
-			_G.Mixin(editBox, _G.BackdropTemplateMixin)
+		-- Clear focus textures to prevent overlapping borders
+		if editBox.focusLeft then editBox.focusLeft:SetTexture(nil) end
+		if editBox.focusRight then editBox.focusRight:SetTexture(nil) end
+		if editBox.focusMid then editBox.focusMid:SetTexture(nil) end
+
+		if editBox.SetBackdrop then
+			editBox:SetBackdrop(editBoxBackdrop)
+			editBox:SetBackdropColor(0, 0, 0, 0.6)
+			editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
 		end
 
-		editBox:SetBackdrop(editBoxBackdrop)
-		editBox:SetBackdropColor(0, 0, 0, 0.6)
-		editBox:SetBackdropBorderColor(0.6, 0.6, 0.6)
 	elseif not _G.XCHT_DB.hideEditboxBorder then
 		if editBox.focusLeft then editBox.focusLeft:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Left2]]) end
 		if editBox.focusRight then editBox.focusRight:SetTexture([[Interface\ChatFrame\UI-ChatInputBorder-Right2]]) end
@@ -164,7 +173,7 @@ local function configureEditboxPosition(editBox, chatFrame)
 	local frameName = chatFrame:GetName()
 	local frameTab = _G[frameName.."Tab"]
 
-	local spaceAdjusted = _G.XCHT_DB and _G.XCHT_DB.enableEditboxAdjusted and 6 or 0
+	local spaceAdjusted = _G.XCHT_DB and _G.XCHT_DB.enableEditboxAdjusted and -6 or 0
 
 	editBox:ClearAllPoints()
 
@@ -239,8 +248,10 @@ local function setupEditboxHistory(editBox)
 	if not editBox then return end
 
 	local name = editBox:GetName()
-	if not _G.HistoryDB or not _G.HistoryDB[name] then return end
+	if not _G.HistoryDB then return end
 
+	-- Initialize history array for this editbox if it doesn't exist
+	_G.HistoryDB[name] = _G.HistoryDB[name] or {}
 	editBox.historyLines = _G.HistoryDB[name]
 	editBox.historyIndex = 0
 
@@ -295,7 +306,7 @@ local function setupChatFrame(chatID)
 
 	-- Configure editbox
 	if editBox then
-		setupEditboxHistory(editBox, frameName)
+		setupEditboxHistory(editBox)
 		configureEditbox(editBox, frameName, f)
 		configureEditboxPosition(editBox, f)
 	end

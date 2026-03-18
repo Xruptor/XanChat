@@ -51,8 +51,14 @@ end
 -- ============================================================================
 
 local function addTimeRunningIcon(guid, stylizedName, isSecret)
-	if not stylizedName or not guid or isSecret then
-		return stylizedName or ""
+	-- Skip timerunning icons during secret value lockdowns (boss encounters)
+	-- but return the colored stylizedName since WrapTextInColorCode handles secret values
+	if not stylizedName then
+		return ""
+	end
+	if not guid or isSecret then
+		-- Return colored stylizedName as-is (WrapTextInColorCode handles secret values)
+		return stylizedName
 	end
 	if type(guid) ~= "string" then return stylizedName end
 
@@ -73,6 +79,10 @@ end
 -- ============================================================================
 -- EVENT TYPE FILTERING
 -- ============================================================================
+
+-- IMPORTANT: During secret value lockdowns (boss encounters, combat),
+-- certain events must be skipped to prevent errors. These events contain
+-- special formatting that cannot be safely processed when values are secret.
 
 -- Events to skip styling for during secret value lockdowns
 local SKIP_STYLING_EVENTS = {
@@ -123,6 +133,11 @@ local function createPlayerLink(m, linkTarget, displayText)
 		return nil
 	end
 
+	-- Skip if linkTarget or displayText is nil (e.g., during secret value lockdowns)
+	if not linkTarget or not displayText then
+		return nil
+	end
+
 	-- Handle achievement events
 	if chatType == "ACHIEVEMENT" or chatType == "GUILD_ACHIEVEMENT" then
 		return string.format("|Hplayer:%s|h[%s]|h", linkTarget, displayText)
@@ -167,7 +182,10 @@ local function StylePlayerSection(m)
 
 	local isSecret = addon.isSecretValue(m.player_name)
 	local chatType = m.chat_type or ""
+	local fullEvent = m.EVENT or ""
 
+	-- During a boss encounter or a chat lockdown we don't want to process certain events
+	-- as they will get broken because of their special formatting.
 	-- Skip styling for special events during secret value lockdowns
 	if shouldSkipStyling(chatType, isSecret) then
 		if addon and addon.dbg then
@@ -176,10 +194,15 @@ local function StylePlayerSection(m)
 		return
 	end
 
-	-- Check filter list for styling eligibility
-	local shouldStyle = true
-	if addon.searchFilterList and addon.isFilterListEnabled then
-		shouldStyle = addon:searchFilterList(chatType, m.message_text or "")
+	-- Check filter list for styling eligibility (filter returns true = allow styling)
+	local shouldStyle = false  -- default: no styling
+	if addon.searchFilterList and addon.isFilterListEnabled and addon:searchFilterList(fullEvent, m.message_text or "") then
+		shouldStyle = true  -- filter matched, allow styling
+	end
+
+	-- Debug: Check why we're entering disabled styling path
+	if addon and addon.dbg then
+		addon.dbg("StylePlayerSection: enablePlayerChatStyle="..tostring(_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle).." isSecret="..tostring(isSecret).." shouldStyle="..tostring(shouldStyle))
 	end
 
 	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) or isSecret or not shouldStyle then
@@ -223,7 +246,7 @@ local function StylePlayerSection(m)
 		end
 
 		-- Create clickable player link
-		displayText = addTimeRunningIcon(m.player_guid, coloredPlayerName, isSecret)
+		local displayText = addTimeRunningIcon(m.player_guid, coloredPlayerName, isSecret)
 		local playerLink = createPlayerLink(m, m.sender_name, displayText)
 		if playerLink then
 			m.player_link = playerLink
@@ -359,8 +382,11 @@ local function checkNoticeFilter(_, event, message)
 	end
 
 	if event == "CHAT_MSG_SYSTEM" and type(message) == "string" then
-		if string.find(message, "|Hplayer:", 1, true) and (string.find(message, "has joined", 1, true) or string.find(message, "has left", 1, true)) then
-			return true
+		-- Skip secret values as string.find is not allowed on them
+		if not (addon.isSecretValue and addon.isSecretValue(message)) then
+			if string.find(message, "|Hplayer:", 1, true) and (string.find(message, "has joined", 1, true) or string.find(message, "has left", 1, true)) then
+				return true
+			end
 		end
 	end
 

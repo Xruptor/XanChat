@@ -19,6 +19,13 @@ addon.L = (private and private.L) or addon.L or {}
 -- CHAT COMPOSITION SYSTEM (Direct Construction)
 -- ============================================================================
 
+-- IMPORTANT SECURITY NOTES:
+-- 1. This module handles chat message formatting and construction
+-- 2. Secret values are protected WoW values that cannot be modified with gsub()
+-- 3. DO NOT call FormatChatMessage() for secret value payloads
+-- 4. Secret value messages use the direct safe path in XanChat.lua instead
+-- 5. Violating these rules will cause errors during boss encounters/chat lockdown
+
 if addon and addon.dbg then
 	addon.dbg("chat_composition_system_init")
 end
@@ -35,6 +42,8 @@ local sectionOriginal = {}
 local sectionWorking = { ORG = sectionOriginal }
 
 -- Helper to safely trim strings and handle secret values
+-- IMPORTANT: This function returns empty string for secret values - DO NOT use
+-- for operations that require string manipulation like gsub() on the original secret value
 local function getSafeValue(field, m)
 	local value = m and m[field]
 	if not value then return "" end
@@ -69,6 +78,8 @@ local function prepareWorkingSections()
 end
 
 -- Do not call this for secret values (string modifications like gsub don't work with secret values)
+-- This function should not be called for secret values as there is a lot of string
+-- modifications done here. Especially gsub() which don't work with secret values.
 local function FormatChatMessage(message)
 	if addon and addon.dbg then
 		addon.dbg("FormatChatMessage: building chat text with direct construction")
@@ -129,7 +140,17 @@ local function FormatChatMessage(message)
 	-- Add message text
 	local messageText = getSafeValue("message_text", m)
 	if messageText ~= "" then
-		table.insert(parts, messageText)
+		-- If we have player styling, combine with last part (player section) instead of adding as separate part
+		if styledPlayer ~= "" or playerLink ~= "" or playerName ~= "" then
+			local lastPartIndex = #parts
+			if lastPartIndex > 0 then
+				parts[lastPartIndex] = parts[lastPartIndex]..": "..messageText
+			else
+				table.insert(parts, messageText)
+			end
+		else
+			table.insert(parts, messageText)
+		end
 	end
 
 	-- Combine all parts with proper spacing

@@ -22,6 +22,23 @@ addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
 
 -- ============================================================================
+-- SECRET VALUE HANDLING ARCHITECTURE
+-- ============================================================================
+--
+-- CRITICAL: WoW protects certain values as "secret" during boss encounters
+-- and other restricted contexts. Secret values cannot be:
+--   - Modified with gsub() or other string functions
+--   - Used in string concatenation with non-secret values
+--   - Compared directly with other strings
+--
+-- The codebase has two paths:
+--   1. PROXY PATH: For normal messages (safe to process and modify)
+--   2. DIRECT SAFE PATH: For secret payloads (minimal processing, no gsub)
+--
+-- When modifying this code, ensure secret value handling is preserved!
+-- ============================================================================
+
+-- ============================================================================
 -- CONSTANTS
 -- ============================================================================
 
@@ -135,7 +152,7 @@ local function tryGetPlayerFromGUID(guid)
 end
 
 -- Try to get player info from lineID
-local function tryGetPlayerFromLineID(lineID)
+local function tryGetPlayerFromLineID(lineID, skipGuidLookup)
 	if not _G.C_ChatInfo or not _G.GetPlayerInfoByGUID then return nil end
 	if type(lineID) ~= "number" or lineID <= 0 then return nil end
 
@@ -153,7 +170,8 @@ local function tryGetPlayerFromLineID(lineID)
 	end
 
 	-- Try GetChatLineSenderGUID + GetPlayerInfoByGUID as fallback
-	if _G.C_ChatInfo.GetChatLineSenderGUID then
+	-- Skip if we already have the GUID from a previous lookup
+	if not skipGuidLookup and _G.C_ChatInfo.GetChatLineSenderGUID then
 		local guidChk = _G.C_ChatInfo.GetChatLineSenderGUID(lineID)
 		if guidChk then
 			result.player_guid = guidChk
@@ -187,8 +205,16 @@ local function extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
 	end
 
 	-- arg2 is secret, try fallbacks
+	-- This matches Baseline's approach for secret boss encounter messages
+	-- GetPlayerInfoByGUID returns: localizedClass, englishClass, localizedRace, englishRace, sex, name, realmName
 	local playerInfo = tryGetPlayerFromGUID(arg12)
-	if not playerInfo then
+	if playerInfo then
+		-- We have GUID info, but still try to get player_name_with_realm from lineID
+		local lineInfo = tryGetPlayerFromLineID(arg11, true)
+		if lineInfo and lineInfo.player_name_with_realm then
+			playerInfo.player_name_with_realm = lineInfo.player_name_with_realm
+		end
+	else
 		playerInfo = tryGetPlayerFromLineID(arg11)
 	end
 
@@ -401,6 +427,11 @@ function addon:ParseChatEvent(_, event, ...)
 
 	-- Player information extraction
 	local isArg2Secret = addon.isSecretValue and addon.isSecretValue(arg2)
+
+	if addon and addon.dbg and isArg2Secret then
+		addon.dbg("ParseChatEvent: arg2 is secret, will try GUID/lineID fallbacks")
+	end
+
 	local playerInfo = extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
 
 	if playerInfo.player_name then
@@ -421,7 +452,9 @@ function addon:ParseChatEvent(_, event, ...)
 
 	if not isArg2Secret then
 		-- Extract name and server from colored name
-		local plr, svr = parsePlayerName(arg2 or s.player_name_with_realm)
+		-- arg2 is known to be non-secret here (isArg2Secret is false)
+		local nameToParse = arg2 or s.player_name_with_realm
+		local plr, svr = parsePlayerName(nameToParse)
 		if plr then
 			s.player_name = plr
 		end
@@ -431,12 +464,11 @@ function addon:ParseChatEvent(_, event, ...)
 		end
 
 		-- Apply Ambiguate for guild vs non-guild
-		if _G.Ambiguate then
-			local coloredName = arg2 or s.player_name_with_realm
+		if _G.Ambiguate and nameToParse then
 			if chatType == "GUILD" then
-				s.player_name_display = _G.Ambiguate(coloredName, "guild")
+				s.player_name_display = _G.Ambiguate(nameToParse, "guild")
 			else
-				s.player_name_display = _G.Ambiguate(coloredName, "none")
+				s.player_name_display = _G.Ambiguate(nameToParse, "none")
 			end
 		end
 	end
@@ -494,12 +526,18 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		local infoRow = m.INFO or info or {}
 		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
 
+		-- Generate clickable player link using StylePlayerSection for secret payloads
 		addon.StylePlayerSection(m)
+		-- NOTE: WE CANNOT do channel shortening on secret values payloads because it uses gsub() to do it.
+		-- This is not possible with secret values as gsub() is not allowed.
+		-- Therefore we cannot do applyShortChannelNamesToSections() during a boss encounter or chat lockdown.
 
+		-- Use the clickable player_link that StylePlayerSection generated.
+		-- This one would be a secret value return so we can only do string concatenation
 		local textToDisplay = (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
 		local isSecretText = addon.isSecretValue and addon.isSecretValue(textToDisplay)
 
-		addon.dbg("ChatFrame_MessageEventHandler: secret output len=" .. tostring(#textToDisplay) .. " isSecretText=" .. tostring(isSecretText))
+		addon.dbg("ChatFrame_MessageEventHandler: secret output len=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) .. " isSecretText=" .. tostring(isSecretText))
 		if not isSecretText then
 			if not (addon.isSafeString and addon.isSafeString(textToDisplay)) or textToDisplay == "" then
 				addon.dbg("ChatFrame_MessageEventHandler: secret output empty or unsafe, skipping display")
@@ -568,7 +606,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		handlerResult = addon.callOriginalMessageHandler(self, proxyFrame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 		addon:RestoreProxy()
 		m.OUTPUT = addon.captureState.text
-		addon.dbg("ChatFrame_MessageEventHandler: proxy capture result length=" .. tostring(type(m.OUTPUT) == "string" and #m.OUTPUT or 0))
+		addon.dbg("ChatFrame_MessageEventHandler: proxy capture result length=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(m.OUTPUT) or 0))
 	end
 
 	m.CAPTUREOUTPUT = false
@@ -582,7 +620,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 	end
 
 	if type(m.message_text) ~= "string" then
-		m.message_text = m.message_text and tostring(m.message_text) or ""
+		m.message_text = (addon.dbgSafeValue and addon.dbgSafeValue(m.message_text)) or (m.message_text and tostring(m.message_text)) or ""
 	end
 
 	if type(m.OUTPUT) == "string" and not m.DONOTPROCESS then
@@ -598,7 +636,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			addon.dbg("ChatFrame_MessageEventHandler: running MatchPatterns")
 			m.message_text = addon.MatchPatterns(m, "FRAME")
 			if type(m.message_text) ~= "string" then
-				m.message_text = m.message_text and tostring(m.message_text) or ""
+				m.message_text = (addon.dbgSafeValue and addon.dbgSafeValue(m.message_text)) or (m.message_text and tostring(m.message_text)) or ""
 			end
 		end
 
@@ -640,14 +678,14 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		end
 
 		m.OUTPUT = textToDisplay
-		addon.dbg("ChatFrame_MessageEventHandler: final output length=" .. tostring(#textToDisplay))
+		addon.dbg("ChatFrame_MessageEventHandler: final output length=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0))
 
 		if m.DONOTPROCESS then
 			addon.dbg("ChatFrame_MessageEventHandler: message blocked, firing POST_ADDMESSAGE_BLOCKED callback")
 			if addon.fireCallback then
 				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE_BLOCKED, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
 			end
-		elseif string.len(textToDisplay) > 0 then
+		elseif (addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) > 0 then
 			addon.dbg("ChatFrame_MessageEventHandler: adding non-secret message to frame")
 			local capturedR = addon.captureState.color.r or outR
 			local capturedG = addon.captureState.color.g or outG
@@ -738,18 +776,17 @@ local function initializeDatabase()
 	addon.wrapperDebug = _G.XCHT_DB.debugWrapper
 
 	local currentPlayer = (_G.UnitName and _G.UnitName("player")) or "Unknown"
-	local currentRealm
-	if _G.UnitFullName then
-		currentRealm = select(2, _G.UnitFullName("player"))
+	local currentRealm = "Unknown"
+	if _G.GetRealmName then
+		currentRealm = _G.GetRealmName() or "Unknown"
+	elseif _G.UnitFullName then
+		currentRealm = select(2, _G.UnitFullName("player")) or "Unknown"
 	elseif _G.UnitName then
-		currentRealm = select(2, _G.UnitName("player"))
-	elseif _G.GetRealmName then
-		currentRealm = _G.GetRealmName()
-	else
-		currentRealm = "Unknown"
+		currentRealm = select(2, _G.UnitName("player")) or "Unknown"
 	end
 
 	if not _G.XCHT_HISTORY then _G.XCHT_HISTORY = {} end
+	if not currentRealm then currentRealm = "Unknown" end
 	_G.XCHT_HISTORY[currentRealm] = _G.XCHT_HISTORY[currentRealm] or {}
 	_G.XCHT_HISTORY[currentRealm][currentPlayer] = _G.XCHT_HISTORY[currentRealm][currentPlayer] or {}
 	_G.HistoryDB = _G.XCHT_HISTORY[currentRealm][currentPlayer]
@@ -1049,12 +1086,8 @@ function addon:OnLoad()
 	hideVoiceButtons()
 
 	-- Setup all chat frames
-	if _G.NUM_CHAT_WINDOWS then
-		for i = 1, _G.NUM_CHAT_WINDOWS do
-			if self.setupChatFrame then
-				self.setupChatFrame(i)
-			end
-		end
+	if self.setupAllChatFrames then
+		self.setupAllChatFrames()
 	end
 
 	-- Register UI_SCALE_CHANGED event

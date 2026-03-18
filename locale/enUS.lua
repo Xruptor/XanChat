@@ -71,6 +71,7 @@ L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[I]|h %s: "
 L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[IL]|h %s: "
 
 L.EditFilterListHeader = "Edit Stylized Filter List"
+L.EditFilterListInfo = "Checkmarked events will be stylized in chat."
 L.EditStickyChannelsListHeader = "Edit Sticky Channels List"
 
 L.SocialOn = "xanChat: Social buttons are now [|cFF99CC33ON|r]"

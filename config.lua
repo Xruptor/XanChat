@@ -19,6 +19,19 @@ local configFrame = addon.configFrame
 local L = addon.L
 local floor = math.floor
 
+-- Register static popup dialog for reload prompt
+_G.StaticPopupDialogs["XANCHAT_APPLYCHANGES"] = _G.StaticPopupDialogs["XANCHAT_APPLYCHANGES"] or {
+	text = L.ReloadRequired or "Some changes require reloading the UI to take effect.",
+	button1 = _G.RELOADUI,
+	button2 = _G.CANCEL,
+	OnAccept = function()
+		_G.ReloadUI()
+	end,
+	timeout = 0,
+	whileDead = 1,
+	hideOnEscape = 1,
+}
+
 -- Track configuration objects for lock functionality
 local configObjList = {}
 local lastObject = {}
@@ -34,16 +47,16 @@ local function addConfigEntry(frameParentName, objEntry, adjustX, adjustY, isCus
 
 	objEntry:ClearAllPoints()
 
-	if isCustom then
-		objEntry:SetPoint("TOPLEFT", adjustX, adjustY)
-	else
+	if not isCustom then
 		if not lastObject[frameParentName] then
 			objEntry:SetPoint("TOPLEFT", 20, customStartYPoint or -135)
 		else
-			local _, _, _, yOfs = lastObject[frameParentName]:GetPoint()
-			objEntry:SetPoint("TOPLEFT", adjustX or 0, (yOfs + (adjustY or -30)))
+			local point, relativeTo, relativePoint, xOfs, yOfs = lastObject[frameParentName]:GetPoint()
+			objEntry:SetPoint("TOPLEFT", adjustX or 0, (yOfs + adjustY) or -30)
 		end
 		lastObject[frameParentName] = objEntry
+	else
+		objEntry:SetPoint("TOPLEFT", adjustX, adjustY)
 	end
 end
 
@@ -370,20 +383,19 @@ function configFrame:EnableConfig()
 		{ key = "editBoxTop", info = L.EditBoxInfo, messageOn = L.EditBoxTop, messageOff = L.EditBoxBottom, reload = true },
 		{ key = "hideTabs", info = L.TabsInfo, messageOn = L.TabsOff, messageOff = L.TabsOn, reload = true },
 		{ key = "addFontOutline", info = L.OutlineInfo, messageOn = L.OutlineOn, messageOff = L.OutlineOff, reload = true },
-		{ key = "addFontShadow", info = L.ShadowInfo, messageOn = L.ShadowOn, messageOff = L.ShadowOff, reload = true },
+		{ key = "addFontShadow", info = L.ShadowInfo, messageOn = L.ShadowOn, messageOff = L.ShadowOff, reload = true, adjustX = 45 },
 		{ key = "hideVoice", info = L.VoiceInfo, messageOn = L.VoiceOff, messageOff = L.VoiceOn, reload = true },
 		{ key = "hideEditboxBorder", info = L.EditBoxBorderInfo, messageOn = L.EditBoxBorderOff, messageOff = L.EditBoxBorderOn, reload = true, onToggle = function() XCHT_DB.enableSimpleEditbox = false end },
-		{ key = "enableSimpleEditbox", info = L.SimpleEditBoxInfo, messageOn = L.SimpleEditBoxOn, messageOff = L.SimpleEditBoxOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox) end, onToggle = function(val, btn) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, val) end },
-		{ key = "enableSEBDesign", info = L.SEBDesignInfo, messageOn = L.SEBDesignOn, messageOff = L.SEBDesignOff, reload = true },
+		{ key = "enableSimpleEditbox", info = L.SimpleEditBoxInfo, messageOn = L.SimpleEditBoxOn, messageOff = L.SimpleEditBoxOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox) end, onToggle = function(val, btn) XCHT_DB.hideEditboxBorder = false setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, val) end },
+		{ key = "enableSEBDesign", info = L.SEBDesignInfo, messageOn = L.SEBDesignOn, messageOff = L.SEBDesignOff, reload = true, adjustX = 45 },
 		{ key = "enableEditboxAdjusted", info = L.AdjustedEditboxInfo, messageOn = L.AdjustedEditboxOn, messageOff = L.AdjustedEditboxOff, reload = true },
 		{ key = "enableCopyButton", info = L.CopyPasteInfo, messageOn = L.CopyPasteOn, messageOff = L.CopyPasteOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton) end, onToggle = function(val, btn) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, val) end },
-		{ key = "enableCopyButtonLeft", info = L.CopyPasteLeftInfo, messageOn = L.CopyPasteLeftOn, messageOff = L.CopyPasteLeftOff, reload = true },
+		{ key = "enableCopyButtonLeft", info = L.CopyPasteLeftInfo, messageOn = L.CopyPasteLeftOn, messageOff = L.CopyPasteLeftOff, reload = true, adjustX = 45 },
 		{ key = "enableChatTextFade", info = L.ChatTextFadeInfo, messageOn = L.ChatTextFadeOn, messageOff = L.ChatTextFadeOff, reload = true },
 		{ key = "disableChatFrameFade", info = L.ChatFrameFadeInfo, messageOn = L.ChatFrameFadeOn, messageOff = L.ChatFrameFadeOff, reload = true },
-		{ key = "enablePlayerChatStyle", info = L.PlayerChatStyleInfo, messageOn = L.PlayerChatStyleOn, messageOff = L.PlayerChatStyleOff },
 	}
 
-	-- Create all options
+	-- Create all options on MAIN panel
 	for _, opt in ipairs(options) do
 		local btn = createCheckbutton(addon.aboutPanel, opt.info)
 		bindToggle(btn, opt.key, {
@@ -393,11 +405,11 @@ function configFrame:EnableConfig()
 			onToggle = opt.onToggle,
 			onShow = opt.onShow,
 		})
-		addConfigEntry(addon.aboutPanel.name, btn, 20, -22)
+		addConfigEntry(addon.aboutPanel.name, btn, opt.adjustX or 20, -22)
 		addon.aboutPanel["btn"..opt.key] = btn
 	end
 
-	-- Chat Alpha slider
+	-- Chat Alpha slider (on MAIN panel as in original 012dff0)
 	local sliderChatAlpha = createSlider(addon.aboutPanel, L.ChatAlphaText, 0, 100)
 	sliderChatAlpha:SetScript("OnShow", function()
 		local val = floor(XCHT_DB.userChatAlpha * 100)
@@ -412,10 +424,10 @@ function configFrame:EnableConfig()
 		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.ChatAlphaSet, val))
 		addon:setUserAlpha()
 	end
-	sliderChatAlpha.sliderMouseUp = function()
+	sliderChatAlpha.sliderMouseUp = function(self, button)
 		sliderChatAlpha.func(sliderChatAlpha:GetValue())
 	end
-	sliderChatAlpha.sliderFunc = function(_, value)
+	sliderChatAlpha.sliderFunc = function(self, value)
 		sliderChatAlpha.currVal:SetText("("..floor(value)..")")
 	end
 	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
@@ -490,10 +502,10 @@ function configFrame:EnableConfig()
 		sliderPageLimit:SetValue(val)
 		sliderPageLimit.currVal:SetText("("..val..")")
 	end
-	sliderPageLimit.sliderMouseUp = function()
+	sliderPageLimit.sliderMouseUp = function(self, button)
 		sliderPageLimit.func(sliderPageLimit:GetValue())
 	end
-	sliderPageLimit.sliderFunc = function(_, value)
+	sliderPageLimit.sliderFunc = function(self, value)
 		sliderPageLimit.currVal:SetText("("..floor(value)..")")
 	end
 	sliderPageLimit:SetScript("OnValueChanged", sliderPageLimit.sliderFunc)
