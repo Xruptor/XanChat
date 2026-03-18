@@ -49,12 +49,20 @@ local function showInstanceWarning()
 		return
 	end
 
+	-- First display (immediate)
 	if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
 		_G.DEFAULT_CHAT_FRAME:AddMessage("|cFFFA8072" .. addon.L.ChatFeaturesDisabledInstance .. "|r")
 	end
 
+	-- Second display after 2 seconds using timer
+	_G.C_Timer.After(2, function()
+		if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
+			_G.DEFAULT_CHAT_FRAME:AddMessage("|cFFFA8072" .. addon.L.ChatFeaturesDisabledInstance .. "|r")
+		end
+	end)
+
 	if addon.dbg then
-		addon.dbg("InstanceWarning: showing warning for instance")
+		addon.dbg("InstanceWarning: showing warning for instance (with 2-second repeat)")
 	end
 end
 

@@ -47,6 +47,25 @@ L.ShortGuildRecruitment = "招募"
 L.ShortNewComerChat = "新"
 L.ShortTradeServices = "交服"
 
+-- Channel name patterns for flexible matching
+L.ChannelNameGeneral = "[综]合"
+L.ChannelNameTrade = "[交]易"
+L.ChannelNameWorldDefense = "[世]界防务"
+L.ChannelNameLocalDefense = "[本]地防务"
+L.ChannelNameLookingForGroup = "[寻]求组队"
+L.ChannelNameGuildRecruitment = "[公]会招募"
+L.ChannelNameNewcomerChat = "[新]人聊天"
+
+-- Additional fallback patterns derived from locale channel names
+-- These provide multiple match styles: partial, case-insensitive, prefix/suffix tolerant
+L.ChannelPatternGeneral = "(%[%d+%. ]*综合[%s%-].-])"
+L.ChannelPatternTrade = "(%[%d+%. ]*交易[%s%-].-])"
+L.ChannelPatternWorldDefense = "(%[%d+%. ]*世界防务[%s%-].-])"
+L.ChannelPatternLocalDefense = "(%[%d+%. ]*本地防务[%s%-].-])"
+L.ChannelPatternLookingForGroup = "(%[%d+%. ]*寻求组队[%s%-].-])"
+L.ChannelPatternGuildRecruitment = "(%[%d+%. ]*公会招募[%s%-].-])"
+L.ChannelPatternNewcomerChat = "(%[%d+%. ]*新人聊天[%s%-].-])"
+
 --short channel globals
 --Example: "|Hchannel:  Channel Type   |h  [short channel name]   |h %s: " 
 --Example Yell: "|Hchannel:  Yell  |h  [Y]  |h %s: "   Channel Type = Yell, short name = Y
@@ -70,6 +89,7 @@ L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[战]|h %s: "
 L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[蟀]|h %s: "
 
 L.EditFilterListHeader = "编辑过滤器列表"
+L.EditFilterListInfo = "选中的事件将在聊天中样式化。"
 L.EditStickyChannelsListHeader = "编辑频道列表"
 
 L.SocialOn = "xanChat: 社交按钮现在是 [|cFF99CC33开|r]"

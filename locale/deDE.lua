@@ -39,6 +39,25 @@ L.ChannelGuildRecruitment = "(%[%d+%. )Gildenrekrutierung.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )Einsteigerchat.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )Handel %([^()]*%).-%]"
 
+-- Channel name patterns for flexible matching
+L.ChannelNameGeneral = "[Aa]llgemein"
+L.ChannelNameTrade = "[Hh]andel"
+L.ChannelNameWorldDefense = "[Ww]elt[Vv]erteidigung"
+L.ChannelNameLocalDefense = "[Ll]okale[Vv]erteidigung"
+L.ChannelNameLookingForGroup = "[Ss]uche[Nn]ach[Gg]ruppe"
+L.ChannelNameGuildRecruitment = "[Gg]ilden[Rr]ekrutierung"
+L.ChannelNameNewcomerChat = "[Ee]insteiger[cC]hat"
+
+-- Additional fallback patterns derived from locale channel names
+-- These provide multiple match styles: partial, case-insensitive, prefix/suffix tolerant
+L.ChannelPatternGeneral = "(%[%d+%. ]*Allgemein[%s%-].-])"
+L.ChannelPatternTrade = "(%[%d+%. ]*Handel[%s%-].-])"
+L.ChannelPatternWorldDefense = "(%[%d+%. ]*Weltverteidigung[%s%-].-])"
+L.ChannelPatternLocalDefense = "(%[%d+%. ]*LokaleVerteidigung[%s%-].-])"
+L.ChannelPatternLookingForGroup = "(%[%d+%. ]*SucheNachGruppe[%s%-].-])"
+L.ChannelPatternGuildRecruitment = "(%[%d+%. ]*Gildenrekrutierung[%s%-].-])"
+L.ChannelPatternNewcomerChat = "(%[%d+%. ]*Einsteigerchat[%s%-].-])"
+
 L.ShortGeneral = "A"
 L.ShortTrade = "H"
 L.ShortWorldDefense = "WV"
@@ -71,6 +90,7 @@ L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[I]|h %s: "
 L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[IL]|h %s: "
 
 L.EditFilterListHeader = "Stilisierte Filterliste bearbeiten"
+L.EditFilterListInfo = "Markierte Ereignisse werden im Chat stilisiert."
 L.EditStickyChannelsListHeader = "Sticky Channels-Liste bearbeiten"
 
 L.SocialOn = "xanChat: Schaltfläche für die Kontakte ist jetzt [|cFF99CC33AN|r]"

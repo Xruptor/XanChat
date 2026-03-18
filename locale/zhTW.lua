@@ -38,6 +38,25 @@ L.ChannelGuildRecruitment = "(%[%d+%. )公會招募.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )新手聊天.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )交易 %([^()]*%).-%]"
 
+-- Chinese channel name patterns for flexible matching
+L.ChannelNameGeneral = "[綜]合"
+L.ChannelNameTrade = "[交]易"
+L.ChannelNameWorldDefense = "[世]界防務"
+L.ChannelNameLocalDefense = "[本]地防務"
+L.ChannelNameLookingForGroup = "[尋]求組隊"
+L.ChannelNameGuildRecruitment = "[公]會招募"
+L.ChannelNameNewcomerChat = "[新]手聊天|[新]人聊天"
+
+-- Additional fallback patterns derived from locale channel names
+-- These provide multiple match styles: partial, case-insensitive, prefix/suffix tolerant
+L.ChannelPatternGeneral = "(%[%d+%. ]*綜合[%s%-].-])"
+L.ChannelPatternTrade = "(%[%d+%. ]*交易[%s%-].-])"
+L.ChannelPatternWorldDefense = "(%[%d+%. ]*世界防務[%s%-].-])"
+L.ChannelPatternLocalDefense = "(%[%d+%. ]*本地防務[%s%-].-])"
+L.ChannelPatternLookingForGroup = "(%[%d+%. ]*尋求組隊[%s%-].-])"
+L.ChannelPatternGuildRecruitment = "(%[%d+%. ]*公會招募[%s%-].-])"
+L.ChannelPatternNewcomerChat = "(%[%d+%. ]*新手聊天[%s%-].-])"
+
 L.ShortGeneral = "綜"
 L.ShortTrade = "交"
 L.ShortWorldDefense = "世防"
@@ -70,6 +89,7 @@ L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[戰]|h %s: "
 L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[戰領]|h %s: "
 
 L.EditFilterListHeader = "編輯樣式化過濾清單"
+L.EditFilterListInfo = "勾選的事件將在聊天中樣式化。"
 L.EditStickyChannelsListHeader = "編輯黏著頻道清單"
 
 L.SocialOn = "xanChat: 社交按鈕現在 [|cFF99CC33ON|r]"

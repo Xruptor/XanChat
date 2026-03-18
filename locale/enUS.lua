@@ -39,6 +39,25 @@ L.ChannelGuildRecruitment = "(%[%d+%. )GuildRecruitment.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )Newcomer Chat.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )Trade %([^()]*%).-%]"
 
+-- English channel name patterns for flexible matching
+L.ChannelNameGeneral = "[Gg]eneral"
+L.ChannelNameTrade = "[Tt]rade"
+L.ChannelNameWorldDefense = "[Ww]orld[Dd]efense"
+L.ChannelNameLocalDefense = "[Ll]ocal[Dd]efense"
+L.ChannelNameLookingForGroup = "[Ll]ooking[Ff]or[Gg]roup"
+L.ChannelNameGuildRecruitment = "[Gg]uild[Rr]ecruitment"
+L.ChannelNameNewcomerChat = "[Nn]ewcomer"
+
+-- Additional fallback patterns derived from locale channel names
+-- These provide multiple match styles: partial, case-insensitive, prefix/suffix tolerant
+L.ChannelPatternGeneral = "(%[%d+%. ]*General[%s%-].-])"
+L.ChannelPatternTrade = "(%[%d+%. ]*Trade[%s%-].-])"
+L.ChannelPatternWorldDefense = "(%[%d+%. ]*WorldDefense[%s%-].-])"
+L.ChannelPatternLocalDefense = "(%[%d+%. ]*LocalDefense[%s%-].-])"
+L.ChannelPatternLookingForGroup = "(%[%d+%. ]*LookingForGroup[%s%-].-])"
+L.ChannelPatternGuildRecruitment = "(%[%d+%. ]*GuildRecruitment[%s%-].-])"
+L.ChannelPatternNewcomerChat = "(%[%d+%. ]*Newcomer Chat[%s%-].-])"
+
 L.ShortGeneral = "GN"
 L.ShortTrade = "TR"
 L.ShortWorldDefense = "WD"

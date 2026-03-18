@@ -68,10 +68,15 @@ header:SetFontObject("GameFontNormal")
 header:SetPoint("CENTER", filterList, "TOP", 0, -20)
 header:SetText(L.EditFilterListHeader)
 
-local filterInfo = filterList:CreateFontString("$parentFilterInfo", "ARTWORK", "GameFontHighlightSmall")
+local filterInfo = filterList:CreateFontString("$parentFilterInfo", "ARTWORK", "GameFontHighlight")
 filterInfo:SetJustifyH("LEFT")
 filterInfo:SetPoint("TOPLEFT", filterList, "TOPLEFT", 15, -45)
-filterInfo:SetText(L.EditFilterListInfo)
+filterInfo:SetText("|cFF61F200"..L.EditFilterListInfo.."|r")
+-- Make font slightly larger for better visibility
+local fontHeight = filterInfo:GetFontHeight()
+if fontHeight then
+	filterInfo:SetFontHeight(fontHeight * 1.05)
+end
 
 local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", filterList, "UIPanelScrollFrameTemplate")
 local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")

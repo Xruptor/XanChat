@@ -47,6 +47,25 @@ L.ShortGuildRecruitment = "НГ"
 L.ShortNewComerChat = "НЧ"
 L.ShortTradeServices = "ТУ"
 
+-- Channel name patterns for flexible matching
+L.ChannelNameGeneral = "[Оо]бщий"
+L.ChannelNameTrade = "[Тт]орговл[Яя]"
+L.ChannelNameWorldDefense = "[Оо]борона%s*[Гг]лобальн"
+L.ChannelNameLocalDefense = "[Оо]борона%s*[Лл]окальн"
+L.ChannelNameLookingForGroup = "[Пп]оиск%s*[Гг]рупп"
+L.ChannelNameGuildRecruitment = "[Нн]абор%s*[Вв]%s*[Гг]ильди[Юю]"
+L.ChannelNameNewcomerChat = "[Чч]ат%s*[Нн]овичков"
+
+-- Additional fallback patterns derived from locale channel names
+-- These provide multiple match styles: partial, case-insensitive, prefix/suffix tolerant
+L.ChannelPatternGeneral = "(%[%d+%. ]*Общий[%s%-].-])"
+L.ChannelPatternTrade = "(%[%d+%. ]*Торговля[%s%-].-])"
+L.ChannelPatternWorldDefense = "(%[%d+%. ]*Оборона глобальный[%s%-].-])"
+L.ChannelPatternLocalDefense = "(%[%d+%. ]*Оборона локальный[%s%-].-])"
+L.ChannelPatternLookingForGroup = "(%[%d+%. ]*Поиск группы[%s%-].-])"
+L.ChannelPatternGuildRecruitment = "(%[%d+%. ]*Набор в гильдию[%s%-].-])"
+L.ChannelPatternNewcomerChat = "(%[%d+%. ]*Чат новичков[%s%-].-])"
+
 --short channel globals
 --Example: "|Hchannel:  Channel Type   |h  [short channel name]   |h %s: " 
 --Example Yell: "|Hchannel:  Yell  |h  [Y]  |h %s: "   Channel Type = Yell, short name = Y
@@ -70,6 +89,7 @@ L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[I]|h %s: "
 L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[IL]|h %s: "
 
 L.EditFilterListHeader = "Редактировать список стилизованных фильтров"
+L.EditFilterListInfo = "Отмеченные события будут стилизованы в чате."
 L.EditStickyChannelsListHeader = "Редактировать список закрепленных каналов"
 
 L.SocialOn = "xanChat: Социальные кнопки теперь [|cFF99CC33ВКЛ|r]"

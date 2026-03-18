@@ -474,9 +474,7 @@ function addon:ParseChatEvent(_, event, ...)
 	end
 
 	-- Store additional data needed for link generation
-	if not isArg2Secret then
-		s.sender_name = arg2
-	end
+	s.sender_name = arg2 or s.player_name_with_realm
 	s.arg11 = arg11 or 0
 	s.arg13 = arg13
 	s.chat_type = chatType
@@ -526,6 +524,15 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		local infoRow = m.INFO or info or {}
 		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
 
+		-- During lockdown, get proper colors from ChatTypeInfo if not already set
+		if outR == 1 and outG == 1 and outB == 1 and _G.ChatTypeInfo and _G.ChatTypeInfo[event] then
+			local chatTypeInfo = _G.ChatTypeInfo[event]
+			outR = chatTypeInfo.r or 1
+			outG = chatTypeInfo.g or 1
+			outB = chatTypeInfo.b or 1
+			outID = chatTypeInfo.id or 0
+		end
+
 		-- Generate clickable player link using StylePlayerSection for secret payloads
 		addon.StylePlayerSection(m)
 		-- NOTE: WE CANNOT do channel shortening on secret values payloads because it uses gsub() to do it.
@@ -545,7 +552,9 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			end
 		end
 
-		textToDisplay = ((m.type_prefix and (m.type_prefix .. " ")) or "") .. (textToDisplay or "")
+		-- During lockdown, skip type_prefix to avoid double formatting
+		-- The player_link already contains the necessary formatting
+		-- textToDisplay = ((m.type_prefix and (m.type_prefix .. " ")) or "") .. (textToDisplay or "")
 
 		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
 		this:AddMessage(textToDisplay, outR, outG, outB, outID, m.ACCESSID, m.TYPEID)
@@ -661,7 +670,30 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			addon.dbg("ChatFrame_MessageEventHandler: useStyledOutput=" .. tostring(useStyledOutput))
 		end
 
-		if processMode == (addon.EventProcessingType and addon.EventProcessingType.Full) then
+		-- For channel events with non-standard argument structures, use Blizzard's formatted output directly
+		-- These events have arg1 as notice type (e.g., "YOU_CHANGED"), not message text
+		--
+		-- ISSUE: For these events, arg1 is a notice type constant ("YOU_CHANGED", "YOU_JOINED", etc.)
+		--        not the actual message text. FormatChatMessage() uses message_text which would
+		--        incorrectly show "YOU_CHANGED" instead of the properly formatted message.
+		--
+		-- FIX: Use m.OUTPUT (Blizzard's formatted output) directly instead of FormatChatMessage()
+		--      This ensures proper message display while still allowing short channel names and other features.
+		--
+		-- EVENTS AFFECTED:
+		--   - CHAT_MSG_CHANNEL_NOTICE (arg1 = notice type like "YOU_CHANGED")
+		--   - CHAT_MSG_CHANNEL_NOTICE_USER (arg1 = notice type for user actions)
+		--   - CHAT_MSG_CHANNEL_JOIN (arg1 = notice type for joins)
+		--   - CHAT_MSG_CHANNEL_LEAVE (arg1 = notice type for leaves)
+		local isChannelNoticeEvent = resolvedEvent == "CHAT_MSG_CHANNEL_NOTICE" or
+			resolvedEvent == "CHAT_MSG_CHANNEL_NOTICE_USER" or
+			resolvedEvent == "CHAT_MSG_CHANNEL_JOIN" or
+			resolvedEvent == "CHAT_MSG_CHANNEL_LEAVE"
+
+		if isChannelNoticeEvent then
+			addon.dbg("ChatFrame_MessageEventHandler: using Blizzard output for channel notice event")
+			textToDisplay = (m.PRE or "") .. (m.OUTPUT or "") .. (m.POST or "")
+		elseif processMode == (addon.EventProcessingType and addon.EventProcessingType.Full) then
 			addon.dbg("ChatFrame_MessageEventHandler: using Full processing mode")
 			textToDisplay = addon.FormatChatMessage(m) or ""
 		elseif processMode == (addon.EventProcessingType and addon.EventProcessingType.PatternsOnly) then

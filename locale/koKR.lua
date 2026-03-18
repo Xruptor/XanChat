@@ -47,6 +47,25 @@ L.ShortGuildRecruitment = "길모"
 L.ShortNewComerChat = "새"
 L.ShortTradeServices = "거서"
 
+-- Channel name patterns for flexible matching
+L.ChannelNameGeneral = "[일]반"
+L.ChannelNameTrade = "[거]래"
+L.ChannelNameWorldDefense = "[세]계방어"
+L.ChannelNameLocalDefense = "[지]역방어"
+L.ChannelNameLookingForGroup = "[파]티찾기"
+L.ChannelNameGuildRecruitment = "[길]드모집"
+L.ChannelNameNewcomerChat = "[새]내기%s*대화"
+
+-- Additional fallback patterns derived from locale channel names
+-- These provide multiple match styles: partial, case-insensitive, prefix/suffix tolerant
+L.ChannelPatternGeneral = "(%[%d+%. ]*일반[%s%-].-])"
+L.ChannelPatternTrade = "(%[%d+%. ]*거래[%s%-].-])"
+L.ChannelPatternWorldDefense = "(%[%d+%. ]*세계방어[%s%-].-])"
+L.ChannelPatternLocalDefense = "(%[%d+%. ]*지역방어[%s%-].-])"
+L.ChannelPatternLookingForGroup = "(%[%d+%. ]*파티찾기[%s%-].-])"
+L.ChannelPatternGuildRecruitment = "(%[%d+%. ]*길드모집[%s%-].-])"
+L.ChannelPatternNewcomerChat = "(%[%d+%. ]*새내기 대화[%s%-].-])"
+
 --short channel globals
 --Example: "|Hchannel:  Channel Type   |h  [short channel name]   |h %s: " 
 --Example Yell: "|Hchannel:  Yell  |h  [Y]  |h %s: "   Channel Type = Yell, short name = Y
@@ -70,6 +89,7 @@ L.CHAT_INSTANCE_CHAT_GET 			= "|Hchannel:instance|h[전장]|h %s: "
 L.CHAT_INSTANCE_CHAT_LEADER_GET 	= "|Hchannel:instance|h[전투대장]|h %s: "
 
 L.EditFilterListHeader = "스타일 필터 목록 편집"
+L.EditFilterListInfo = "체크된 이벤트는 채팅에서 스타일이 적용됩니다."
 L.EditStickyChannelsListHeader = "고정 채널 목록 편집"
 
 L.SocialOn = "xanChat: 소셜 버튼 [|cFF99CC33ON|r]"
