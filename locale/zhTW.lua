@@ -38,6 +38,15 @@ L.ChannelGuildRecruitment = "(%[%d+%. )公會招募.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )新手聊天.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )交易 %([^()]*%).-%]"
 
+-- Chinese (Traditional) channel name patterns for SHORT flexible matching
+L.ChannelPatternShortGeneral = "綜合"
+L.ChannelPatternShortTrade = "交易"
+L.ChannelPatternShortWorldDefense = "世界防務"
+L.ChannelPatternShortLocalDefense = "本地防務"
+L.ChannelPatternShortLookingForGroup = "尋求組隊"
+L.ChannelPatternShortGuildRecruitment = "公會招募"
+L.ChannelPatternShortNewcomerChat = "新手聊天"
+
 -- Chinese channel name patterns for flexible matching
 L.ChannelNameGeneral = "[綜]合"
 L.ChannelNameTrade = "[交]易"

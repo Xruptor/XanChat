@@ -38,6 +38,15 @@ L.ChannelGuildRecruitment = "(%[%d+%. )길드모집.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )새내기 대화.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )거래 %([^()]*%).-%]"
 
+-- Korean channel name patterns for SHORT flexible matching
+L.ChannelPatternShortGeneral = "일반"
+L.ChannelPatternShortTrade = "거래"
+L.ChannelPatternShortWorldDefense = "세계방어"
+L.ChannelPatternShortLocalDefense = "지역방어"
+L.ChannelPatternShortLookingForGroup = "파티찾기"
+L.ChannelPatternShortGuildRecruitment = "길드모집"
+L.ChannelPatternShortNewcomerChat = "새내기대화"
+
 L.ShortGeneral = "일"
 L.ShortTrade = "거"
 L.ShortWorldDefense = "세방"

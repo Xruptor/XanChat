@@ -39,6 +39,15 @@ L.ChannelGuildRecruitment = "(%[%d+%. )GuildRecruitment.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )Newcomer Chat.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )Trade %([^()]*%).-%]"
 
+-- English channel name patterns for SHORT flexible matching
+L.ChannelPatternShortGeneral = "general"
+L.ChannelPatternShortTrade = "trade"
+L.ChannelPatternShortWorldDefense = "worlddefense"
+L.ChannelPatternShortLocalDefense = "localdefense"
+L.ChannelPatternShortLookingForGroup = "lookingforgroup"
+L.ChannelPatternShortGuildRecruitment = "guildrecruitment"
+L.ChannelPatternShortNewcomerChat = "newcomer"
+
 -- English channel name patterns for flexible matching
 L.ChannelNameGeneral = "[Gg]eneral"
 L.ChannelNameTrade = "[Tt]rade"

@@ -124,10 +124,14 @@ end
 -- ============================================================================
 
 local function createPlayerLink(m, linkTarget, displayText)
-	-- Skip for monster emotes and channel notices
+	-- Skip for emotes, monster emotes, and channel notices
+	-- EMOTE and TEXT_EMOTE events have embedded player names in the message text
+	-- and should not have additional player links prepended
 	local chatType = m.chat_type or ""
 	if string.sub(chatType, 1, 7) == "MONSTER" or
 	   string.sub(chatType, 1, 18) == "RAID_BOSS_EMOTE" or
+	   chatType == "EMOTE" or
+	   chatType == "TEXT_EMOTE" or
 	   chatType == "CHANNEL_NOTICE" or
 	   chatType == "CHANNEL_NOTICE_USER" then
 		return nil

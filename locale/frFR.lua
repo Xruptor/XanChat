@@ -38,6 +38,15 @@ L.ChannelGuildRecruitment = "(%[%d+%. )RecrutementDeGuilde.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )Discussion des nouveaux.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )Commerce %([^()]*%).-%]"
 
+-- French channel name patterns for SHORT flexible matching
+L.ChannelPatternShortGeneral = "général"
+L.ChannelPatternShortTrade = "commerce"
+L.ChannelPatternShortWorldDefense = "défenseglobale"
+L.ChannelPatternShortLocalDefense = "défenselocale"
+L.ChannelPatternShortLookingForGroup = "recherchedegroupe"
+L.ChannelPatternShortGuildRecruitment = "recrutementdeguilde"
+L.ChannelPatternShortNewcomerChat = "nouveaux"
+
 -- Channel name patterns for flexible matching
 L.ChannelNameGeneral = "[Gg]énéral"
 L.ChannelNameTrade = "[Cc]ommerce"

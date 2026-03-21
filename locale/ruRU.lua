@@ -38,6 +38,15 @@ L.ChannelGuildRecruitment = "(%[%d+%. )Набор в гильдию.-%]"
 L.ChannelNewComerChat = "(%[%d+%. )Чат новичков.-%]"
 L.ChannelTradeServices  = "(%[%d+%. )Услуги %([^()]*%).-%]"
 
+-- Russian channel name patterns for SHORT flexible matching
+L.ChannelPatternShortGeneral = "общий"
+L.ChannelPatternShortTrade = "торговля"
+L.ChannelPatternShortWorldDefense = "оборонаглобальный"
+L.ChannelPatternShortLocalDefense = "обороналокальный"
+L.ChannelPatternShortLookingForGroup = "поискгруппы"
+L.ChannelPatternShortGuildRecruitment = "наборвигильдию"
+L.ChannelPatternShortNewcomerChat = "чатновичков"
+
 L.ShortGeneral = "ОБ"
 L.ShortTrade = "ТР"
 L.ShortWorldDefense = "МО"
