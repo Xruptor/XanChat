@@ -259,25 +259,21 @@ local function setupEditboxHistory(editBox)
 		self.historyIndex = 0
 	end)
 
-	-- if addon.AddEditBoxHistoryLine then
-	-- 	addon:SecureHook(editBox, "AddHistoryLine", function(eb)
-	-- 		if eb then addon.AddEditBoxHistoryLine(eb) end
-	-- 	end)
-	-- end
-	-- if addon.ClearEditBoxHistory then
-	-- 	addon:SecureHook(editBox, "ClearHistory", function(eb)
-	-- 		if eb then addon.ClearEditBoxHistory(eb) end
-	-- 	end)
-	-- end
-	-- if addon.OnArrowPressed then
-	-- 	editBox:HookScript("OnArrowPressed", function(self, key)
-	-- 		-- Skip custom arrow handling during combat to prevent taint
-	-- 		-- that would block protected functions like PerformEmote()
-	-- 		if not _G.InCombatLockdown or not _G.InCombatLockdown() then
-	-- 			addon.OnArrowPressed(self, key)
-	-- 		end
-	-- 	end)
-	-- end
+	if addon.AddEditBoxHistoryLine then
+		addon:SecureHook(editBox, "AddHistoryLine", function(eb)
+			if eb then addon.AddEditBoxHistoryLine(eb) end
+		end)
+	end
+	if addon.ClearEditBoxHistory then
+		addon:SecureHook(editBox, "ClearHistory", function(eb)
+			if eb then addon.ClearEditBoxHistory(eb) end
+		end)
+	end
+	if addon.OnArrowPressed then
+		editBox:HookScript("OnArrowPressed", function(self, key)
+			addon.OnArrowPressed(self, key)
+		end)
+	end
 end
 
 -- ============================================================================

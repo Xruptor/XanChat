@@ -253,6 +253,39 @@ end
 -- ============================================================================
 -- CHANNEL NAME SHORTENING FUNCTIONS
 -- ============================================================================
+-- CHANNEL NAME SHORTENING FUNCTIONS
+-- ============================================================================
+
+--- Helper function to look up the short name for a channel
+--- @param fullName string The full channel name (e.g., "General" or "general")
+--- @return string|nil The short name (e.g., "GN") or nil if not found
+local function lookupShortChannelName(fullName)
+	if not fullName or fullName == "" then return nil end
+
+	-- Normalize the full name for matching
+	local normalizedName = fullName:lower():gsub("[%s%-]", "")
+
+	for _, replacement in ipairs(SHORT_CHANNEL_REPLACEMENTS) do
+		local longPattern, shortName = unpack(replacement)
+		if longPattern and shortName then
+			local patternMatched = false
+
+			-- Use Lua pattern matching for [Gg]eneral style patterns
+			if longPattern:find("%[") then
+				patternMatched = (normalizedName:match("^" .. longPattern .. "$") ~= nil)
+			else
+				-- Simple word pattern - case-insensitive comparison
+				patternMatched = (longPattern:lower() == normalizedName)
+			end
+
+			if patternMatched then
+				return shortName
+			end
+		end
+	end
+
+	return nil
+end
 
 local function applyShortChannelNamesToSections(m)
 	if not addon then return end
@@ -311,47 +344,34 @@ local function applyShortChannelNamesToSections(m)
 			addon.dbg("applyShortChannelNamesToSections: channelNum="..tostring(channelNum).." bracketContent="..tostring(bracketContent).." longName="..tostring(string.sub(longName, 1, 80)))
 		end
 
-		if bracketContent then
-			-- Extract just the channel name (remove number prefix and zone suffix)
-			-- e.g., "1. General - Orgrimmar" -> "General"
-			-- For full hyperlink match, extract from the inner bracket only
-			local innerBracket = bracketContent:match("%[([^%]]+)%]") or bracketContent
-			local baseName = innerBracket:gsub("^%d+%.?%s*", ""):gsub("%s*%-.*$", "")
-			local baseNameLower = baseName:lower()
+		-- First, determine the short name for bracket replacement
+		-- This ensures we have the short name before attempting bracket replacement
+		local shortName = lookupShortChannelName(m.channel_name or "")
+		if shortName then
+			-- Update m.channel_name immediately for lockdown code to use
+			m.channel_name = shortName
+		end
 
-			-- Look up the short name for this channel
-			local shortName = nil
-			for _, replacement in ipairs(SHORT_CHANNEL_REPLACEMENTS) do
-				local longPattern, replacementName = unpack(replacement)
-				if longPattern and replacementName then
-					local patternClean = longPattern:gsub("[%[%]]", ""):gsub("%^", ""):gsub("%-", ""):lower()
-					if patternClean ~= "" and baseNameLower:find(patternClean, 1, true) then
-						shortName = replacementName
-						break
-					end
-				end
+		if bracketContent and shortName then
+			-- Build the shortened format: [1] [GN]
+			local shortenedBracket = "["..channelNum.."] ["..shortName.."]"
+
+			-- Replace based on what we matched
+			if bracketContent:find("|Hchannel:") then
+				-- We matched the full hyperlink, replace the inner bracket content
+				-- Convert |Hchannel:1|h[1. General - Zone]|h to |Hchannel:1|h[1] [GN]|h
+				longName = longName:gsub("|Hchannel:"..channelNum.."|h%[([^%]]+)%]|h", "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..shortName.."]|h", 1)
+			else
+				-- We matched just the bracket, replace it directly
+				-- Extract inner bracket content for proper escaping
+				local innerBracket = bracketContent:match("%[([^%]]+)%]") or bracketContent
+				local escapedBracket = innerBracket:gsub("[%(%)%.%*%+%?%[%]%^%$%-]", "%%%0")
+				local originalPattern = "%["..escapedBracket.."%]"
+				longName = string.gsub(longName, originalPattern, shortenedBracket, 1)
 			end
 
-			-- If we found a short name, replace the channel bracket
-			if shortName then
-				-- Build the shortened format: [1] GN]
-				local shortenedBracket = "["..channelNum.."] "..shortName.."]"
-
-				-- Replace based on what we matched
-				if bracketContent:find("|Hchannel:") then
-					-- We matched the full hyperlink, replace the inner bracket content
-					-- Convert |Hchannel:1|h[1. General - Zone]|h to |Hchannel:1|h[1] GN]|h
-					longName = longName:gsub("|Hchannel:"..channelNum.."|h%[([^%]]+)%]|h", "|Hchannel:"..channelNum.."|h["..channelNum.."] "..shortName.."]|h", 1)
-				else
-					-- We matched just the bracket, replace it directly
-					local escapedBracket = innerBracket:gsub("[%(%)%.%*%+%?%[%]%^%$%-]", "%%%0")
-					local originalPattern = "%["..escapedBracket.."%]"
-					longName = string.gsub(longName, originalPattern, shortenedBracket, 1)
-				end
-
-				if addon and addon.dbg then
-					addon.dbg("applyShortChannelNamesToSections: replaced '"..baseName.."' with '"..shortName.."'")
-				end
+			if addon and addon.dbg then
+				addon.dbg("applyShortChannelNamesToSections: replaced bracket with '"..shortName.."'")
 			end
 		end
 	end
@@ -360,38 +380,14 @@ local function applyShortChannelNamesToSections(m)
 	m.OUTPUT = longName
 
 	-- Update m.channel_name with the short name for FormatChatMessage use
-	-- Look up the short name from SHORT_CHANNEL_REPLACEMENTS based on the extracted full name
+	-- Note: m.channel_name was already updated to the short name above during bracket replacement
+	-- This is a fallback in case bracket replacement didn't happen but we still want to shorten the name
 	if m.channel_name and m.channel_name ~= "" then
-		local fullName = m.channel_name:lower():gsub("[%s%-]", "")
-		if addon and addon.dbg then
-			addon.dbg("applyShortChannelNamesToSections: Looking up short name for fullName="..tostring(fullName))
-		end
-		for _, replacement in ipairs(SHORT_CHANNEL_REPLACEMENTS) do
-			local longPattern, shortName = unpack(replacement)
-			if longPattern and shortName then
-				local patternMatched = false
-
-				-- Check if pattern matches the full name
-				if longPattern:find("%[") then
-					-- Pattern contains [Gg] style - use it as a Lua pattern directly
-					-- The pattern like "[Gg]eneral" should match "general"
-					patternMatched = (fullName:match("^" .. longPattern .. "$") ~= nil)
-				else
-					-- Simple word pattern - case-insensitive comparison
-					patternMatched = (longPattern:lower() == fullName)
-				end
-
-				if addon and addon.dbg then
-					addon.dbg("applyShortChannelNamesToSections: Checking longPattern="..tostring(longPattern).." shortName="..tostring(shortName).." matched="..tostring(patternMatched))
-				end
-
-				if patternMatched then
-					m.channel_name = shortName
-					if addon and addon.dbg then
-						addon.dbg("applyShortChannelNamesToSections: mapped '"..tostring(longPattern).."' to '"..shortName.."'")
-					end
-					break
-				end
+		local shortName = lookupShortChannelName(m.channel_name)
+		if shortName then
+			m.channel_name = shortName
+			if addon and addon.dbg then
+				addon.dbg("applyShortChannelNamesToSections: fallback lookup mapped to '"..shortName.."'")
 			end
 		end
 	end
@@ -431,32 +427,13 @@ local function getShortChannelPatternOnLockdown(m, channelNum)
 
 	if not channelName or channelName == "" then return "" end
 
-	-- Normalize the full name for matching
-	local normalizedName = channelName:lower():gsub("[%s%-]", "")
-
-	-- Look through SHORT_CHANNEL_REPLACEMENTS for a match
-	if SHORT_CHANNEL_REPLACEMENTS then
-		for _, replacement in ipairs(SHORT_CHANNEL_REPLACEMENTS) do
-			local longPattern, shortName = unpack(replacement)
-			if longPattern and shortName then
-				local patternMatched = false
-
-				-- Use Lua pattern matching for [Gg]eneral style patterns
-				if longPattern:find("%[") then
-					patternMatched = (normalizedName:match("^" .. longPattern .. "$") ~= nil)
-				else
-					-- Simple word pattern - case-insensitive comparison
-					patternMatched = (longPattern:lower() == normalizedName)
-				end
-
-				if patternMatched then
-					if addon and addon.dbg then
-						addon.dbg("getShortChannelPatternOnLockdown: '"..channelName.."' -> '"..shortName.."'")
-					end
-					return shortName
-				end
-			end
+	-- Look up the short name using the shared helper function
+	local shortName = lookupShortChannelName(channelName)
+	if shortName then
+		if addon and addon.dbg then
+			addon.dbg("getShortChannelPatternOnLockdown: '"..channelName.."' -> '"..shortName.."'")
 		end
+		return shortName
 	end
 
 	-- No match found, return original

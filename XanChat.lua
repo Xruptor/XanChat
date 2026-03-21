@@ -516,15 +516,23 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		addon.dbg("ChatFrame_MessageEventHandler: secret payload detected, using local safe rendering")
 		self:DebugChatHandlerState("secret-payload")
 
+		-- Reset capture state to avoid using stale colors from previous non-secret messages
+		addon.resetCaptureState()
+
+		-- During lockdown, we can't call the original handler to test if the frame should display
+		-- Instead, use a per-message deduplication tracker - only the first frame processes
+		-- This works because Blizzard routes the message to the correct frame first
+		local messageKey = tostring(event) .. "_" .. tostring(arg11 or 0)
+		if addon._lockdownProcessedMessages and addon._lockdownProcessedMessages[messageKey] then
+			addon.dbg("ChatFrame_MessageEventHandler: message already processed during lockdown, skipping duplicate frame")
+			return true
+		end
+
 		local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 		local m = type(parsedMessage) == "table" and parsedMessage or addon.sectionOriginal or {}
 
-		local infoRow = m.INFO or info or {}
-		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
-
-		addon.dbg("ChatFrame_MessageEventHandler: initial colors from infoRow - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID).." event="..tostring(event))
-
 		-- Extract channel info from args if not already set (using unified function)
+		-- Need to do this BEFORE getting colors so we have channel_number for proper color lookup
 		if not m.channel_number or m.channel_number == "" then
 			local argsSources = {arg7, arg9, arg10}
 			addon.extractChannelInfoFromSources(m, argsSources)
@@ -534,28 +542,28 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		-- We can use string.match on secret values (just not gsub())
 		addon.extractChannelFromOutputIfDeferred(m)
 
-		-- During lockdown, get proper colors from ChatTypeInfo if not already set
-		-- For channel events, also check if we can get channel-specific colors
-		if m.chat_type and outR == 1 and outG == 1 and outB == 1 then
-			if _G.ChatTypeInfo and _G.ChatTypeInfo[m.chat_type] then
-				local chatTypeInfo = _G.ChatTypeInfo[m.chat_type]
-				outR = chatTypeInfo.r or 1
-				outG = chatTypeInfo.g or 1
-				outB = chatTypeInfo.b or 1
-				outID = chatTypeInfo.id or 0
-				addon.dbg("ChatFrame_MessageEventHandler: fallback colors from ChatTypeInfo - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID))
-			elseif m.channel_number and m.channel_number ~= "" and _G.GetChannelColor then
-				-- For channel events, try to get channel-specific color
-				local channelNum = tonumber(m.channel_number)
-				if channelNum and channelNum > 0 then
-					local r, g, b = _G.GetChannelColor(channelNum)
-					if r and g and b then
-						outR, outG, outB = r, g, b
-						addon.dbg("ChatFrame_MessageEventHandler: channel-specific color - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." channel="..tostring(channelNum))
-					end
-				end
+		-- IMPORTANT: During lockdown, we must use ChatTypeInfo["CHANNEL" + number] NOT ChatTypeInfo["CHANNEL"]
+		-- ChatTypeInfo["CHANNEL"] = generic default color (WRONG)
+		-- ChatTypeInfo["CHANNEL1"] = General channel color (CORRECT)
+		-- ChatTypeInfo["CHANNEL3"] = Lockdown/Trade channel color (CORRECT)
+		-- Each channel has its own color configured by the player - use the specific channel type key!
+		local infoRow = m.INFO or info or {}
+		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
+
+		-- For channel messages, try to get the channel-specific color by channel number
+		if m.channel_number and m.channel_number ~= "" and m.channel_number ~= "0" then
+			local channelTypeKey = "CHANNEL" .. m.channel_number
+			if _G.ChatTypeInfo and _G.ChatTypeInfo[channelTypeKey] then
+				outR = _G.ChatTypeInfo[channelTypeKey].r or outR
+				outG = _G.ChatTypeInfo[channelTypeKey].g or outG
+				outB = _G.ChatTypeInfo[channelTypeKey].b or outB
+				outID = _G.ChatTypeInfo[channelTypeKey].id or outID
+				addon.dbg("ChatFrame_MessageEventHandler: using channel-specific color for "..channelTypeKey.." - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB))
 			end
 		end
+
+		addon.dbg("ChatFrame_MessageEventHandler: initial colors from infoRow - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID).." event="..tostring(event))
+
 
 		-- Build channel info for display during lockdown
 		-- Skip for events in SKIP_STYLING_EVENTS (system messages like AFK/DND) and for channel "0"
@@ -638,6 +646,11 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
 		this:AddMessage(textToDisplay, outR, outG, outB, outID, false, m.ACCESSID, m.TYPEID)
+
+		-- Mark this message as processed so duplicate frames don't process it
+		messageKey = tostring(event) .. "_" .. tostring(arg11 or 0)
+		addon._lockdownProcessedMessages = addon._lockdownProcessedMessages or {}
+		addon._lockdownProcessedMessages[messageKey] = true
 		return true
 	end
 
@@ -817,7 +830,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			local capturedG = addon.captureState.color.g or outG
 			local capturedB = addon.captureState.color.b or outB
 			local capturedID = addon.captureState.color.id or outID
-			local isCensored = arg11 and _G.C_ChatInfo and _G.C_ChatInfo.IsChatLineCensored(arg11)
+			local isCensored = arg11 and _G.C_ChatInfo.IsChatLineCensored(arg11)
 			local visibleText = isCensored and (arg1 or "") or textToDisplay
 
 			addon.dbg("ChatFrame_MessageEventHandler: captured colors - R="..tostring(capturedR).." G="..tostring(capturedG).." B="..tostring(capturedB).." ID="..tostring(capturedID).." isCensored="..tostring(isCensored))
@@ -1256,6 +1269,9 @@ function addon:OnEnable()
 	self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
 	self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
 
+	-- Register cleanup event for lockdown deduplication table
+	self:RegisterEvent("PLAYER_LEAVING_WORLD", "ClearLockdownProcessedMessages")
+
 	-- Initialize Instance Warning module
 	if addon.InitInstanceWarning then
 		addon.InitInstanceWarning()
@@ -1280,8 +1296,14 @@ function addon:OnEnable()
 	end
 end
 
+function addon:ClearLockdownProcessedMessages()
+	addon._lockdownProcessedMessages = {}
+	addon.dbg("ClearLockdownProcessedMessages: cleared deduplication table")
+end
+
 function addon:OnDisable()
 	addon.dbg("OnDisable: removing hooks and cleaning up")
+	self:ClearLockdownProcessedMessages()
 
 	if addon.unregisterAllCallbacks then
 		addon.unregisterAllCallbacks()
