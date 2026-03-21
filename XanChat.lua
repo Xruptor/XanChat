@@ -393,6 +393,20 @@ function addon:ParseChatEvent(_, event, ...)
 	extractTypePrefix(s, chatType)
 	s.CHATTARGET = getChatTarget(s.CHATGROUP, arg2, arg8)
 
+	-- Set ACCESSID and TYPEID for the report system using Blizzard's ChatHistory API
+	-- These are used by AddMessage for proper message reporting functionality
+	if _G.ChatHistory_GetAccessId then
+		s.ACCESSID = _G.ChatHistory_GetAccessId(s.CHATGROUP, s.CHATTARGET) or arg11 or 0
+	else
+		s.ACCESSID = arg11 or 0
+	end
+
+	if _G.ChatHistory_GetTypeInfo then
+		s.TYPEID = _G.ChatHistory_GetTypeInfo(s.CHATTYPE, s.CHATTARGET, arg12 or arg13) or 0
+	else
+		s.TYPEID = 0
+	end
+
 	-- Message text handling
 	local isUnsafeMessage = isSecret or not (addon.isSafeString and addon.isSafeString(arg1))
 	if isUnsafeMessage then
@@ -522,9 +536,9 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		-- During lockdown, get proper colors from ChatTypeInfo if not already set
 		-- For channel events, also check if we can get channel-specific colors
-		if outR == 1 and outG == 1 and outB == 1 then
-			if _G.ChatTypeInfo and _G.ChatTypeInfo[event] then
-				local chatTypeInfo = _G.ChatTypeInfo[event]
+		if m.chat_type and outR == 1 and outG == 1 and outB == 1 then
+			if _G.ChatTypeInfo and _G.ChatTypeInfo[m.chat_type] then
+				local chatTypeInfo = _G.ChatTypeInfo[m.chat_type]
 				outR = chatTypeInfo.r or 1
 				outG = chatTypeInfo.g or 1
 				outB = chatTypeInfo.b or 1
@@ -544,8 +558,10 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		end
 
 		-- Build channel info for display during lockdown
+		-- Skip for events in SKIP_STYLING_EVENTS (system messages like AFK/DND) and for channel "0"
 		local channelInfo = ""
-		if m.channel_number and m.channel_number ~= "" then
+		local skipChannelInfo = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type] or false
+		if not skipChannelInfo and m.channel_number and m.channel_number ~= "" and m.channel_number ~= "0" then
 			local channelNum = m.channel_number
 			local channelName = m.channel_name or ""
 
@@ -597,9 +613,15 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		-- Generate clickable player link using StylePlayerSection for secret payloads
 		addon.StylePlayerSection(m)
 
-		-- Use the clickable player_link that StylePlayerSection generated.
-		-- This one would be a secret value return so we can only do string concatenation
-		local textToDisplay = channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
+		-- For events in SKIP_STYLING_EVENTS (emotes, system messages), use Blizzard's original formatting
+		-- Otherwise build custom format with channel info and player link
+		local skipStyling = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type]
+		local textToDisplay
+		if skipStyling then
+			textToDisplay = arg1 or ""
+		else
+			textToDisplay = channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
+		end
 		local isSecretText = addon.isSecretValue and addon.isSecretValue(textToDisplay)
 
 		addon.dbg("ChatFrame_MessageEventHandler: secret output len=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) .. " isSecretText=" .. tostring(isSecretText))
@@ -615,7 +637,7 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 		-- textToDisplay = ((m.type_prefix and (m.type_prefix .. " ")) or "") .. (textToDisplay or "")
 
 		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
-		this:AddMessage(textToDisplay, outR, outG, outB, 1.0, outID, m.ACCESSID, m.TYPEID)
+		this:AddMessage(textToDisplay, outR, outG, outB, outID, false, m.ACCESSID, m.TYPEID)
 		return true
 	end
 
@@ -801,11 +823,11 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			addon.dbg("ChatFrame_MessageEventHandler: captured colors - R="..tostring(capturedR).." G="..tostring(capturedG).." B="..tostring(capturedB).." ID="..tostring(capturedID).." isCensored="..tostring(isCensored))
 
 			if isCensored then
-				this:AddMessage(visibleText, capturedR, capturedG, capturedB, 1.0, capturedID, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
+				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, false, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
 					return text
 				end)
 			else
-				this:AddMessage(visibleText, capturedR, capturedG, capturedB, 1.0, capturedID, m.ACCESSID, m.TYPEID)
+				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, false, m.ACCESSID, m.TYPEID)
 			end
 
 			if addon.fireCallback then
@@ -1204,11 +1226,16 @@ function addon:OnLoad()
 		_G.XCHT_DB.dbVer = ver
 	end
 
-	-- Setup slash commands
+	-- Setup slash commands using RegisterChatCommand to avoid taint
 	_G["SLASH_XANCHAT1"] = "/xanchat"
-	_G.SlashCmdList = _G.SlashCmdList or {}
-	_G.SlashCmdList["XANCHAT"] = function(msg)
-		handleSlashCommand(msg)
+	_G["SLASH_XANCHAT2"] = "/xanchat"
+	if _G.RegisterChatCommand then
+		_G.RegisterChatCommand("xanchat", handleSlashCommand)
+	elseif _G.SlashCmdList then
+		-- Fallback for older WoW versions
+		_G.SlashCmdList["XANCHAT"] = function(msg)
+			handleSlashCommand(msg)
+		end
 	end
 
 	addon.dbg("OnLoad: COMPLETE xanChat initialization")

@@ -85,6 +85,7 @@ end
 -- special formatting that cannot be safely processed when values are secret.
 
 -- Events to skip styling for during secret value lockdowns
+-- Obviously many of these have CHAT_MSG_ stripped from the front  like CHAT_MSG_SYSTEM
 local SKIP_STYLING_EVENTS = {
 	BN_INLINE_TOAST_ALERT = true,
 	BN_INLINE_TOAST_BROADCAST = true,
@@ -106,17 +107,18 @@ local SKIP_STYLING_EVENTS = {
 	COMBAT_HONOR_GAIN = true,
 	IGNORED = true,
 	PING = true,
+	EMOTE = true,
+	TEXT_EMOTE = true
 }
 
-local function shouldSkipStyling(chatType, isSecret)
-	if not isSecret then return false end
-
-	-- Skip all Battle.net toast events
-	if string.sub(chatType or "", 1, 15) == "BN_INLINE_TOAST" then
+local function shouldSkipStyling(chatType)
+	-- Always skip for events in SKIP_STYLING_EVENTS (emotes, system messages, etc.)
+	-- These have special formatting that breaks with player links prepended
+	if SKIP_STYLING_EVENTS and SKIP_STYLING_EVENTS[chatType] then
 		return true
 	end
 
-	return SKIP_STYLING_EVENTS[chatType] or false
+	return false
 end
 
 -- ============================================================================
@@ -191,7 +193,7 @@ local function StylePlayerSection(m)
 	-- During a boss encounter or a chat lockdown we don't want to process certain events
 	-- as they will get broken because of their special formatting.
 	-- Skip styling for special events during secret value lockdowns
-	if shouldSkipStyling(chatType, isSecret) then
+	if shouldSkipStyling(chatType) then
 		if addon and addon.dbg then
 			addon.dbg("StylePlayerSection: skipping special event during secret lockdown: "..addon.dbgSafeValue(chatType))
 		end
@@ -422,3 +424,4 @@ addon.setDisableChatEnterLeaveNotice = setDisableChatEnterLeaveNotice
 addon.RGBAToHex = RGBAToHex
 addon.HexToRGBA = HexToRGBA
 addon.wrapInColor = wrapInColor
+addon.SKIP_STYLING_EVENTS = SKIP_STYLING_EVENTS

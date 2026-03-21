@@ -127,9 +127,9 @@ end
 -- Uses SafeType() to handle secret values gracefully
 -- Returns true if extraction was attempted, false otherwise
 local function extractChannelInfoFromSources(m, sources)
-	if not m or not m.channel_number then return false end
+	if not m then return false end
 
-	local extractedNum = m.channel_number
+	local extractedNum = m.channel_number or ""
 	local extractedName = m.channel_name or ""
 
 	-- Try each source in order until we find channel info
@@ -240,11 +240,9 @@ local function extractChannelInfo(s, arg7, arg8, arg9, arg10, chatGroup)
 	-- Use unified function to extract from all sources
 	local found = extractChannelInfoFromSources(s, sources)
 
-	-- If still no channel number and this is a CHANNEL event, mark for deferred extraction
+	-- If still no channel number OR no channel name and this is a CHANNEL event, mark for deferred extraction
 	-- This handles channel notice events where OUTPUT contains the info but args don't
-	if not found and chatGroup == "CHANNEL" then
-		s.channel_number = ""
-		s.channel_name = ""
+	if chatGroup == "CHANNEL" and (not s.channel_number or s.channel_number == "" or not s.channel_name or s.channel_name == "") then
 		s.deferredChannelExtraction = true
 	elseif not found then
 		s.channel_number = ""
@@ -286,6 +284,9 @@ local function applyShortChannelNamesToSections(m)
 	-- Use the addon's centralized extraction function
 	if (not m.channel_number or m.channel_number == "") and type(longName) == "string" then
 		m.channel_number = extractChannelNumberFromString(longName)
+		if addon and addon.dbg then
+			addon.dbg("applyShortChannelNamesToSections: extracted channel number from OUTPUT="..tostring(m.channel_number))
+		end
 	end
 
 	-- Also extract the short channel name to update m.channel_name for FormatChatMessage
@@ -307,7 +308,7 @@ local function applyShortChannelNamesToSections(m)
 		                          longName:match("%["..channelNum.."%. [^%]]+%]")
 
 		if addon and addon.dbg then
-			addon.dbg("applyShortChannelNamesToSections: bracketContent="..tostring(bracketContent))
+			addon.dbg("applyShortChannelNamesToSections: channelNum="..tostring(channelNum).." bracketContent="..tostring(bracketContent).." longName="..tostring(string.sub(longName, 1, 80)))
 		end
 
 		if bracketContent then
