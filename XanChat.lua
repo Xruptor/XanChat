@@ -549,44 +549,41 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			local channelNum = m.channel_number
 			local channelName = m.channel_name or ""
 
-			-- If channel name not set, try to extract it from OUTPUT
-			-- We can use match on secret values, just not gsub
-			if (not channelName or channelName == "") and m.OUTPUT and type(m.OUTPUT) == "string" then
-				channelName = addon.extractChannelNameFromString(m.OUTPUT, channelNum) or ""
-				if channelName and channelName ~= "" then
-					m.channel_name = channelName
-					addon.dbg("ChatFrame_MessageEventHandler: extracted channel name from OUTPUT during lockdown - "..tostring(channelName))
-				end
-			end
-
-			-- If shortNames is enabled, look up the short name from SHORT_CHANNEL_REPLACEMENTS
-			local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
-			if useShortNames and channelName and channelName ~= "" then
-				local fullName = channelName:lower():gsub("[%s%-]", "")
-				if addon.SHORT_CHANNEL_REPLACEMENTS then
-					for _, replacement in ipairs(addon.SHORT_CHANNEL_REPLACEMENTS) do
-						local longPattern, shortName = unpack(replacement)
-						if longPattern and shortName then
-							local patternMatched = false
-							-- Use Lua pattern matching for [Gg]eneral style patterns
-							if longPattern:find("%[") then
-								patternMatched = (fullName:match("^" .. longPattern .. "$") ~= nil)
-							else
-								patternMatched = (longPattern:lower() == fullName)
-							end
-							if patternMatched then
-								channelName = shortName
-								break
-							end
-						end
+			-- Try to use centralized channel shortening function first
+			-- This handles both channel extraction and shortening in one place
+			local shorteningSucceeded = false
+			if m.OUTPUT and not addon.isSecretValue(m.OUTPUT) then
+				local success, err = pcall(addon.applyShortChannelNamesToSections, m)
+				if success then
+					-- applyShortChannelNamesToSections succeeded, use the updated values
+					-- But only if it actually produced a channel name
+					if m.channel_name and m.channel_name ~= "" then
+						channelName = m.channel_name
+						shorteningSucceeded = true
+						addon.dbg("ChatFrame_MessageEventHandler: applyShortChannelNamesToSections succeeded during lockdown")
+					else
+						addon.dbg("ChatFrame_MessageEventHandler: applyShortChannelNamesToSections succeeded but returned empty channel_name, using fallback")
 					end
+				else
+					addon.dbg("ChatFrame_MessageEventHandler: applyShortChannelNamesToSections failed during lockdown: "..tostring(err))
 				end
 			end
 
-			if channelName and channelName ~= "" then
-				-- Use short format [1] [GN] or long format [1. General] based on shortNames setting
+			-- Fallback: use lockdown-safe channel extraction and shortening if centralized function failed
+			if not shorteningSucceeded then
+				local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
 				if useShortNames then
-					channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum.."]|h ["..channelName.."] "
+					channelName = addon.getShortChannelPatternOnLockdown and addon.getShortChannelPatternOnLockdown(m, channelNum) or channelName
+				end
+			end
+
+			-- Build channelInfo with the (potentially shortened) channel name
+			local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
+			if channelName and channelName ~= "" then
+				-- Use short format [1] GN] or long format [1. General] based on shortNames setting
+				-- Note: Short format has the number and short name in one clickable link
+				if useShortNames then
+					channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..channelName.."]|h "
 				else
 					channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h "
 				end
@@ -599,9 +596,6 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 
 		-- Generate clickable player link using StylePlayerSection for secret payloads
 		addon.StylePlayerSection(m)
-		-- NOTE: WE CANNOT do channel shortening on secret values payloads because it uses gsub() to do it.
-		-- This is not possible with secret values as gsub() is not allowed.
-		-- Therefore we cannot do applyShortChannelNamesToSections() during a boss encounter or chat lockdown.
 
 		-- Use the clickable player_link that StylePlayerSection generated.
 		-- This one would be a secret value return so we can only do string concatenation

@@ -101,7 +101,7 @@ local function FormatChatMessage(message)
 		local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
 		if useShortNames then
 			-- Format: [1] [Gen] - clickable channel number and bracketed short name
-			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum.."]|h ["..channelName.."]")
+			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..channelName.."]|h")
 		else
 			-- Original format with clickable entire channel: |Hchannel:1|h[1. General]|h
 			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h")

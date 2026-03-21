@@ -301,7 +301,7 @@ local function applyShortChannelNamesToSections(m)
 
 	-- Try to find and replace the channel bracket with shortened version
 	if channelNum then
-		-- Match the channel bracket (format: [1. General - Ragefire Chasm] or [1. General])
+		-- Match the channel bracket (format: |Hchannel:1|h[1. General - Ragefire Chasm]|h or [1. General])
 		-- The OUTPUT may or may not have a hyperlink prefix, so we try both patterns
 		local bracketContent = longName:match("|Hchannel:%d+|h%["..channelNum.."%. [^%]]+%]|h") or
 		                          longName:match("%["..channelNum.."%. [^%]]+%]")
@@ -313,7 +313,9 @@ local function applyShortChannelNamesToSections(m)
 		if bracketContent then
 			-- Extract just the channel name (remove number prefix and zone suffix)
 			-- e.g., "1. General - Orgrimmar" -> "General"
-			local baseName = bracketContent:gsub("^%d+%.?%s*", ""):gsub("%s*%-.*$", "")
+			-- For full hyperlink match, extract from the inner bracket only
+			local innerBracket = bracketContent:match("%[([^%]]+)%]") or bracketContent
+			local baseName = innerBracket:gsub("^%d+%.?%s*", ""):gsub("%s*%-.*$", "")
 			local baseNameLower = baseName:lower()
 
 			-- Look up the short name for this channel
@@ -331,13 +333,21 @@ local function applyShortChannelNamesToSections(m)
 
 			-- If we found a short name, replace the channel bracket
 			if shortName then
-				-- Build the shortened format: [1] GN
+				-- Build the shortened format: [1] GN]
 				local shortenedBracket = "["..channelNum.."] "..shortName.."]"
-				-- Replace the original bracket with the shortened one
-				-- Need to escape special regex chars in the bracket content
-				local escapedBracket = bracketContent:gsub("[%(%)%.%*%+%?%[%]%^%$%-]", "%%%0")
-				local originalPattern = "%["..escapedBracket.."%]"
-				longName = string.gsub(longName, originalPattern, shortenedBracket, 1)
+
+				-- Replace based on what we matched
+				if bracketContent:find("|Hchannel:") then
+					-- We matched the full hyperlink, replace the inner bracket content
+					-- Convert |Hchannel:1|h[1. General - Zone]|h to |Hchannel:1|h[1] GN]|h
+					longName = longName:gsub("|Hchannel:"..channelNum.."|h%[([^%]]+)%]|h", "|Hchannel:"..channelNum.."|h["..channelNum.."] "..shortName.."]|h", 1)
+				else
+					-- We matched just the bracket, replace it directly
+					local escapedBracket = innerBracket:gsub("[%(%)%.%*%+%?%[%]%^%$%-]", "%%%0")
+					local originalPattern = "%["..escapedBracket.."%]"
+					longName = string.gsub(longName, originalPattern, shortenedBracket, 1)
+				end
+
 				if addon and addon.dbg then
 					addon.dbg("applyShortChannelNamesToSections: replaced '"..baseName.."' with '"..shortName.."'")
 				end
@@ -391,6 +401,71 @@ local function applyShortChannelNamesToSections(m)
 end
 
 -- ============================================================================
+-- LOCKDOWN FALLBACK CHANNEL NAME LOOKUP
+-- ============================================================================
+
+-- Look up short channel name from message section during lockdown
+-- Safe to use during lockdown/secret values as it only uses string operations
+-- that are allowed on secrets (no gsub on secret values)
+-- @param m The message section table
+-- @param channelNum The channel number
+-- @return The shortened channel name (e.g., "Gen", "LDef") or original if not found
+local function getShortChannelPatternOnLockdown(m, channelNum)
+	if not m or not channelNum then return "" end
+
+	local channelName = m.channel_name or ""
+
+	-- If channel name not set, try to extract it from OUTPUT
+	-- We can use match on secret values, just not gsub
+	-- Use SafeType to avoid errors on secret values
+	if (not channelName or channelName == "") and m.OUTPUT and addon.SafeType and addon.SafeType(m.OUTPUT) == "string" then
+		channelName = extractChannelNameFromString(m.OUTPUT, channelNum) or ""
+		if channelName and channelName ~= "" then
+			m.channel_name = channelName
+			if addon and addon.dbg then
+				addon.dbg("getShortChannelPatternOnLockdown: extracted channel name from OUTPUT during lockdown - "..tostring(channelName))
+			end
+		end
+	end
+
+	if not channelName or channelName == "" then return "" end
+
+	-- Normalize the full name for matching
+	local normalizedName = channelName:lower():gsub("[%s%-]", "")
+
+	-- Look through SHORT_CHANNEL_REPLACEMENTS for a match
+	if SHORT_CHANNEL_REPLACEMENTS then
+		for _, replacement in ipairs(SHORT_CHANNEL_REPLACEMENTS) do
+			local longPattern, shortName = unpack(replacement)
+			if longPattern and shortName then
+				local patternMatched = false
+
+				-- Use Lua pattern matching for [Gg]eneral style patterns
+				if longPattern:find("%[") then
+					patternMatched = (normalizedName:match("^" .. longPattern .. "$") ~= nil)
+				else
+					-- Simple word pattern - case-insensitive comparison
+					patternMatched = (longPattern:lower() == normalizedName)
+				end
+
+				if patternMatched then
+					if addon and addon.dbg then
+						addon.dbg("getShortChannelPatternOnLockdown: '"..channelName.."' -> '"..shortName.."'")
+					end
+					return shortName
+				end
+			end
+		end
+	end
+
+	-- No match found, return original
+	if addon and addon.dbg then
+		addon.dbg("getShortChannelPatternOnLockdown: no match for '"..channelName.."', returning original")
+	end
+	return channelName
+end
+
+-- ============================================================================
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
@@ -401,3 +476,4 @@ addon.extractChannelNameFromString = extractChannelNameFromString
 addon.extractChannelInfoFromSources = extractChannelInfoFromSources
 addon.extractChannelFromOutputIfDeferred = extractChannelFromOutputIfDeferred
 addon.extractChannelInfo = extractChannelInfo
+addon.getShortChannelPatternOnLockdown = getShortChannelPatternOnLockdown
