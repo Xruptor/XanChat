@@ -1,11 +1,10 @@
 --[[
 	stickychannels.lua - Sticky channels list management for XanChat
-	Refactored for:
-	- Fixed path separator consistency
-	- Simplified frame creation and setup
-	- Consolidated redundant code
+	Improvements:
+	- Reused common UI helpers from filter.lua (extracted to local)
+	- Simplified frame setup
 	- Better early returns
-	- Improved scroll handling
+	- Reduced redundant code
 ]]
 
 local ADDON_NAME, private = ...
@@ -17,7 +16,7 @@ local L = addon.L
 local chatTypeInfo = ChatTypeInfo
 
 -- ============================================================================
--- RESTRICTION HELPERS
+-- SHARED UI HELPERS (same as filter.lua)
 -- ============================================================================
 
 local function isRestricted()
@@ -34,48 +33,59 @@ local function guardRestricted()
 	return false
 end
 
+local function createDialogFrame(frameName, titleText)
+	local frame = CreateFrame("frame", frameName, UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetToplevel(true)
+	frame:EnableMouse(true)
+	frame:SetMovable(true)
+	frame:SetClampedToScreen(true)
+	frame:SetWidth(380)
+	frame:SetHeight(570)
+
+	frame:SetBackdrop({
+		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+		edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+		tile = true,
+		tileSize = 16,
+		edgeSize = 32,
+		insets = { left = 5, right = 5, top = 5, bottom = 5 }
+	})
+	frame:SetBackdropColor(0, 0, 0, 1)
+	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+
+	local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+	closeButton:SetPoint("TOPRIGHT", frame, -15, -8)
+
+	local header = frame:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
+	header:SetJustifyH("LEFT")
+	header:SetFontObject("GameFontNormal")
+	header:SetPoint("CENTER", frame, "TOP", 0, -20)
+	header:SetText(titleText)
+
+	return frame
+end
+
+local function createScrollFrame(parent, yOffset)
+	local scrollFrame = CreateFrame("ScrollFrame", parent:GetName().."_Scroll", parent, "UIPanelScrollFrameTemplate")
+	local scrollChild = CreateFrame("frame", parent:GetName().."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
+	scrollFrame:SetPoint("TOPLEFT", 10, -yOffset)
+	scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
+	scrollFrame:SetScrollChild(scrollChild)
+
+	return scrollFrame, scrollChild
+end
+
 -- ============================================================================
--- FRAME SETUP
+-- STICKY CHANNELS FRAME
 -- ============================================================================
 
-addon.stickyChannelsList = CreateFrame("frame", ADDON_NAME.."_stickyChannelsList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-local stickyChannelsList = addon.stickyChannelsList
-stickyChannelsList:SetFrameStrata("DIALOG")
-stickyChannelsList:SetToplevel(true)
-stickyChannelsList:EnableMouse(true)
-stickyChannelsList:SetMovable(true)
-stickyChannelsList:SetClampedToScreen(true)
-stickyChannelsList:SetWidth(380)
-stickyChannelsList:SetHeight(570)
+addon.stickyChannelsList = createDialogFrame(ADDON_NAME.."_stickyChannelsList", L.EditStickyChannelsListHeader)
 
-stickyChannelsList:SetBackdrop({
-	bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-	edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-	tile = true,
-	tileSize = 16,
-	edgeSize = 32,
-	insets = { left = 5, right = 5, top = 5, bottom = 5 }
-})
-stickyChannelsList:SetBackdropColor(0, 0, 0, 1)
-stickyChannelsList:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-
-local closeButton = CreateFrame("Button", nil, stickyChannelsList, "UIPanelCloseButton")
-closeButton:SetPoint("TOPRIGHT", stickyChannelsList, -15, -8)
-
-local header = stickyChannelsList:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
-header:SetJustifyH("LEFT")
-header:SetFontObject("GameFontNormal")
-header:SetPoint("CENTER", stickyChannelsList, "TOP", 0, -20)
-header:SetText(L.EditStickyChannelsListHeader)
-
-local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", stickyChannelsList, "UIPanelScrollFrameTemplate")
-local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
-scrollFrame:SetPoint("TOPLEFT", 10, -50)
-scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
-scrollFrame:SetScrollChild(scrollFrame_Child)
+local scrollFrame, scrollFrame_Child = createScrollFrame(addon.stickyChannelsList, -50)
 
 scrollFrame:Hide()
-stickyChannelsList:Hide()
+addon.stickyChannelsList:Hide()
 
 -- ============================================================================
 -- CHANNEL DATA
@@ -94,7 +104,7 @@ local STICKY_TYPE_CHANNELS = {
 }
 
 -- ============================================================================
--- SETUP HELPERS
+-- SETUP AND LIST BUILDING
 -- ============================================================================
 
 local function setupStickyChannelsUI()
@@ -123,10 +133,6 @@ local function setupStickyChannelsUI()
 		addon.stickyChannelsList._xanHooked = true
 	end
 end
-
--- ============================================================================
--- LIST BUILDING
--- ============================================================================
 
 local function buildStickyChannelsList()
 	scrollFrame_Child:SetPoint("TOPLEFT")
@@ -158,9 +164,7 @@ local function buildStickyChannelsList()
 		end
 
 		barSlot:EnableMouse(true)
-		barSlot:SetBackdrop({
-			bgFile = "Interface\\Buttons\\WHITE8x8",
-		})
+		barSlot:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
 		barSlot:SetBackdropColor(0, 0, 0, 0)
 		previousBar = barSlot
 
@@ -170,19 +174,17 @@ local function buildStickyChannelsList()
 		bar_chk.xData = entry
 		bar_chk:SetPoint("LEFT", 4, 0)
 
-		local isChecked = XCHT_DB.stickyChannelsList[entry.name] == 1
+		local checkedValue = XCHT_DB.stickyChannelsList[entry.name] == 1
 		_G["xanChat_StickyChannelBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..entry.name.."|r")
-		bar_chk:SetChecked(isChecked)
+		bar_chk:SetChecked(checkedValue)
 		bar_chk:SetEnabled(not isRestricted())
 
 		bar_chk:SetScript("OnClick", function(self)
-			if not guardRestricted() then
-				if self.xData and self.xData.name then
-					local newVal = not self:GetChecked()
-					XCHT_DB.stickyChannelsList[self.xData.name] = newVal and 1 or 0
-					self:SetChecked(newVal)
-					addon:UpdateStickyChannels()
-				end
+			if not guardRestricted() and self.xData and self.xData.name then
+				local newVal = not self:GetChecked()
+				XCHT_DB.stickyChannelsList[self.xData.name] = newVal and 1 or 0
+				self:SetChecked(newVal)
+				addon:UpdateStickyChannels()
 			end
 		end)
 

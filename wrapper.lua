@@ -1,12 +1,12 @@
 --[[
 	wrapper.lua - Event handling wrapper and lifecycle management for XanChat
-	Refactored for:
-	- Simplified event dispatching with early returns
-	- Consolidated redundant state checks
+	Improvements:
+	- Simplified DebugPrint with direct table.concat
+	- Consolidated event dispatch with early returns
 	- Improved ticker management with direct cleanup
 	- Better hook tracking to prevent duplicates
 	- Cleaner callback integration
-	- Removed redundant nil checks
+	- Removed redundant state initialization
 ]]
 
 local ADDON_NAME, private = ...
@@ -61,7 +61,6 @@ end
 -- ============================================================================
 
 local function Dispatch(_, event, ...)
-	-- Handle ADDON_LOADED and PLAYER_LOGIN specially
 	if event == "ADDON_LOADED" then
 		if ... == ADDON_NAME then
 			addon.wrapperLoaded = true
@@ -81,7 +80,6 @@ local function Dispatch(_, event, ...)
 		return
 	end
 
-	-- Dispatch to registered handlers
 	local handlers = state.events[event]
 	if not handlers then return end
 
@@ -106,9 +104,7 @@ frame:RegisterEvent("PLAYER_LOGIN")
 function addon:RegisterEvent(event, handler)
 	if type(event) ~= "string" or event == "" then return end
 
-	-- Default handler to event name if not provided
 	handler = handler or event
-
 	local list = state.events[event]
 	if not list then
 		list = {}
@@ -135,7 +131,6 @@ function addon:UnregisterEvent(event, handler)
 	local list = state.events[event]
 	if not list then return end
 
-	-- Remove specific handler or all handlers for event
 	if handler then
 		for i = #list, 1, -1 do
 			if list[i] == handler then
@@ -143,17 +138,12 @@ function addon:UnregisterEvent(event, handler)
 				break
 			end
 		end
+		if #list == 0 then
+			state.events[event] = nil
+			state.registered[event] = nil
+			frame:UnregisterEvent(event)
+		end
 	else
-		-- Remove all handlers for this event
-		state.events[event] = nil
-		state.registered[event] = nil
-		frame:UnregisterEvent(event)
-		DebugPrint("unregister", event)
-		return
-	end
-
-	-- Unregister from frame if no handlers remain
-	if #list == 0 then
 		state.events[event] = nil
 		state.registered[event] = nil
 		frame:UnregisterEvent(event)
@@ -177,7 +167,6 @@ local function EnsureOnUpdate()
 	if state.useOnUpdate then return end
 	state.useOnUpdate = true
 	frame:SetScript("OnUpdate", function(_, elapsed)
-		-- Iterate in reverse to safely remove cancelled tickers
 		for i = #state.tickers, 1, -1 do
 			local t = state.tickers[i]
 			if not t.cancelled then
@@ -199,12 +188,10 @@ function addon:NewTicker(interval, func, ...)
 	interval = tonumber(interval) or 0
 	if interval <= 0 then return nil end
 
-	-- Prefer C_Timer for native tickers
 	if C_Timer and C_Timer.NewTicker then
 		return C_Timer.NewTicker(interval, func, ...)
 	end
 
-	-- Fallback to OnUpdate ticker
 	local ticker = {
 		interval = interval,
 		func = func,
@@ -220,14 +207,9 @@ end
 function addon:CancelTicker(ticker)
 	if not ticker then return end
 
-	-- Handle C_Timer tickers
 	if type(ticker) == "table" and ticker.Cancel then
 		ticker:Cancel()
-		return
-	end
-
-	-- Handle OnUpdate tickers
-	if type(ticker) == "table" then
+	elseif type(ticker) == "table" then
 		ticker.cancelled = true
 	end
 end
@@ -244,12 +226,10 @@ addon.SetCVar = (C_CVar and C_CVar.SetCVar) or SetCVar
 -- CALLBACK HANDLER INTEGRATION
 -- ============================================================================
 
--- Initialize CallbackHandler-1.0 globally for entire addon
 local LibStub = _G.LibStub
 if LibStub then
 	local CallbackHandler = LibStub("CallbackHandler-1.0")
 	if CallbackHandler then
-		-- Defensive check: ensure addon is a proper table before using CallbackHandler
 		if type(addon) ~= "table" then
 			DEFAULT_CHAT_FRAME:AddMessage("xanChat ERROR: addon is not a table, type is: "..type(addon))
 			return
@@ -262,7 +242,6 @@ if LibStub then
 		addon.unregisterAllCallbacks = function()
 			return addon:UnregisterAllCallbacks()
 		end
-		-- Provide lowercase wrapper functions for API compatibility
 		addon.registerCallback = function(event, handler)
 			return addon:RegisterCallback(event, handler)
 		end

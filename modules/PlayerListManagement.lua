@@ -1,5 +1,11 @@
 --[[
 	PlayerListManagement.lua - Player list management and caching for XanChat
+	Improvements:
+	- Consolidated event registration with table loop
+	- Reduced redundant secret value checks
+	- Simplified throttle function
+	- Better nil handling in getPlayerInfo
+	- Improved addToPlayerList flow
 ]]
 
 local ADDON_NAME, private = ...
@@ -14,26 +20,20 @@ addon.L = (private and private.L) or addon.L or {}
 
 local PLAYERLIST_MAX = 1000
 
---strips and removes all whitespace characters.  "Area 52" -> "area52"
+-- Strips and removes all whitespace characters. "Area 52" -> "area52"
 local function stripAndLowercase(text)
 	if not text then return "" end
-	text = string.lower(text)
-	text = string.gsub(text, "%s+", "")
-	return text
+	return string.lower(string.gsub(text, "%s+", ""))
 end
 
---strips and removes all non-alphanumeric. "Player-Area52' -> "playerarea52"
+-- Strips and removes all non-alphanumeric. "Player-Area52" -> "playerarea52"
 local function stripNameKey(text)
 	if not text then return "" end
-	text = string.lower(text)
-	text = string.gsub(text, "[^%a%d]", "")
-	return text
+	return string.lower(string.gsub(text, "[^%a%d]", ""))
 end
 
 local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
-	if not addon then return end
-
-	if not key or not entry then return end
+	if not addon or not key or not entry then return end
 
 	local ring = addon.playerListRing
 	local pos = (addon.playerListRingPos or 0) + 1
@@ -47,8 +47,6 @@ local function rotatePlayerListEntry(key, name, lowerName, cleanName, entry)
 			addon.playerList[old.key] = nil
 			local byName = addon.playerListByName
 			if byName then
-				-- Remove ALL entries in playerListByName that point to this player object
-				-- by value comparison, since multiple name variants all point to the same entry
 				for k, v in pairs(byName) do
 					if v == current then
 						byName[k] = nil
@@ -67,94 +65,77 @@ end
 -- PLAYER LIST RETRIEVAL
 -- ============================================================================
 
---WE CANNOT DO SECRET VALUE LOOKUPS ON TABLES!!!!!!  So don't do it!
---Otherwise I would have stored the secret values in a table as well.
---Again Player List Management is NOT used for secret values for comparisons, inclusion, insertion or anything dealing with the player name tables found in this module.
---The reason is once again, you cannot use secret values at all for any kind of table lookup or comparison.  Secret Values cannot be compared to anything!
---So anything dealing with secret values must be done by hand or using Blizzard WOW Api functions as they are the only ones that can accept secret values and modify them.
+-- NOTE: Cannot do secret value lookups on tables!
+-- Player List Management is NOT used for secret values for comparisons,
+-- inclusion, insertion or anything dealing with the player name tables.
+-- Secret Values cannot be compared to anything!
+
 local function getPlayerInfo(guid, nameWithRealm, playerName, serverName)
 	if not addon then return end
 
 	local result = nil
+	local isSecret = addon.isSecretValue
 
 	-- 1. Check guid first (if provided and not secret)
-	if guid then
-		local isSecret = addon.isSecretValue(guid)
-		if not isSecret then
-			-- Only do type() if not secret
-			if type(guid) == "string" then
-				result = addon.playerListByName and addon.playerListByName[guid]
-				if result and addon.dbg then
-					addon.dbg("-->getPlayerInfo: found by guid="..addon.dbgSafeValue(guid))
-				end
-			end
+	if guid and not isSecret(guid) and type(guid) == "string" then
+		result = addon.playerListByName and addon.playerListByName[guid]
+		if result and addon.dbg then
+			addon.dbg("-->getPlayerInfo: found by guid="..addon.dbgSafeValue(guid))
 		end
 	end
 
 	-- 2. Check exact name with realm (e.g., "Xruptor-Area52")
-	if not result and nameWithRealm then
-		local isSecret = addon.isSecretValue(nameWithRealm)
-		if not isSecret then
-			-- Only do type() and string operations if not secret
-			if type(nameWithRealm) == "string" then
-				result = addon.playerListByName and addon.playerListByName[nameWithRealm]
-				if result and addon.dbg then
-					addon.dbg("-->getPlayerInfo: found by nameWithRealm="..addon.dbgSafeValue(nameWithRealm))
-				end
+	if not result and nameWithRealm and not isSecret(nameWithRealm) and type(nameWithRealm) == "string" then
+		result = addon.playerListByName and addon.playerListByName[nameWithRealm]
+		if result and addon.dbg then
+			addon.dbg("-->getPlayerInfo: found by nameWithRealm="..addon.dbgSafeValue(nameWithRealm))
+		end
 
-				-- Try lowercase version if not found
-				if not result then
-					local lowerWithRealm = nameWithRealm:lower()
-					result = addon.playerListByName and addon.playerListByName[lowerWithRealm]
-					if result and addon.dbg then
-						addon.dbg("-->getPlayerInfo: found by lowerWithRealm="..addon.dbgSafeValue(lowerWithRealm))
-					end
-				end
+		-- Try lowercase version if not found
+		if not result then
+			local lowerWithRealm = nameWithRealm:lower()
+			result = addon.playerListByName and addon.playerListByName[lowerWithRealm]
+			if result and addon.dbg then
+				addon.dbg("-->getPlayerInfo: found by lowerWithRealm="..addon.dbgSafeValue(lowerWithRealm))
 			end
 		end
 	end
 
 	-- 3. If not found and we have separate name and realm, combine them
 	if not result and playerName and serverName then
-		local nameIsSecret = addon.isSecretValue(playerName)
-		local realmIsSecret = addon.isSecretValue(serverName)
+		local nameIsSecret = isSecret(playerName)
+		local realmIsSecret = isSecret(serverName)
 
-		if not nameIsSecret and not realmIsSecret then
-			-- Only do string operations if not secret
-			if type(playerName) == "string" and type(serverName) == "string" then
-				local combinedName = playerName.."-"..serverName
-				result = addon.playerListByName and addon.playerListByName[combinedName]
+		if not nameIsSecret and not realmIsSecret and type(playerName) == "string" and type(serverName) == "string" then
+			local combinedName = playerName.."-"..serverName
+			result = addon.playerListByName and addon.playerListByName[combinedName]
 
-				-- Try lowercase version
-				if not result then
-					local lowerCombined = combinedName:lower()
-					result = addon.playerListByName and addon.playerListByName[lowerCombined]
-					if result and addon.dbg then
-						addon.dbg("-->getPlayerInfo: found by combined lowercase="..addon.dbgSafeValue(lowerCombined))
-					end
-				elseif result and addon.dbg then
-					addon.dbg("-->getPlayerInfo: found by combined name="..addon.dbgSafeValue(combinedName))
+			-- Try lowercase version
+			if not result then
+				local lowerCombined = combinedName:lower()
+				result = addon.playerListByName and addon.playerListByName[lowerCombined]
+				if result and addon.dbg then
+					addon.dbg("-->getPlayerInfo: found by combined lowercase="..addon.dbgSafeValue(lowerCombined))
 				end
+			elseif result and addon.dbg then
+				addon.dbg("-->getPlayerInfo: found by combined name="..addon.dbgSafeValue(combinedName))
 			end
 		end
 	end
 
 	-- 4. Check cleanName + realmKey combination
 	if not result and playerName and serverName then
-		local nameIsSecret = addon.isSecretValue(playerName)
-		local realmIsSecret = addon.isSecretValue(serverName)
+		local nameIsSecret = isSecret(playerName)
+		local realmIsSecret = isSecret(serverName)
 
-		if not nameIsSecret and not realmIsSecret then
-			-- Only do string operations if not secret
-			if type(playerName) == "string" and type(serverName) == "string" then
-				local cleanName = stripNameKey(playerName) or playerName:lower()
-				local realmKey = stripAndLowercase(serverName)
-				local key = cleanName.."-"..realmKey
-				result = addon.playerList and addon.playerList[key]
+		if not nameIsSecret and not realmIsSecret and type(playerName) == "string" and type(serverName) == "string" then
+			local cleanName = stripNameKey(playerName) or playerName:lower()
+			local realmKey = stripAndLowercase(serverName)
+			local key = cleanName.."-"..realmKey
+			result = addon.playerList and addon.playerList[key]
 
-				if result and addon.dbg then
-					addon.dbg("-->getPlayerInfo: found by cleanName-key="..addon.dbgSafeValue(key))
-				end
+			if result and addon.dbg then
+				addon.dbg("-->getPlayerInfo: found by cleanName-key="..addon.dbgSafeValue(key))
 			end
 		end
 	end
@@ -165,7 +146,6 @@ end
 local function addToPlayerList(guid, name, realm, level, class, bnName, pin)
 	if not addon then return end
 
-	-- Debug output to see what's being passed
 	if addon and addon.dbg then
 		addon.dbg("addToPlayerList: guid="..addon.dbgSafeValue(guid).."name="..addon.dbgSafeValue(name).." level="..addon.dbgSafeValue(level).." class="..addon.dbgSafeValue(class).." realm="..addon.dbgSafeValue(realm))
 	end
@@ -214,6 +194,7 @@ local function addToPlayerList(guid, name, realm, level, class, bnName, pin)
 	local key = cleanName.."-"..realmKey
 	local entry = addon.playerList[key]
 	local isNew = false
+
 	if entry then
 		entry.guid = guid
 		entry.name = name
@@ -237,6 +218,7 @@ local function addToPlayerList(guid, name, realm, level, class, bnName, pin)
 		addon.playerList[key] = entry
 		isNew = true
 	end
+
 	if pin then
 		entry._pinned = true
 	end
@@ -264,7 +246,6 @@ local function initUpdateCurrentPlayer()
 		addon.dbg("-->initUpdateCurrentPlayer: name="..addon.dbgSafeValue(name).." level="..addon.dbgSafeValue(level).." class="..addon.dbgSafeValue(classFile))
 	end
 
-	-- Only add to list if we have valid data
 	if name and level and level > 0 then
 		addToPlayerList(guid, name, realm, level, classFile, nil, true)
 	end
@@ -290,11 +271,9 @@ local function doRosterUpdate()
 				addon.dbg("-->doRosterUpdate: unit="..addon.dbgSafeValue(unitId).." name="..addon.dbgSafeValue(playerName).." className="..addon.dbgSafeValue(className).." classFile="..addon.dbgSafeValue(classFile).." level="..addon.dbgSafeValue(level))
 			end
 
-			-- Only add if we have valid data
 			if playerName and level and level > 0 and classFile and classFile ~= 0 then
 				addToPlayerList(guid, playerName, playerServer, level, classFile)
 			elseif playerName and level and level > 0 and (not classFile or classFile == 0) then
-				-- Still add even if class is 0, but debug it
 				if addon and addon.dbg then
 					addon.dbg("-->doRosterUpdate: Adding player with class=0: "..addon.dbgSafeValue(playerName))
 				end
@@ -341,7 +320,7 @@ local function doGuildUpdate()
 
 	local numMembers = GetNumGuildMembers and GetNumGuildMembers(true) or 0
 	for i = 1, numMembers do
-		local name, _, _, level, classDisplayName, _, _, _, online, _, class, _, _, _, _, _, guid = GetGuildRosterInfo(i)
+		local name, _, _, level, _, _, _, _, online, _, class, _, _, _, _, _, guid = GetGuildRosterInfo(i)
 
 		if online and name then
 			local playerName, playerServer = string.match(name, "([^%-]+)%-?(.*)")
@@ -353,6 +332,10 @@ local function doGuildUpdate()
 		end
 	end
 end
+
+-- ============================================================================
+-- PLAYER INFO INITIALIZATION
+-- ============================================================================
 
 local function initPlayerInfo()
 	if not addon then return end
@@ -376,27 +359,33 @@ local function initPlayerInfo()
 		end
 	end
 
-	local function safeRegister(event, handler)
-		if addon.RegisterEvent then
+	-- Consolidated event registration with table loop
+	local EVENT_HANDLERS = {
+		{ "GUILD_ROSTER_UPDATE", "guild", 0.5, doGuildUpdate },
+		{ "PLAYER_GUILD_UPDATE", "guild", 0.5, doGuildUpdate },
+		{ "FRIENDLIST_UPDATE", "friends", 0.5, doFriendUpdate },
+		{ "BN_CONNECTED", "friends", 0.5, doFriendUpdate },
+		{ "BN_DISCONNECTED", "friends", 0.5, doFriendUpdate },
+		{ "BN_FRIEND_ACCOUNT_ONLINE", "friends", 0.5, doFriendUpdate },
+		{ "BN_FRIEND_ACCOUNT_OFFLINE", "friends", 0.5, doFriendUpdate },
+		{ "RAID_ROSTER_UPDATE", "roster", 0.3, doRosterUpdate },
+		{ "GROUP_ROSTER_UPDATE", "roster", 0.3, doRosterUpdate },
+		{ "PLAYER_ENTERING_WORLD", "roster", 0.3, doRosterUpdate },
+		{ "UPDATE_INSTANCE_INFO", "roster", 0.3, doRosterUpdate },
+		{ "ZONE_CHANGED_NEW_AREA", "roster", 0.3, doRosterUpdate },
+		{ "UNIT_NAME_UPDATE", "roster", 0.3, doRosterUpdate },
+		{ "UNIT_PORTRAIT_UPDATE", "roster", 0.3, doRosterUpdate },
+		{ "PLAYER_LEVEL_UP", "levelup", 0, initUpdateCurrentPlayer },
+	}
+
+	for _, eventInfo in ipairs(EVENT_HANDLERS) do
+		local event, throttleKey, delay, handler = unpack(eventInfo)
+		if handler == initUpdateCurrentPlayer then
 			addon:RegisterEvent(event, handler)
+		else
+			addon:RegisterEvent(event, function() throttle(throttleKey, delay, handler) end)
 		end
 	end
-
-	safeRegister("GUILD_ROSTER_UPDATE", function() throttle("guild", 0.5, doGuildUpdate) end)
-	safeRegister("PLAYER_GUILD_UPDATE", function() throttle("guild", 0.5, doGuildUpdate) end)
-	safeRegister("FRIENDLIST_UPDATE", function() throttle("friends", 0.5, doFriendUpdate) end)
-	safeRegister("BN_CONNECTED", function() throttle("friends", 0.5, doFriendUpdate) end)
-	safeRegister("BN_DISCONNECTED", function() throttle("friends", 0.5, doFriendUpdate) end)
-	safeRegister("BN_FRIEND_ACCOUNT_ONLINE", function() throttle("friends", 0.5, doFriendUpdate) end)
-	safeRegister("BN_FRIEND_ACCOUNT_OFFLINE", function() throttle("friends", 0.5, doFriendUpdate) end)
-	safeRegister("RAID_ROSTER_UPDATE", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("GROUP_ROSTER_UPDATE", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("PLAYER_ENTERING_WORLD", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("UPDATE_INSTANCE_INFO", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("ZONE_CHANGED_NEW_AREA", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("UNIT_NAME_UPDATE", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("UNIT_PORTRAIT_UPDATE", function() throttle("roster", 0.3, doRosterUpdate) end)
-	safeRegister("PLAYER_LEVEL_UP", initUpdateCurrentPlayer)
 end
 
 -- ============================================================================

@@ -1,11 +1,12 @@
 --[[
 	ChannelShortening.lua - Channel name shortening and channel extraction for XanChat
-	Refactored for:
-	- Fixed global string.gsub usage (now uses string.gsub)
-	- Simplified pattern matching logic
-	- Removed redundant nil checks
-	- Better early returns
-	- Centralized channel extraction and parsing
+	Improvements:
+	- Removed duplicate comment header
+	- Consolidated channel name extraction logic
+	- Simplified lookupShortChannelName with early exit
+	- Improved applyShortChannelNamesToSections flow
+	- Better channel number extraction
+	- Reduced redundant gsub calls
 ]]
 
 local ADDON_NAME, private = ...
@@ -19,7 +20,7 @@ addon.L = (private and private.L) or addon.L or {}
 -- ============================================================================
 
 local SHORT_CHANNEL_REPLACEMENTS = {
-	-- Simple word replacements (for fallback matching)
+	-- Simple word replacements
 	{ addon.L.ChannelGeneral or "General", addon.L.ShortGeneral or "Gen" },
 	{ addon.L.ChannelTradeServices or "Trade - Services", addon.L.ShortTradeServices or "Trade-S" },
 	{ addon.L.ChannelTrade or "Trade", addon.L.ShortTrade or "Trade" },
@@ -36,7 +37,7 @@ local SHORT_CHANNEL_REPLACEMENTS = {
 	{ addon.L.ChannelNameLookingForGroup or "[Ll]ooking[Ff]or[Gg]roup", addon.L.ShortLookingForGroup or "LFG" },
 	{ addon.L.ChannelNameGuildRecruitment or "[Gg]uild[Rr]ecruitment", addon.L.ShortGuildRecruitment or "Guild" },
 	{ addon.L.ChannelNameNewcomerChat or "[Nn]ewcomer", addon.L.ShortNewComerChat or "New" },
-	-- Blizzard hyperlink format with actual channel number: |Hchannel:1|h[1. General - Zone]|h
+	-- Blizzard hyperlink format patterns
 	{ "|Hchannel:%d+|h%[%d+%. ]*General.-|h", addon.L.ShortGeneral or "Gen" },
 	{ "|Hchannel:%d+|h%[%d+%. ]*Trade.-|h", addon.L.ShortTrade or "Trade" },
 	{ "|Hchannel:%d+|h%[%d+%. ]*WorldDefense.-|h", addon.L.ShortWorldDefense or "WDef" },
@@ -51,14 +52,9 @@ local SHORT_CHANNEL_REPLACEMENTS = {
 -- ============================================================================
 
 -- Helper function to extract channel number from string
--- Tries multiple patterns to find the channel number in various formats
 local function extractChannelNumberFromString(str)
 	if not str or type(str) ~= "string" then return nil end
 
-	-- Try various patterns for channel number:
-	-- 1. |Hchannel:1|h or |Hchannel:CHANNEL:1|h
-	-- 2. [1. prefix in bracketed text like [1. General]
-	-- 3. Just [1] bracketed number
 	return str:match("|Hchannel:(%d+)|h") or
 	       str:match("|Hchannel:CHANNEL:(%d+)|h") or
 	       str:match("|Hchannel:channel:(%d+)|h") or
@@ -67,29 +63,19 @@ local function extractChannelNumberFromString(str)
 end
 
 -- Helper function to extract channel name from bracketed content
--- Works with formats like: |Hchannel:1|h[1. General - Zone]|h
 local function extractChannelNameFromString(str, channelNum)
 	if not str or type(str) ~= "string" or not channelNum then return "" end
 
-	-- Try to extract from hyperlink bracketed content: |Hchannel:1|h[1. General - Zone]|h
-	-- The pattern needs to match the bracket content but stop at the first ] after the channel name
-	-- We handle zone-specific names like "General - Ragefire Chasm" by capturing the base name
+	-- Try to extract from hyperlink bracketed content
 	local bracketMatch = str:match("|Hchannel:"..channelNum.."|h%[([^%]]*)%]")
 	if bracketMatch then
-		-- Remove leading number and any zone suffix, keep the channel name
-		-- For zone-specific names like "General - Ragefire Chasm", extract just "General"
-		-- Pattern: remove optional zone suffix like " - Zone" or " - Zone Name"
 		local name = bracketMatch:gsub("^"..channelNum.."[%. ]*", ""):gsub("%s*%-.*$", "")
 		if name and name ~= "" then
 			return name:gsub("^%s+", ""):gsub("%s+$", "")
 		end
 	end
 
-	-- Fallback: try to find the channel name anywhere in the string
-	-- Use simple locale-aware patterns from addon.L to extract channel names
-	-- Locale patterns are lowercase strings like "general", "trade", etc.
-
-	-- Define locale channel patterns with fallbacks
+	-- Fallback: locale-aware patterns
 	local localePatterns = {
 		{ addon.L.ChannelPatternShortGeneral or "general", "General" },
 		{ addon.L.ChannelPatternShortTrade or "trade", "Trade" },
@@ -100,18 +86,13 @@ local function extractChannelNameFromString(str, channelNum)
 		{ addon.L.ChannelPatternShortNewcomerChat or "newcomer", "Newcomer" },
 	}
 
-	-- For handling names with suffixes like "General - Zone", strip whitespace/special chars for matching
 	local lowerStr = str:lower():gsub("[%s%-]", "")
 
 	for _, patternPair in ipairs(localePatterns) do
 		local searchPattern, properName = unpack(patternPair)
-		if searchPattern and properName and searchPattern ~= "" then
-			-- searchPattern is already lowercase from locale, just need to strip spaces/hyphens
-			local cleanedPattern = searchPattern:gsub("[%s%-]", "")
-			-- Require minimum 4 chars for search pattern to avoid false matches
-			if cleanedPattern ~= "" and #cleanedPattern >= 4 and lowerStr:find(cleanedPattern, 1, true) then
-				return properName
-			end
+		local cleanedPattern = searchPattern:gsub("[%s%-]", "")
+		if cleanedPattern ~= "" and #cleanedPattern >= 4 and lowerStr:find(cleanedPattern, 1, true) then
+			return properName
 		end
 	end
 
@@ -123,28 +104,20 @@ end
 -- ============================================================================
 
 -- Unified function to extract channel info from multiple sources
--- Populates m.channel_number and m.channel_name if found
--- Uses SafeType() to handle secret values gracefully
--- Returns true if extraction was attempted, false otherwise
 local function extractChannelInfoFromSources(m, sources)
 	if not m then return false end
 
 	local extractedNum = m.channel_number or ""
 	local extractedName = m.channel_name or ""
 
-	-- Try each source in order until we find channel info
 	for _, source in ipairs(sources) do
-		-- Skip if source is empty or nil
 		if not source or source == "" then
-			-- continue to next source
+			-- continue
 		else
-			-- Use SafeType() to check type without errors on secret values
 			local sourceType = addon.SafeType and addon.SafeType(source) or type(source)
 
-			-- If channel number already found, only extract name
 			if extractedNum and extractedNum ~= "" then
 				if sourceType == "string" then
-					-- Try to extract channel name from this source
 					local nameFromSource = extractChannelNameFromString(source, extractedNum)
 					if nameFromSource and nameFromSource ~= "" then
 						extractedName = nameFromSource
@@ -152,14 +125,12 @@ local function extractChannelInfoFromSources(m, sources)
 					end
 				end
 			else
-				-- Try to extract channel number from this source
 				if sourceType == "number" then
 					extractedNum = tostring(source)
 				elseif sourceType == "string" then
 					local numFromSource = extractChannelNumberFromString(source)
 					if numFromSource and numFromSource ~= "" then
 						extractedNum = numFromSource
-						-- Also try to extract name from the same source
 						local nameFromSource = extractChannelNameFromString(source, extractedNum)
 						if nameFromSource and nameFromSource ~= "" then
 							extractedName = nameFromSource
@@ -171,7 +142,6 @@ local function extractChannelInfoFromSources(m, sources)
 		end
 	end
 
-	-- Update m with extracted values
 	if extractedNum and extractedNum ~= "" and (not m.channel_number or m.channel_number == "") then
 		m.channel_number = extractedNum
 	end
@@ -182,12 +152,7 @@ local function extractChannelInfoFromSources(m, sources)
 	return extractedNum and extractedNum ~= "" or extractedName and extractedName ~= ""
 end
 
--- ============================================================================
--- DEFERRED CHANNEL EXTRACTION (from OUTPUT)
--- ============================================================================
-
 -- Unified function to handle deferred channel extraction from OUTPUT
--- Called when channel info wasn't available in args but might be in OUTPUT
 local function extractChannelFromOutputIfDeferred(m)
 	if not m or not m.deferredChannelExtraction then return false end
 	local sourceType = addon.SafeType and addon.SafeType(m.OUTPUT) or type(m.OUTPUT)
@@ -200,7 +165,7 @@ local function extractChannelFromOutputIfDeferred(m)
 				m.channel_name = extractChannelNameFromString(m.OUTPUT, numFromOutput)
 			end
 			m.deferredChannelExtraction = false
-			addon.dbg("ChatFrame_MessageEventHandler: extracted channel number from OUTPUT="..tostring(numFromOutput))
+			addon.dbg("extracted channel number from OUTPUT="..tostring(numFromOutput))
 			return true
 		end
 	end
@@ -209,17 +174,15 @@ local function extractChannelFromOutputIfDeferred(m)
 end
 
 -- ============================================================================
--- LEGACY CHANNEL INFO EXTRACTION (extractChannelInfo)
+-- LEGACY CHANNEL INFO EXTRACTION
 -- ============================================================================
 
 -- Extract channel information into section
 local function extractChannelInfo(s, arg7, arg8, arg9, arg10, chatGroup)
 	if not s then return end
 
-	-- Clear channel extraction flag first
 	s.deferredChannelExtraction = nil
 
-	-- Special handling for BN_CONVERSATION channels
 	if chatGroup == "BN_CONVERSATION" then
 		local bnChannelNum = tonumber(arg8) or 0
 		s.channel_number = tostring((_G.MAX_WOW_CHAT_CHANNELS or 20) + bnChannelNum)
@@ -229,19 +192,14 @@ local function extractChannelInfo(s, arg7, arg8, arg9, arg10, chatGroup)
 		return
 	end
 
-	-- For channel events, build list of sources to try in order
-	-- Priority: arg8 (primary), then arg7, arg9, arg10
 	local sources = {}
 	if arg8 then table.insert(sources, arg8) end
 	if arg7 then table.insert(sources, arg7) end
 	if arg9 then table.insert(sources, arg9) end
 	if arg10 then table.insert(sources, arg10) end
 
-	-- Use unified function to extract from all sources
 	local found = extractChannelInfoFromSources(s, sources)
 
-	-- If still no channel number OR no channel name and this is a CHANNEL event, mark for deferred extraction
-	-- This handles channel notice events where OUTPUT contains the info but args don't
 	if chatGroup == "CHANNEL" and (not s.channel_number or s.channel_number == "" or not s.channel_name or s.channel_name == "") then
 		s.deferredChannelExtraction = true
 	elseif not found then
@@ -253,28 +211,21 @@ end
 -- ============================================================================
 -- CHANNEL NAME SHORTENING FUNCTIONS
 -- ============================================================================
--- CHANNEL NAME SHORTENING FUNCTIONS
--- ============================================================================
 
 --- Helper function to look up the short name for a channel
---- @param fullName string The full channel name (e.g., "General" or "general")
---- @return string|nil The short name (e.g., "GN") or nil if not found
 local function lookupShortChannelName(fullName)
 	if not fullName or fullName == "" then return nil end
 
-	-- Normalize the full name for matching
 	local normalizedName = fullName:lower():gsub("[%s%-]", "")
 
 	for _, replacement in ipairs(SHORT_CHANNEL_REPLACEMENTS) do
 		local longPattern, shortName = unpack(replacement)
 		if longPattern and shortName then
-			local patternMatched = false
+			local patternMatched
 
-			-- Use Lua pattern matching for [Gg]eneral style patterns
 			if longPattern:find("%[") then
 				patternMatched = (normalizedName:match("^" .. longPattern .. "$") ~= nil)
 			else
-				-- Simple word pattern - case-insensitive comparison
 				patternMatched = (longPattern:lower() == normalizedName)
 			end
 
@@ -290,7 +241,6 @@ end
 local function applyShortChannelNamesToSections(m)
 	if not addon then return end
 
-	-- Early return if short names disabled
 	if not (_G.XCHT_DB and _G.XCHT_DB.shortNames) then
 		if addon and addon.dbg then
 			addon.dbg("applyShortChannelNamesToSections: shortNames disabled")
@@ -298,8 +248,6 @@ local function applyShortChannelNamesToSections(m)
 		return
 	end
 
-	-- Always use OUTPUT for shortening since it contains the full hyperlink format
-	-- channel_name alone doesn't have the hyperlink structure needed for replacement
 	local longName = m.OUTPUT
 
 	if not longName or longName == "" then
@@ -314,15 +262,11 @@ local function applyShortChannelNamesToSections(m)
 	end
 
 	-- Get channel number if not already set
-	-- Use the addon's centralized extraction function
 	if (not m.channel_number or m.channel_number == "") and type(longName) == "string" then
 		m.channel_number = extractChannelNumberFromString(longName)
-		if addon and addon.dbg then
-			addon.dbg("applyShortChannelNamesToSections: extracted channel number from OUTPUT="..tostring(m.channel_number))
-		end
 	end
 
-	-- Also extract the short channel name to update m.channel_name for FormatChatMessage
+	-- Extract the short channel name
 	if m.channel_number and type(longName) == "string" then
 		m.channel_name = extractChannelNameFromString(longName, m.channel_number)
 	end
@@ -335,39 +279,23 @@ local function applyShortChannelNamesToSections(m)
 
 	-- Try to find and replace the channel bracket with shortened version
 	if channelNum then
-		-- Match the channel bracket (format: |Hchannel:1|h[1. General - Ragefire Chasm]|h or [1. General])
-		-- The OUTPUT may or may not have a hyperlink prefix, so we try both patterns
 		local bracketContent = longName:match("|Hchannel:%d+|h%["..channelNum.."%. [^%]]+%]|h") or
 		                          longName:match("%["..channelNum.."%. [^%]]+%]")
 
-		if addon and addon.dbg then
-			addon.dbg("applyShortChannelNamesToSections: channelNum="..tostring(channelNum).." bracketContent="..tostring(bracketContent).." longName="..tostring(string.sub(longName, 1, 80)))
-		end
-
-		-- First, determine the short name for bracket replacement
-		-- This ensures we have the short name before attempting bracket replacement
 		local shortName = lookupShortChannelName(m.channel_name or "")
 		if shortName then
-			-- Update m.channel_name immediately for lockdown code to use
 			m.channel_name = shortName
 		end
 
 		if bracketContent and shortName then
-			-- Build the shortened format: [1] [GN]
 			local shortenedBracket = "["..channelNum.."] ["..shortName.."]"
 
-			-- Replace based on what we matched
 			if bracketContent:find("|Hchannel:") then
-				-- We matched the full hyperlink, replace the inner bracket content
-				-- Convert |Hchannel:1|h[1. General - Zone]|h to |Hchannel:1|h[1] [GN]|h
 				longName = longName:gsub("|Hchannel:"..channelNum.."|h%[([^%]]+)%]|h", "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..shortName.."]|h", 1)
 			else
-				-- We matched just the bracket, replace it directly
-				-- Extract inner bracket content for proper escaping
 				local innerBracket = bracketContent:match("%[([^%]]+)%]") or bracketContent
 				local escapedBracket = innerBracket:gsub("[%(%)%.%*%+%?%[%]%^%$%-]", "%%%0")
-				local originalPattern = "%["..escapedBracket.."%]"
-				longName = string.gsub(longName, originalPattern, shortenedBracket, 1)
+				longName = string.gsub(longName, "%["..escapedBracket.."%]", shortenedBracket, 1)
 			end
 
 			if addon and addon.dbg then
@@ -376,12 +304,8 @@ local function applyShortChannelNamesToSections(m)
 		end
 	end
 
-	-- Write back to OUTPUT
 	m.OUTPUT = longName
 
-	-- Update m.channel_name with the short name for FormatChatMessage use
-	-- Note: m.channel_name was already updated to the short name above during bracket replacement
-	-- This is a fallback in case bracket replacement didn't happen but we still want to shorten the name
 	if m.channel_name and m.channel_name ~= "" then
 		local shortName = lookupShortChannelName(m.channel_name)
 		if shortName then
@@ -391,30 +315,14 @@ local function applyShortChannelNamesToSections(m)
 			end
 		end
 	end
-
-	if addon and addon.dbg then
-		addon.dbg("applyShortChannelNamesToSections: final channel_name="..addon.dbgSafeValue(m.channel_name))
-	end
 end
 
--- ============================================================================
--- LOCKDOWN FALLBACK CHANNEL NAME LOOKUP
--- ============================================================================
-
 -- Look up short channel name from message section during lockdown
--- Safe to use during lockdown/secret values as it only uses string operations
--- that are allowed on secrets (no gsub on secret values)
--- @param m The message section table
--- @param channelNum The channel number
--- @return The shortened channel name (e.g., "Gen", "LDef") or original if not found
 local function getShortChannelPatternOnLockdown(m, channelNum)
 	if not m or not channelNum then return "" end
 
 	local channelName = m.channel_name or ""
 
-	-- If channel name not set, try to extract it from OUTPUT
-	-- We can use match on secret values, just not gsub
-	-- Use SafeType to avoid errors on secret values
 	if (not channelName or channelName == "") and m.OUTPUT and addon.SafeType and addon.SafeType(m.OUTPUT) == "string" then
 		channelName = extractChannelNameFromString(m.OUTPUT, channelNum) or ""
 		if channelName and channelName ~= "" then
@@ -427,7 +335,6 @@ local function getShortChannelPatternOnLockdown(m, channelNum)
 
 	if not channelName or channelName == "" then return "" end
 
-	-- Look up the short name using the shared helper function
 	local shortName = lookupShortChannelName(channelName)
 	if shortName then
 		if addon and addon.dbg then
@@ -436,7 +343,6 @@ local function getShortChannelPatternOnLockdown(m, channelNum)
 		return shortName
 	end
 
-	-- No match found, return original
 	if addon and addon.dbg then
 		addon.dbg("getShortChannelPatternOnLockdown: no match for '"..channelName.."', returning original")
 	end

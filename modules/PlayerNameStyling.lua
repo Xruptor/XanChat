@@ -1,12 +1,11 @@
 --[[
 	PlayerNameStyling.lua - Player name styling and formatting for XanChat
-	Refactored for:
-	- Consolidated duplicate player link generation code
+	Improvements:
+	- Extracted class color lookup into helper function
 	- Simplified color extraction logic
-	- Improved early returns and nil handling
-	- Better function organization
-	- Reduced code duplication
-	- Fixed redundant secret value checks
+	- Consolidated player info retrieval
+	- Better early returns throughout
+	- Reduced code duplication in level coloring
 ]]
 
 local ADDON_NAME, private = ...
@@ -38,12 +37,10 @@ local function HexToRGBA(hex)
 end
 
 local function wrapInColor(text, r, g, b)
-	if not text or text == "" then return "" end
-	if not r or not g or not b then return text end
+	if not text or text == "" or not r or not g or not b then return text end
 
 	local hexColor = RGBAToHex(r, g, b, 1)
-	if not hexColor or hexColor == "" then return text end
-	return "|c"..hexColor..text.."|r"
+	return hexColor ~= "" and "|c"..hexColor..text.."|r" or text
 end
 
 -- ============================================================================
@@ -51,25 +48,16 @@ end
 -- ============================================================================
 
 local function addTimeRunningIcon(guid, stylizedName, isSecret)
-	-- Skip timerunning icons during secret value lockdowns (boss encounters)
-	-- but return the colored stylizedName since WrapTextInColorCode handles secret values
 	if not stylizedName then
 		return ""
 	end
-	if not guid or isSecret then
-		-- Return colored stylizedName as-is (WrapTextInColorCode handles secret values)
+	if not guid or isSecret or type(guid) ~= "string" then
 		return stylizedName
 	end
-	if type(guid) ~= "string" then return stylizedName end
 
-	-- Check for timerunning availability
-	if not _G.C_ChatInfo or not _G.C_ChatInfo.IsTimerunningPlayer then
-		return stylizedName
-	end
-	if not _G.TimerunningUtil or not _G.TimerunningUtil.AddSmallIcon then
-		return stylizedName
-	end
-	if not _G.C_ChatInfo.IsTimerunningPlayer(guid) then
+	if not (_G.C_ChatInfo and _G.C_ChatInfo.IsTimerunningPlayer) or
+	   not (_G.TimerunningUtil and _G.TimerunningUtil.AddSmallIcon) or
+	   not _G.C_ChatInfo.IsTimerunningPlayer(guid) then
 		return stylizedName
 	end
 
@@ -80,12 +68,6 @@ end
 -- EVENT TYPE FILTERING
 -- ============================================================================
 
--- IMPORTANT: During secret value lockdowns (boss encounters, combat),
--- certain events must be skipped to prevent errors. These events contain
--- special formatting that cannot be safely processed when values are secret.
-
--- Events to skip styling for during secret value lockdowns
--- Obviously many of these have CHAT_MSG_ stripped from the front  like CHAT_MSG_SYSTEM
 local SKIP_STYLING_EVENTS = {
 	BN_INLINE_TOAST_ALERT = true,
 	BN_INLINE_TOAST_BROADCAST = true,
@@ -112,13 +94,35 @@ local SKIP_STYLING_EVENTS = {
 }
 
 local function shouldSkipStyling(chatType)
-	-- Always skip for events in SKIP_STYLING_EVENTS (emotes, system messages, etc.)
-	-- These have special formatting that breaks with player links prepended
-	if SKIP_STYLING_EVENTS and SKIP_STYLING_EVENTS[chatType] then
-		return true
-	end
+	return SKIP_STYLING_EVENTS and SKIP_STYLING_EVENTS[chatType]
+end
 
-	return false
+-- ============================================================================
+-- HELPER FUNCTIONS
+-- ============================================================================
+
+-- Get class color for a player class
+local function getClassColor(playerClass)
+	if not playerClass or playerClass == "" then return nil end
+
+	local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
+	return classColorTable and classColorTable[playerClass]
+end
+
+-- Get colored level text
+local function getColoredLevel(playerInfo)
+	if not playerInfo or not playerInfo.level then return "" end
+
+	local level = tonumber(playerInfo.level) or 0
+	if level <= 0 then return "" end
+
+	local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
+	if not colorFunc then return "" end
+
+	local difficultyColor = colorFunc(level)
+	if not difficultyColor then return "" end
+
+	return wrapInColor(tostring(level), difficultyColor.r, difficultyColor.g, difficultyColor.b)
 end
 
 -- ============================================================================
@@ -126,21 +130,15 @@ end
 -- ============================================================================
 
 local function createPlayerLink(m, linkTarget, displayText)
-	-- Skip for emotes, monster emotes, and channel notices
-	-- EMOTE and TEXT_EMOTE events have embedded player names in the message text
-	-- and should not have additional player links prepended
+	if not linkTarget or not displayText then return nil end
+
 	local chatType = m.chat_type or ""
+
+	-- Skip for emotes, monster emotes, and channel notices
 	if string.sub(chatType, 1, 7) == "MONSTER" or
 	   string.sub(chatType, 1, 18) == "RAID_BOSS_EMOTE" or
-	   chatType == "EMOTE" or
-	   chatType == "TEXT_EMOTE" or
-	   chatType == "CHANNEL_NOTICE" or
-	   chatType == "CHANNEL_NOTICE_USER" then
-		return nil
-	end
-
-	-- Skip if linkTarget or displayText is nil (e.g., during secret value lockdowns)
-	if not linkTarget or not displayText then
+	   chatType == "EMOTE" or chatType == "TEXT_EMOTE" or
+	   chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
 		return nil
 	end
 
@@ -190,117 +188,85 @@ local function StylePlayerSection(m)
 	local chatType = m.chat_type or ""
 	local fullEvent = m.EVENT or ""
 
-	-- During a boss encounter or a chat lockdown we don't want to process certain events
-	-- as they will get broken because of their special formatting.
-	-- Skip styling for special events during secret value lockdowns
 	if shouldSkipStyling(chatType) then
 		if addon and addon.dbg then
-			addon.dbg("StylePlayerSection: skipping special event during secret lockdown: "..addon.dbgSafeValue(chatType))
+			addon.dbg("StylePlayerSection: skipping special event: "..addon.dbgSafeValue(chatType))
 		end
 		return
 	end
 
-	-- Check filter list for styling eligibility (filter returns true = allow styling)
-	local shouldStyle = false  -- default: no styling
-	if addon.searchFilterList and addon.isFilterListEnabled and addon:searchFilterList(fullEvent, m.message_text or "") then
-		shouldStyle = true  -- filter matched, allow styling
-	end
+	-- Check filter list for styling eligibility
+	local shouldStyle = addon.searchFilterList and addon.isFilterListEnabled and addon:searchFilterList(fullEvent, m.message_text or "")
 
-	-- Debug: Check why we're entering disabled styling path
 	if addon and addon.dbg then
 		addon.dbg("StylePlayerSection: enablePlayerChatStyle="..tostring(_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle).." isSecret="..tostring(isSecret).." shouldStyle="..tostring(shouldStyle))
 	end
 
+	-- Early exit if no player name
+	if not m.player_name or (not isSecret and m.player_name == "") then
+		return
+	end
+
+	-- Get class color
+	local coloredPlayerName = m.player_name
+	local playerClass = m.player_class
+
+	if not isSecret and (not playerClass or playerClass == "") and addon.getPlayerInfo then
+		local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
+		if playerInfo and playerInfo.class then
+			playerClass = playerInfo.class
+		end
+	elseif isSecret and m.player_guid and not playerClass then
+		playerClass = select(2, _G.GetPlayerInfoByGUID(m.player_guid))
+	end
+
+	-- Apply class color (non-secret path)
+	if not isSecret and playerClass and playerClass ~= "" then
+		local classColor = getClassColor(playerClass)
+		if classColor then
+			coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
+		end
+	elseif isSecret and playerClass and _G.C_ClassColor then
+		local classColor = _G.C_ClassColor.GetClassColor(playerClass)
+		if classColor then
+			coloredPlayerName = classColor:WrapTextInColorCode(coloredPlayerName)
+		end
+	end
+
+	-- Get player level
+	local coloredLevel = ""
+	if addon.getPlayerInfo then
+		local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
+		coloredLevel = getColoredLevel(playerInfo)
+	end
+
+	-- Build display text
+	local displayText = coloredPlayerName
+	if coloredLevel ~= "" then
+		displayText = coloredLevel..":"..coloredPlayerName
+	end
+	displayText = addTimeRunningIcon(m.player_guid, displayText, isSecret)
+
+	-- Create player link
+	-- IMPORTANT: Ambiguate cannot be called on secret values during lockdown
+	local linkTarget = m.sender_name
+	if linkTarget and not isSecret and _G.Ambiguate then
+		linkTarget = _G.Ambiguate(linkTarget, "none")
+	end
+
+	local playerLink = createPlayerLink(m, linkTarget, displayText)
+
 	if not (_G.XCHT_DB and _G.XCHT_DB.enablePlayerChatStyle) or isSecret or not shouldStyle then
-		-- Still need to generate player_link for clickable names
-		if not m.player_name or (not isSecret and m.player_name == "") then
-			return
-		end
-
-		-- Get class color for player name
-		local coloredPlayerName = m.player_name
-		local playerClass = m.player_class
-
-		if not isSecret and (not playerClass or playerClass == "") and addon.getPlayerInfo then
-			local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
-			if playerInfo and playerInfo.class then
-				playerClass = playerInfo.class
-			end
-		elseif isSecret and (m.player_guid and not playerClass) then
-			local _, englishClassChk = _G.GetPlayerInfoByGUID(m.player_guid)
-			playerClass = englishClassChk
-		end
-
-		-- Apply class color
-		if not isSecret and playerClass and playerClass ~= "" then
-			local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
-			local classColor = classColorTable and classColorTable[playerClass]
-			if classColor then
-				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
-				if addon and addon.dbg then
-					addon.dbg("StylePlayerSection: class color applied for disabled style="..addon.dbgSafeValue(playerClass))
-				end
-			end
-		elseif isSecret and playerClass and C_ClassColor then
-			local classColor = C_ClassColor.GetClassColor(playerClass)
-			if classColor then
-				coloredPlayerName = classColor:WrapTextInColorCode(coloredPlayerName)
-				if addon and addon.dbg then
-					addon.dbg("StylePlayerSection: class color applied for (secret) coloredPlayerName="..addon.dbgSafeValue(coloredPlayerName))
-				end
-			end
-		end
-
-		-- Get player info for level (supports level display even during lockdown)
-		local coloredLevel = ""
-		if addon.getPlayerInfo then
-			local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
-			if playerInfo and playerInfo.level then
-				local level = tonumber(playerInfo.level) or 0
-				if level > 0 then
-					local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
-					if colorFunc then
-						local difficultyColor = colorFunc(level)
-						if difficultyColor then
-							coloredLevel = wrapInColor(tostring(level), difficultyColor.r, difficultyColor.g, difficultyColor.b)
-						end
-					end
-				end
-			end
-		end
-
-		-- Create clickable player link
-		-- IMPORTANT: Use Ambiguate to strip realm for same-realm players in the link target
-		-- sender_name may be in "Name-Realm" format, but WoW player links work better with proper format
-		local linkTarget = m.sender_name
-		if linkTarget and _G.Ambiguate then
-			linkTarget = _G.Ambiguate(linkTarget, "none")
-		end
-
-		-- Build display text with level if available
-		local displayText = coloredPlayerName
-		if coloredLevel ~= "" then
-			displayText = coloredLevel..":"..coloredPlayerName
-		end
-		displayText = addTimeRunningIcon(m.player_guid, displayText, isSecret)
-		local playerLink = createPlayerLink(m, linkTarget, displayText)
+		-- Basic styling path - just create clickable link with class color
 		if playerLink then
 			m.player_link = playerLink
 			m.styled_player_name = displayText
-			if addon and addon.dbg then
-				addon.dbg("StylePlayerSection: class-colored player_link created="..addon.dbgSafeValue(playerLink).." styled_player_name="..addon.dbgSafeValue(displayText))
-			end
 		end
 		return
 	end
 
-	-- Return early if no player name
-	if not m.player_name or (not addon.isSecretValue(m.player_name) and m.player_name == "") then
-		return
-	end
-
-	-- Extract class color from Blizzard output
-	local extractedClassColor
+	-- Full styling path - extract color from Blizzard output and apply
+	local extractedColorFromOutput = false
 	if m.OUTPUT and type(m.OUTPUT) == "string" then
 		local playerNamePattern = string.gsub(m.player_name, "([%-%^%$%(%)%%%[%]%.%*%+%?])", "%%%1")
 
@@ -311,11 +277,13 @@ local function StylePlayerSection(m)
 		}) do
 			local colorMatch = string.match(m.OUTPUT, pattern)
 			if colorMatch then
-				extractedClassColor = {
-					r = tonumber(string.sub(colorMatch, 1, 2), 16) / 255,
-					g = tonumber(string.sub(colorMatch, 3, 4), 16) / 255,
-					b = tonumber(string.sub(colorMatch, 5, 6), 16) / 255
-				}
+				coloredPlayerName = wrapInColor(m.player_name,
+					tonumber(string.sub(colorMatch, 1, 2), 16) / 255,
+					tonumber(string.sub(colorMatch, 3, 4), 16) / 255,
+					tonumber(string.sub(colorMatch, 5, 6), 16) / 255)
+				displayText = coloredLevel ~= "" and coloredLevel..":"..coloredPlayerName or coloredPlayerName
+				displayText = addTimeRunningIcon(m.player_guid, displayText, false)
+				extractedColorFromOutput = true
 				if addon and addon.dbg then
 					addon.dbg("StylePlayerSection: Extracted class color from Blizzard output")
 				end
@@ -324,70 +292,24 @@ local function StylePlayerSection(m)
 		end
 	end
 
-	-- Get player info for level
-	local playerInfo
-	if addon.getPlayerInfo then
-		playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
+	-- Try getting class from player info if not found
+	if not extractedColorFromOutput then
+		local playerInfo = addon.getPlayerInfo and addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
+		if playerInfo and playerInfo.class then
+			local classColor = getClassColor(playerInfo.class)
+			if classColor then
+				coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
+				displayText = (coloredLevel ~= "" and coloredLevel..":"..coloredPlayerName) or coloredPlayerName
+				displayText = addTimeRunningIcon(m.player_guid, displayText, false)
+			end
+		end
 		if addon and addon.dbg then
 			addon.dbg("-->player list lookup: guid="..addon.dbgSafeValue(m.player_guid).." found="..tostring(playerInfo and "yes" or "no"))
 		end
 	end
 
-	if addon and addon.dbg then
-		addon.dbg("-->StylePlayerSection: name="..addon.dbgSafeValue(m.player_name).." extractedColor="..tostring(extractedClassColor and "yes" or "no"))
-	end
-
-	-- NOTE: Don't return early even without styling data - we still want to create clickable links
-	-- The styled name will just be the plain player name without level/class colors
-
-	-- Build level text with difficulty coloring
-	local coloredLevel = ""
-	if playerInfo then
-		local level = tonumber(playerInfo.level) or 0
-		if level > 0 then
-			local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
-			if colorFunc then
-				local difficultyColor = colorFunc(level)
-				if difficultyColor then
-					coloredLevel = wrapInColor(tostring(level), difficultyColor.r, difficultyColor.g, difficultyColor.b)
-				end
-			end
-		end
-	end
-
-	-- Build colored player name
-	local coloredPlayerName = m.player_name
-
-	if extractedClassColor then
-		coloredPlayerName = wrapInColor(m.player_name, extractedClassColor.r, extractedClassColor.g, extractedClassColor.b)
-	elseif m.player_class and m.player_class ~= "" then
-		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
-		local classColor = classColorTable and classColorTable[m.player_class]
-		if classColor then
-			coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
-		end
-	elseif playerInfo and playerInfo.class then
-		local classColorTable = _G.RAID_CLASS_COLORS or _G.CUSTOM_CLASS_COLORS
-		local classColor = classColorTable and classColorTable[playerInfo.class]
-		if classColor then
-			coloredPlayerName = wrapInColor(m.player_name, classColor.r, classColor.g, classColor.b)
-		end
-	end
-
-	-- Build display text and create player link
-	local displayText = coloredPlayerName
-	if coloredLevel ~= "" then
-		displayText = coloredLevel..":"..coloredPlayerName
-	end
-	displayText = addTimeRunningIcon(m.player_guid, displayText, false)
-
-	-- Strip realm for same-realm players in the link target
-	local linkTarget = m.sender_name
-	if linkTarget and _G.Ambiguate then
-		linkTarget = _G.Ambiguate(linkTarget, "none")
-	end
-
-	local playerLink = createPlayerLink(m, linkTarget, displayText)
+	-- Create final player link
+	playerLink = createPlayerLink(m, linkTarget, displayText)
 	if playerLink then
 		m.player_link = playerLink
 		m.styled_player_name = playerLink
@@ -395,8 +317,7 @@ local function StylePlayerSection(m)
 			addon.dbg("-->clickable player_link created: "..addon.dbgSafeValue(playerLink))
 		end
 	else
-		-- Fallback: non-clickable styled player name
-		m.styled_player_name = coloredLevel ~= "" and "["..displayText.."]" or "["..coloredPlayerName.."]"
+		m.styled_player_name = "["..displayText.."]"
 		if addon and addon.dbg then
 			addon.dbg("-->stylized_player_name (non-clickable): "..addon.dbgSafeValue(m.styled_player_name))
 		end
@@ -421,12 +342,9 @@ local function checkNoticeFilter(_, event, message)
 		return true
 	end
 
-	if event == "CHAT_MSG_SYSTEM" and type(message) == "string" then
-		-- Skip secret values as string.find is not allowed on them
-		if not (addon.isSecretValue and addon.isSecretValue(message)) then
-			if string.find(message, "|Hplayer:", 1, true) and (string.find(message, "has joined", 1, true) or string.find(message, "has left", 1, true)) then
-				return true
-			end
+	if event == "CHAT_MSG_SYSTEM" and type(message) == "string" and not (addon.isSecretValue and addon.isSecretValue(message)) then
+		if string.find(message, "|Hplayer:", 1, true) and (string.find(message, "has joined", 1, true) or string.find(message, "has left", 1, true)) then
+			return true
 		end
 	end
 
@@ -434,9 +352,7 @@ local function checkNoticeFilter(_, event, message)
 end
 
 local function setDisableChatEnterLeaveNotice()
-	if not addon or addon._noticeFilterRegistered then
-		return
-	end
+	if not addon or addon._noticeFilterRegistered then return end
 
 	if _G.ChatFrame_AddMessageEventFilter then
 		_G.ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", addon.checkNoticeFilter)

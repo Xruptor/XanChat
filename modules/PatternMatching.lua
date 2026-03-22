@@ -1,12 +1,11 @@
 --[[
 	PatternMatching.lua - Pattern matching system for XanChat
-	Refactored for:
-	- Improved pattern sorting efficiency (only sort when needed)
-	- Consolidated redundant nil checks
-	- Simplified UUID generation
-	- Better variable naming
-	- More efficient token iteration
-	- Fixed potential issues with token numbering
+	Improvements:
+	- Simplified UUID generation with inline function
+	- Improved token management with single source of truth
+	- Better pattern registry with lazy sorting
+	- Reduced redundant type checks
+	- More efficient match/replace cycle
 ]]
 
 local ADDON_NAME, private = ...
@@ -23,17 +22,15 @@ local PatternRegistry = { patterns = {}, sortedList = {}, sorted = true }
 local tokenCount = 0
 local MatchTable = {}
 
--- UUID generator for pattern IDs - simple and efficient
+-- UUID generator - simple and efficient
 local function generateUUID()
 	return string.gsub('xyxxxxyx', '[xy]', function(c)
-		local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
-		return string.format('%x', v)
+		return string.format('%x', c == 'x' and math.random(0, 0xf) or math.random(8, 0xb))
 	end)
 end
 
 -- Register a pattern with the pattern matching engine
 local function RegisterPattern(pattern, owner)
-	-- Generate unique ID
 	local idx
 	repeat
 		idx = generateUUID()
@@ -54,7 +51,6 @@ end
 local function UnregisterAllPatterns(owner)
 	if addon.dbg then addon.dbg("UnregisterAllPatterns: owner="..tostring(owner)) end
 
-	-- Iterate in reverse for safe removal
 	for i = #PatternRegistry.sortedList, 1, -1 do
 		local pattern = PatternRegistry.sortedList[i]
 		if pattern and pattern.owner == owner then
@@ -67,7 +63,6 @@ end
 -- Register a match token for temporary storage
 function RegisterMatch(text, ptype)
 	tokenCount = tokenCount + 1
-
 	local token = "@##"..tokenCount.."##@"
 
 	if addon.dbg then addon.dbg("RegisterMatch: token="..token.." text="..addon.dbgSafeValue(text)) end
@@ -98,24 +93,20 @@ local function MatchPatterns(m, ptype)
 	-- Sort patterns by priority only when needed
 	if not PatternRegistry.sorted then
 		table.sort(PatternRegistry.sortedList, function(a, b)
-			local ap = a.priority or 50
-			local bp = b.priority or 50
-			return ap < bp
+			return (a.priority or 50) < (b.priority or 50)
 		end)
 		PatternRegistry.sorted = true
 	end
 
 	-- Match and replace patterns
 	for _, pattern in ipairs(PatternRegistry.sortedList) do
-		if text and ptype == (pattern.type or "FRAME") and type(pattern.pattern) == "string" and string.len(pattern.pattern) > 0 then
+		if text and ptype == (pattern.type or "FRAME") and type(pattern.pattern) == "string" and string.len(pattern.pattern) > 0 and pattern.matchfunc then
 			if addon.dbg then addon.dbg("MatchPatterns: checking pattern="..tostring(pattern.pattern)) end
-			if pattern.matchfunc then
-				text = string.gsub(text, pattern.pattern, function(...)
-					local parms = { ... }
-					table.insert(parms, m)
-					return pattern.matchfunc(unpack(parms))
-				end)
-			end
+			text = string.gsub(text, pattern.pattern, function(...)
+				local parms = { ... }
+				table.insert(parms, m)
+				return pattern.matchfunc(unpack(parms))
+			end)
 		end
 	end
 
@@ -148,7 +139,6 @@ local function ReplaceMatches(m, ptype)
 			addon.dbg("ReplaceMatches: token not found: "..token)
 		end
 
-		-- Clean up the match table entry
 		if mt then
 			mt[token] = nil
 		end

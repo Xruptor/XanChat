@@ -1,12 +1,11 @@
 --[[
 	ChatFormatting.lua - Direct chat text construction system for XanChat
-	Refactored for:
-	- Eliminated per-call function creation (getValue helper)
-	- Simplified string concatenation and trimming
+	Improvements:
+	- Simplified getSafeValue with early returns
+	- Consolidated string concatenation with table.concat
+	- Improved resetSectionBuffer with direct wipe
+	- More efficient FormatChatMessage flow
 	- Removed redundant nil checks
-	- Better variable naming
-	- More efficient whitespace handling
-	- Removed unnecessary conditional logic
 ]]
 
 local ADDON_NAME, private = ...
@@ -15,16 +14,11 @@ local addon = _G[ADDON_NAME]
 addon.private = private or addon.private
 addon.L = (private and private.L) or addon.L or {}
 
--- ============================================================================
--- CHAT COMPOSITION SYSTEM (Direct Construction)
--- ============================================================================
-
 -- IMPORTANT SECURITY NOTES:
 -- 1. This module handles chat message formatting and construction
 -- 2. Secret values are protected WoW values that cannot be modified with gsub()
 -- 3. DO NOT call FormatChatMessage() for secret value payloads
 -- 4. Secret value messages use the direct safe path in XanChat.lua instead
--- 5. Violating these rules will cause errors during boss encounters/chat lockdown
 
 if addon and addon.dbg then
 	addon.dbg("chat_composition_system_init")
@@ -42,8 +36,6 @@ local sectionOriginal = {}
 local sectionWorking = { ORG = sectionOriginal }
 
 -- Helper to safely trim strings and handle secret values
--- IMPORTANT: This function returns empty string for secret values - DO NOT use
--- for operations that require string manipulation like gsub() on the original secret value
 local function getSafeValue(field, m)
 	local value = m and m[field]
 	if not value then return "" end
@@ -51,7 +43,6 @@ local function getSafeValue(field, m)
 	if not addon.canAccessValue(value) then return "" end
 	if type(value) ~= "string" then return "" end
 
-	-- Trim leading and trailing whitespace
 	return string.match(value, "^%s*(.-)%s*$") or ""
 end
 
@@ -78,8 +69,6 @@ local function prepareWorkingSections()
 end
 
 -- Do not call this for secret values (string modifications like gsub don't work with secret values)
--- This function should not be called for secret values as there is a lot of string
--- modifications done here. Especially gsub() which don't work with secret values.
 local function FormatChatMessage(message)
 	if addon and addon.dbg then
 		addon.dbg("FormatChatMessage: building chat text with direct construction")
@@ -90,30 +79,22 @@ local function FormatChatMessage(message)
 	end
 	local m = sectionWorking
 
-	-- Build prefix section (channel info and type prefix)
+	-- Build all parts with table for efficiency
 	local parts = {}
 	local channelNum = getSafeValue("channel_number", m)
 	local channelName = getSafeValue("channel_name", m)
 	local typePrefix = getSafeValue("type_prefix", m)
 
+	-- Channel prefix
 	if channelNum ~= "" and channelName ~= "" then
-		-- Use short channel name format if enabled: "[1] [Gen]" instead of "[1. General]"
 		local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
-		if useShortNames then
-			-- Format: [1] [Gen] - clickable channel number and bracketed short name
-			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..channelName.."]|h")
-		else
-			-- Original format with clickable entire channel: |Hchannel:1|h[1. General]|h
-			table.insert(parts, "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h")
-		end
-	elseif addon and addon.dbg then
-		addon.dbg("FormatChatMessage: channelNum="..tostring(channelNum).." channelName="..tostring(channelName))
+		parts[#parts + 1] = "|Hchannel:"..channelNum.."|h["..channelNum..(useShortNames and "] ["..channelName or ". "..channelName).."]|h"
 	end
 	if typePrefix ~= "" then
-		table.insert(parts, typePrefix)
+		parts[#parts + 1] = typePrefix
 	end
 
-	-- Build player section (flag, styled name, or link)
+	-- Player section
 	local playerFlag = getSafeValue("player_flag", m)
 	local styledPlayer = getSafeValue("styled_player_name", m)
 	local playerLink = getSafeValue("player_link", m)
@@ -122,51 +103,48 @@ local function FormatChatMessage(message)
 	local serverSep = getSafeValue("server_separator", m)
 
 	if playerFlag ~= "" then
-		table.insert(parts, playerFlag)
+		parts[#parts + 1] = playerFlag
 	end
 	if styledPlayer ~= "" then
-		table.insert(parts, styledPlayer)
+		parts[#parts + 1] = styledPlayer
 	elseif playerLink ~= "" then
-		table.insert(parts, playerLink)
+		parts[#parts + 1] = playerLink
 	elseif playerName ~= "" then
 		if serverName ~= "" then
-			table.insert(parts, playerName..serverSep..serverName)
+			parts[#parts + 1] = playerName..serverSep..serverName
 		else
-			table.insert(parts, playerName)
+			parts[#parts + 1] = playerName
 		end
 	end
 
-	-- Build postfix section (language and mobile icon)
+	-- Postfix section
 	local language = getSafeValue("language", m)
 	local mobileIcon = getSafeValue("mobile_icon", m)
+	local messageText = getSafeValue("message_text", m)
 
 	if language ~= "" then
-		table.insert(parts, "["..language.."]")
+		parts[#parts + 1] = "["..language.."]"
 	end
 	if mobileIcon ~= "" then
-		table.insert(parts, mobileIcon)
+		parts[#parts + 1] = mobileIcon
 	end
 
-	-- Add message text
-	local messageText = getSafeValue("message_text", m)
+	-- Add message text with colon separator if we have player info
 	if messageText ~= "" then
-		-- If we have player styling, combine with last part (player section) instead of adding as separate part
 		if styledPlayer ~= "" or playerLink ~= "" or playerName ~= "" then
-			local lastPartIndex = #parts
-			if lastPartIndex > 0 then
-				parts[lastPartIndex] = parts[lastPartIndex]..": "..messageText
+			local lastIdx = #parts
+			if lastIdx > 0 then
+				parts[lastIdx] = parts[lastIdx]..": "..messageText
 			else
-				table.insert(parts, messageText)
+				parts[#parts + 1] = messageText
 			end
 		else
-			table.insert(parts, messageText)
+			parts[#parts + 1] = messageText
 		end
 	end
 
 	-- Combine all parts with proper spacing
-	local result = table.concat(parts, " ")
-	-- Clean up multiple spaces
-	result = string.gsub(result, "%s+", " ")
+	local result = string.gsub(table.concat(parts, " "), "%s+", " ")
 
 	if addon and addon.isSafeString and addon.isSafeString(result) then
 		if addon and addon.dbg then

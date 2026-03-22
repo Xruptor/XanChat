@@ -1,11 +1,11 @@
 --[[
 	DebugSystem.lua - Debug logging and value inspection for XanChat
-	Refactored for:
-	- Simplified value recursion with proper depth limiting
-	- Removed redundant type checks
-	- Better function organization
-	- Improved early returns
-	- Fixed inconsistent indentation
+	Improvements:
+	- Simplified safeToString with inline check
+	- Consolidated type handling in safeValue
+	- Reduced nested conditionals
+	- Better early returns throughout
+	- Improved safeLength and safeSub with guards
 ]]
 
 local ADDON_NAME, private = ...
@@ -24,18 +24,17 @@ local MAX_TABLE_ITEMS = 10
 
 -- Basic debug output to chat
 local function dbg(msg)
-	if not msg then return end
-	if not (addon.debugChat or (_G.XCHT_DB and _G.XCHT_DB.debugChat)) then return end
-	if not (_G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage) then return end
+	if not msg or not (addon.debugChat or (_G.XCHT_DB and _G.XCHT_DB.debugChat)) or not (_G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage) then
+		return
+	end
 
 	pcall(_G.DEFAULT_CHAT_FRAME.AddMessage, _G.DEFAULT_CHAT_FRAME, DEBUG_PREFIX..": "..msg)
 end
 
 -- Safely convert value to string for debugging
 local function safeToString(v)
-	if type(tostring) ~= "function" then return false, "" end
 	local ok, res = pcall(tostring, v)
-	return ok and res, ok and res or ""
+	return ok and res or ""
 end
 
 -- Recursively convert value to safe string representation
@@ -50,8 +49,7 @@ local function safeValue(v, depth)
 	-- Handle strings (check for secret values)
 	if t == "string" then
 		if addon.isSecretValue and addon.isSecretValue(v) then
-			local ok, safeStr = safeToString(v)
-			return "<secret-string>"..(ok and " ¦¦¦ "..safeStr or "")
+			return "<secret-string> ¦¦¦ "..safeToString(v)
 		end
 		if addon.canAccessValue and not addon.canAccessValue(v) then
 			return "<inaccessible-string>"
@@ -79,7 +77,6 @@ local function safeValue(v, depth)
 		if mt and mt.__index then
 			return "<table-with-metatable>"
 		end
-		-- Handle function tables ( Blizzard UI handlers)
 		if v.pcall or (type(v[1]) == "function" and #v > 0) then
 			return "<table-function>"
 		end
@@ -95,22 +92,14 @@ local function safeValue(v, depth)
 				result = result.." ...<truncated>"
 				break
 			end
-			local keyStr = safeValue(k, depth + 1)
-			local valStr = safeValue(val, depth + 1)
-			result = result.."["..keyStr.."]="..valStr..", "
+			result = result.."["..safeValue(k, depth + 1).."]="..safeValue(val, depth + 1)..", "
 		end
 		return result.."}"
 	end
 
-	-- Handle functions
-	if t == "function" then
-		return "<function>"
-	end
-
-	-- Handle userdata
-	if t == "userdata" then
-		return "<userdata>"
-	end
+	-- Handle functions and userdata
+	if t == "function" then return "<function>" end
+	if t == "userdata" then return "<userdata>" end
 
 	return "<"..t..">"
 end
@@ -132,8 +121,7 @@ end
 -- Get safe substring (handles secret values)
 local function safeSub(v, startPos, length)
 	if addon.isSecretValue and addon.isSecretValue(v) then
-		local ok, safeStr = safeToString(v)
-		return "<secret-string>"..(ok and " ¦¦¦ "..safeStr or "")
+		return "<secret-string> ¦¦¦ "..safeToString(v)
 	end
 	if addon.canAccessValue and not addon.canAccessValue(v) then
 		return "<inaccessible-string>"
@@ -175,8 +163,7 @@ local _chatLockdownLast = nil
 
 -- Debug-only: Chat lockdown state probe
 function addon:CheckChatLockdownState()
-	if not self.dbg then return end
-	if not (_G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown) then return end
+	if not self.dbg or not (_G.C_ChatInfo and _G.C_ChatInfo.InChatMessagingLockdown) then return end
 
 	local isLocked = _G.C_ChatInfo.InChatMessagingLockdown()
 	if _chatLockdownLast == isLocked then return end
@@ -188,7 +175,6 @@ function addon:CheckChatLockdownState()
 	end
 end
 
--- Debug-only: Encounter start hook
 function addon:OnEncounterStart()
 	if not self.dbg then return end
 	self.dbg("OnEncounterStart: encounter started (debug only, no hook changes)")
@@ -197,7 +183,6 @@ function addon:OnEncounterStart()
 	end
 end
 
--- Debug-only: Encounter end hook
 function addon:OnEncounterEnd()
 	if not self.dbg then return end
 	self.dbg("OnEncounterEnd: encounter ended (debug only, no hook changes)")

@@ -1,11 +1,10 @@
 --[[
 	filter.lua - Filter list management for XanChat
-	Refactored for:
-	- Fixed path separator consistency
-	- Simplified frame creation and setup
-	- Consolidated redundant code
-	- Better early returns
-	- Improved scroll handling
+	Improvements:
+	- Simplified frame creation with consolidated backdrop setup
+	- Reduced redundant checks in buildFilterList
+	- Better early returns throughout
+	- Improved searchFilterList efficiency
 ]]
 
 local ADDON_NAME, private = ...
@@ -17,7 +16,7 @@ local L = addon.L
 local strfind = string.find
 
 -- ============================================================================
--- RESTRICTION HELPERS
+-- SHARED UI HELPERS
 -- ============================================================================
 
 local function isRestricted()
@@ -38,55 +37,69 @@ end
 -- FRAME SETUP
 -- ============================================================================
 
-addon.filterList = CreateFrame("frame", ADDON_NAME.."_filterList", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-local filterList = addon.filterList
-filterList:SetFrameStrata("DIALOG")
-filterList:SetToplevel(true)
-filterList:EnableMouse(true)
-filterList:SetMovable(true)
-filterList:SetClampedToScreen(true)
-filterList:SetWidth(380)
-filterList:SetHeight(570)
+local function createDialogFrame(frameName, titleText)
+	local frame = CreateFrame("frame", frameName, UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetToplevel(true)
+	frame:EnableMouse(true)
+	frame:SetMovable(true)
+	frame:SetClampedToScreen(true)
+	frame:SetWidth(380)
+	frame:SetHeight(570)
 
-filterList:SetBackdrop({
-	bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-	edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-	tile = true,
-	tileSize = 16,
-	edgeSize = 32,
-	insets = { left = 5, right = 5, top = 5, bottom = 5 }
-})
-filterList:SetBackdropColor(0, 0, 0, 1)
-filterList:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+	frame:SetBackdrop({
+		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+		edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+		tile = true,
+		tileSize = 16,
+		edgeSize = 32,
+		insets = { left = 5, right = 5, top = 5, bottom = 5 }
+	})
+	frame:SetBackdropColor(0, 0, 0, 1)
+	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 
-local closeButton = CreateFrame("Button", nil, filterList, "UIPanelCloseButton")
-closeButton:SetPoint("TOPRIGHT", filterList, -15, -8)
+	local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+	closeButton:SetPoint("TOPRIGHT", frame, -15, -8)
 
-local header = filterList:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
-header:SetJustifyH("LEFT")
-header:SetFontObject("GameFontNormal")
-header:SetPoint("CENTER", filterList, "TOP", 0, -20)
-header:SetText(L.EditFilterListHeader)
+	local header = frame:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
+	header:SetJustifyH("LEFT")
+	header:SetFontObject("GameFontNormal")
+	header:SetPoint("CENTER", frame, "TOP", 0, -20)
+	header:SetText(titleText)
 
-local filterInfo = filterList:CreateFontString("$parentFilterInfo", "ARTWORK", "GameFontHighlight")
+	return frame
+end
+
+local function createScrollFrame(parent, yOffset)
+	local scrollFrame = CreateFrame("ScrollFrame", parent:GetName().."_Scroll", parent, "UIPanelScrollFrameTemplate")
+	local scrollChild = CreateFrame("frame", parent:GetName().."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
+	scrollFrame:SetPoint("TOPLEFT", 10, -yOffset)
+	scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
+	scrollFrame:SetScrollChild(scrollChild)
+
+	return scrollFrame, scrollChild
+end
+
+-- ============================================================================
+-- FILTER LIST FRAME
+-- ============================================================================
+
+addon.filterList = createDialogFrame(ADDON_NAME.."_filterList", L.EditFilterListHeader)
+
+local filterInfo = addon.filterList:CreateFontString("$parentFilterInfo", "ARTWORK", "GameFontHighlight")
 filterInfo:SetJustifyH("LEFT")
-filterInfo:SetPoint("TOPLEFT", filterList, "TOPLEFT", 15, -45)
+filterInfo:SetPoint("TOPLEFT", addon.filterList, "TOPLEFT", 15, -45)
 filterInfo:SetText("|cFF61F200"..L.EditFilterListInfo.."|r")
--- Make font slightly larger for better visibility
+
 local fontHeight = filterInfo:GetFontHeight()
 if fontHeight then
 	filterInfo:SetFontHeight(fontHeight * 1.05)
 end
 
-local scrollFrame = CreateFrame("ScrollFrame", ADDON_NAME.."_Scroll", filterList, "UIPanelScrollFrameTemplate")
-local scrollFrame_Child = CreateFrame("frame", ADDON_NAME.."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
-scrollFrame:SetPoint("TOPLEFT", 10, -65)
-scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
-scrollFrame:SetScrollChild(scrollFrame_Child)
+local scrollFrame, scrollFrame_Child = createScrollFrame(addon.filterList, -65)
 
--- Hide both frames initially
 scrollFrame:Hide()
-filterList:Hide()
+addon.filterList:Hide()
 
 -- ============================================================================
 -- FILTER DATA
@@ -164,7 +177,7 @@ local CUSTOM_FILTER_EVENTS = {
 }
 
 -- ============================================================================
--- SETUP HELPERS
+-- SETUP AND LIST BUILDING
 -- ============================================================================
 
 local function setupFilterUI()
@@ -172,7 +185,6 @@ local function setupFilterUI()
 		XCHT_DB.filterList = {}
 	end
 
-	-- Apply defaults for core events
 	if addon.ApplyDefaults then
 		addon.ApplyDefaults(XCHT_DB.filterList.core, CORE_FILTER_EVENTS)
 		addon.ApplyDefaults(XCHT_DB.filterList.custom, CUSTOM_FILTER_EVENTS)
@@ -203,10 +215,6 @@ local function setupFilterUI()
 	addon.isFilterListEnabled = true
 end
 
--- ============================================================================
--- LIST BUILDING
--- ============================================================================
-
 local function buildFilterList()
 	scrollFrame_Child:SetPoint("TOPLEFT")
 	scrollFrame_Child:SetWidth(scrollFrame:GetWidth())
@@ -215,15 +223,13 @@ local function buildFilterList()
 	local previousBar
 	local buildList = {}
 
-	-- Build list entries
-	for k, v in pairs(XCHT_DB.filterList.core) do
+	for k in pairs(XCHT_DB.filterList.core) do
 		table.insert(buildList, { name=k, val=1 })
 	end
-	for k, v in pairs(XCHT_DB.filterList.custom) do
+	for k in pairs(XCHT_DB.filterList.custom) do
 		table.insert(buildList, { name=k, val=2 })
 	end
 
-	-- Sort: core first (val=1), then custom (val=2), both by name
 	table.sort(buildList, function(a, b)
 		if a.val == b.val then
 			return (a.name < b.name)
@@ -232,7 +238,6 @@ local function buildFilterList()
 		end
 	end)
 
-	-- Create list items
 	for barCount = 1, #buildList do
 		local entry = buildList[barCount]
 		local isCore = entry.val == 1
@@ -248,48 +253,30 @@ local function buildFilterList()
 		end
 
 		barSlot:EnableMouse(true)
-		barSlot:SetBackdrop({
-			bgFile = "Interface\\Buttons\\WHITE8x8",
-		})
+		barSlot:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
 		barSlot:SetBackdropColor(0, 0, 0, 0)
 		previousBar = barSlot
 
-		-- Store entry data on bar slot
 		barSlot.xData = entry
 
-		-- Create checkbox
 		local bar_chk = _G["xanChat_FilterListBarChk"..barCount] or CreateFrame("CheckButton", "xanChat_FilterListBarChk"..barCount, barSlot, "InterfaceOptionsCheckButtonTemplate")
 		bar_chk.xData = entry
 		bar_chk:SetPoint("LEFT", 4, 0)
 
-		-- Set checkbox state and text color
-		local isChecked
-		if isCore then
-			isChecked = XCHT_DB.filterList.core[entry.name]
-			_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText("|cFFFFFFFF"..entry.name.."|r")
-		else
-			isChecked = XCHT_DB.filterList.custom[entry.name]
-			_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText("|cFF61F200"..entry.name.."|r")
-		end
-		bar_chk:SetChecked(isChecked)
+		local checkedValue = isCore and XCHT_DB.filterList.core[entry.name] or XCHT_DB.filterList.custom[entry.name]
+		_G["xanChat_FilterListBarChk"..barCount.."Text"]:SetText((isCore and "|cFFFFFFFF" or "|cFF61F200")..entry.name.."|r")
+		bar_chk:SetChecked(checkedValue)
 		bar_chk:SetEnabled(not isRestricted())
 
-		-- Set checkbox click handler
 		bar_chk:SetScript("OnClick", function(self)
-			if not guardRestricted() then
-				if self.xData and self.xData.name then
-					local isChecked = self:GetChecked()
-					if isCore then
-						XCHT_DB.filterList.core[self.xData.name] = isChecked
-					else
-						XCHT_DB.filterList.custom[self.xData.name] = isChecked
-					end
-					self:SetChecked(isChecked)
-				end
+			if not guardRestricted() and self.xData and self.xData.name then
+				local isChecked = self:GetChecked()
+				local targetTable = isCore and XCHT_DB.filterList.core or XCHT_DB.filterList.custom
+				targetTable[self.xData.name] = isChecked
+				self:SetChecked(isChecked)
 			end
 		end)
 
-		-- Show items
 		barSlot:Show()
 		bar_chk:Show()
 	end
@@ -303,21 +290,18 @@ end
 
 function addon:searchFilterList(event, text)
 	local filterList = XCHT_DB.filterList
-	if not filterList then return false end
-	if not event then return false end
+	if not filterList or not event then return false end
 
 	if addon.DebugPrint then
 		local textDump = addon.dbgSafeValue and addon.dbgSafeValue(text) or (addon.DebugValue and addon.DebugValue(text) or "<text>")
 		addon.DebugPrint("searchFilterList: event="..tostring(event).." text="..textDump)
 	end
 
-	-- Check core events first
 	if filterList.core[event] then
 		if addon.DebugPrint then addon.DebugPrint("searchFilterList: core match") end
 		return true
 	end
 
-	-- Check custom events via substring matching
 	for k, v in pairs(filterList.custom) do
 		if v and strfind(event, k, 1, true) then
 			if addon.DebugPrint then addon.DebugPrint("searchFilterList: custom match key="..tostring(k)) end

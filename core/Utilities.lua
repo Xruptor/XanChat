@@ -1,11 +1,11 @@
 --[[
 	Utilities.lua - Utility functions for XanChat
-	Refactored for:
-	- Simplified isSecretValue with clearer logic
-	- Consolidated redundant nil checks
-	- Improved ApplyDefaults with early exit
-	- Fixed isNotSafeStr logic (was inverted behavior)
-	- Better function organization and clarity
+	Improvements:
+	- Consolidated secret value checks
+	- Improved ApplyDefaults efficiency
+	- Simplified SafeType with inline check
+	- Better function organization
+	- Removed redundant isNotSafeStr logic
 ]]
 
 local ADDON_NAME, private = ...
@@ -28,13 +28,10 @@ end
 
 local function SafeType(v)
 	local ok, result = pcall(_G.type, v)
-	if ok then return result end
-	-- If type() failed, it's likely a secret value
-	return nil
+	return ok and result or nil
 end
 
 -- issecretvalue fails by raising an error on secret values
--- This is the safe way to test for secret values without causing errors
 local function isSecretValue(v)
 	local fn = _G.issecretvalue
 	if type(fn) ~= "function" then
@@ -42,7 +39,6 @@ local function isSecretValue(v)
 	end
 
 	local ok, res = pcall(fn, v)
-	-- If pcall fails, the value is secret
 	return not (ok and not res)
 end
 
@@ -58,9 +54,7 @@ end
 
 -- Apply default values to a target table if keys are missing
 local function ApplyDefaults(target, defaults)
-	if not target or not defaults then
-		return
-	end
+	if not target or not defaults then return end
 
 	for key, value in pairs(defaults) do
 		if target[key] == nil then
@@ -70,7 +64,6 @@ local function ApplyDefaults(target, defaults)
 end
 
 -- Check if a value is a safe, accessible string
--- Removed redundant isNotSafeStr (logic was inverted and confusing)
 local function isSafeString(v)
 	return not isSecretValue(v) and canAccessValue(v) and SafeType(v) == "string"
 end

@@ -1,10 +1,10 @@
 --[[
 	URLDetection.lua - URL detection and linking for XanChat
-	Refactored for:
+	Improvements:
 	- Simplified URL pattern registration
-	- Improved hook management with cleanup
-	- Better error handling
-	- Consolidated redundant checks
+	- Improved hook management with better cleanup
+	- Consolidated error handling
+	- Better early returns
 ]]
 
 local ADDON_NAME, private = ...
@@ -17,7 +17,6 @@ addon.L = (private and private.L) or addon.L or {}
 -- URL DETECTION AND LINKING
 -- ============================================================================
 
--- Build clickable URL link with green coloring
 local function buildUrlLink(url)
 	return " |cff99FF33|Hurl:"..url.."|h["..url.."]|h|r "
 end
@@ -66,11 +65,7 @@ local URL_PATTERNS = {
 }
 
 local function registerUrlPatterns()
-	if not addon then return end
-	if addon._urlPatternsRegistered then
-		if addon.dbg then addon.dbg("registerUrlPatterns: already registered") end
-		return
-	end
+	if not addon or addon._urlPatternsRegistered then return end
 
 	if addon.dbg then addon.dbg("registerUrlPatterns: registering "..#URL_PATTERNS.." URL patterns") end
 
@@ -81,16 +76,16 @@ local function registerUrlPatterns()
 end
 
 local function unregisterUrlPatterns()
-	if not addon then return end
-	if not addon._urlPatternsRegistered then return end
+	if not addon or not addon._urlPatternsRegistered then return end
 
 	addon.UnregisterAllPatterns("xanChat-URL")
 	addon._urlPatternsRegistered = false
 end
 
 local function installUrlCopyHook()
-	if not addon or addon._urlCopyHookInstalled then return end
-	if not _G.ItemRefTooltip or not _G.ItemRefTooltip.SetHyperlink then return end
+	if not addon or addon._urlCopyHookInstalled or not _G.ItemRefTooltip or not _G.ItemRefTooltip.SetHyperlink then
+		return
+	end
 
 	-- Create or get the static popup dialog
 	_G.StaticPopupDialogs["LINKME"] = _G.StaticPopupDialogs["LINKME"] or {
@@ -106,10 +101,7 @@ local function installUrlCopyHook()
 		maxLetters = 255,
 	}
 
-	-- Store original and hook SetHyperlink
-	if not addon._origItemRefTooltipSetHyperlink then
-		addon._origItemRefTooltipSetHyperlink = _G.ItemRefTooltip.SetHyperlink
-	end
+	addon._origItemRefTooltipSetHyperlink = addon._origItemRefTooltipSetHyperlink or _G.ItemRefTooltip.SetHyperlink
 	local originalSetHyperlink = addon._origItemRefTooltipSetHyperlink
 
 	_G.ItemRefTooltip.SetHyperlink = function(self, link, ...)

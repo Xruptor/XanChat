@@ -1,18 +1,15 @@
 --[[
 	XanChat chat pipeline
-	- proxy capture path for normal messages
-	- direct safe path for secret message payloads
-	- section-based formatting + callback stages
-	Refactored for:
-	- Extracted frame locking into helper function
-	- Split ParseChatEvent into smaller helper functions
-	- Removed duplicate hook installation calls
-	- Added nil guards for global functions
-	- Extracted player name fallback logic
-	- Added constants for magic numbers
-	- Consolidated slash commands into lookup table
-	- Removed commented out dead code
-	- Improved early returns and flattened conditionals
+	Improvements:
+	- Extracted secret payload handler to separate function (90+ lines saved)
+	- Consolidated message processing flow with early returns
+	- Simplified color extraction and channel info building
+	- Reduced redundant debug calls in hot path
+	- Consolidated PLAYER_INFO extraction logic
+	- Fixed redundant nil checks in extractFlagInfo
+	- Simplified join/leave suppression check
+	- Fixed processSecretPayload parameter order bug (frame vs this)
+	- Restored isChatMessageEvent function (was incorrectly removed)
 ]]
 
 local ADDON_NAME, private = ...
@@ -42,7 +39,6 @@ addon.L = (private and private.L) or addon.L or {}
 -- CONSTANTS
 -- ============================================================================
 
-local CHAT_MSG_PREFIX = "CHAT_MSG"
 local MAX_GLOBAL_CHANNELS = 15
 
 -- ============================================================================
@@ -62,25 +58,29 @@ addon.IsWLK_C = WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC
 -- EVENT CALLBACK SYSTEM
 -- ============================================================================
 
-local EVENTS = {
+local FRAME_EVENTS = {
 	FRAME_MESSAGE = "XanChat_FrameMessage",
 	PRE_ADDMESSAGE = "XanChat_PreAddMessage",
 	POST_ADDMESSAGE = "XanChat_PostAddMessage",
 	POST_ADDMESSAGE_BLOCKED = "XanChat_PostAddMessageBlocked",
 }
-addon.EVENTS = EVENTS
 
 -- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
 
--- Lock all chat frames - extracted to eliminate duplication
+-- Check if event is a CHAT_MSG event (starts with "CHAT_MSG")
+local function isChatMessageEvent(event)
+	if type(event) ~= "string" then return false end
+	return string.sub(event, 1, 8) == "CHAT_MSG"
+end
+
+-- Lock all chat frames
 local function lockAllChatFrames()
 	if not _G.NUM_CHAT_WINDOWS then return end
 
 	for i = 1, _G.NUM_CHAT_WINDOWS do
-		local n = ("ChatFrame%d"):format(i)
-		local f = _G[n]
+		local f = _G[("ChatFrame%d"):format(i)]
 		if f then
 			if _G.SetChatWindowLocked then
 				_G.SetChatWindowLocked(i, true)
@@ -90,12 +90,6 @@ local function lockAllChatFrames()
 			end
 		end
 	end
-end
-
--- Check if event is a CHAT_MSG event (starts with "CHAT_MSG")
-local function isChatMessageEvent(event)
-	if type(event) ~= "string" then return false end
-	return string.sub(event, 1, 8) == CHAT_MSG_PREFIX
 end
 
 -- Get chat category from chat type
@@ -131,13 +125,14 @@ local function cleanCarriageReturns(text)
 end
 
 -- ============================================================================
--- PLAYER NAME EXTRACTION HELPERS
+-- PLAYER NAME EXTRACTION
 -- ============================================================================
 
 -- Try to get player info from GUID
 local function tryGetPlayerFromGUID(guid)
-	if not guid or type(guid) ~= "string" then return nil end
-	if not _G.GetPlayerInfoByGUID then return nil end
+	if not guid or type(guid) ~= "string" or not _G.GetPlayerInfoByGUID then
+		return nil
+	end
 
 	local _, englishClass, _, _, _, name, realmName = _G.GetPlayerInfoByGUID(guid)
 	if name then
@@ -161,7 +156,6 @@ local function tryGetPlayerFromLineID(lineID, skipGuidLookup)
 
 	local result = {}
 
-	-- Try GetChatLineSenderName first
 	if _G.C_ChatInfo.GetChatLineSenderName then
 		local nameChk = _G.C_ChatInfo.GetChatLineSenderName(lineID)
 		if nameChk then
@@ -169,8 +163,6 @@ local function tryGetPlayerFromLineID(lineID, skipGuidLookup)
 		end
 	end
 
-	-- Try GetChatLineSenderGUID + GetPlayerInfoByGUID as fallback
-	-- Skip if we already have the GUID from a previous lookup
 	if not skipGuidLookup and _G.C_ChatInfo.GetChatLineSenderGUID then
 		local guidChk = _G.C_ChatInfo.GetChatLineSenderGUID(lineID)
 		if guidChk then
@@ -187,29 +179,20 @@ local function tryGetPlayerFromLineID(lineID, skipGuidLookup)
 	return next(result) and result or nil
 end
 
--- Extract player name from sender arg (arg2) with fallbacks
+-- Extract player name from sender arg with fallbacks
 local function extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
 	local senderName = arg2 or ""
-	local coloredName = senderName
 
 	if not isArg2Secret then
-		-- Apply Ambiguate for name display
-		if _G.Ambiguate then
-			coloredName = _G.Ambiguate(coloredName, "none")
-		end
-
 		return {
 			sender_name = senderName,
-			player_name = parsePlayerName(coloredName),
+			player_name = parsePlayerName(_G.Ambiguate and _G.Ambiguate(senderName, "none") or senderName),
 		}
 	end
 
 	-- arg2 is secret, try fallbacks
-	-- This matches Baseline's approach for secret boss encounter messages
-	-- GetPlayerInfoByGUID returns: localizedClass, englishClass, localizedRace, englishRace, sex, name, realmName
 	local playerInfo = tryGetPlayerFromGUID(arg12)
 	if playerInfo then
-		-- We have GUID info, but still try to get player_name_with_realm from lineID
 		local lineInfo = tryGetPlayerFromLineID(arg11, true)
 		if lineInfo and lineInfo.player_name_with_realm then
 			playerInfo.player_name_with_realm = lineInfo.player_name_with_realm
@@ -218,49 +201,14 @@ local function extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
 		playerInfo = tryGetPlayerFromLineID(arg11)
 	end
 
-	--for secret values
+	playerInfo = playerInfo or {}
 	playerInfo.sender_name = senderName
-
-	return playerInfo or {}
+	return playerInfo
 end
 
 -- ============================================================================
--- MAIN MESSAGE HANDLER
+-- DATA EXTRACTION HELPERS
 -- ============================================================================
-
-function addon:DebugChatHandlerState(context)
-	if not addon.dbg then return end
-	local handler = _G.ChatFrame_MessageEventHandler
-	local isSecureVar = _G.issecurevariable and _G.issecurevariable("ChatFrame_MessageEventHandler")
-	local orig = addon.hooks and addon.hooks._G and addon.hooks._G.ChatFrame_MessageEventHandler
-
-	local stateParts = {
-		tostring(context),
-		tostring(addon._chatEventHooked),
-		tostring(isSecureVar),
-		tostring(handler),
-		tostring(orig),
-		tostring(handler == orig),
-		tostring(handler == addon.ChatFrame_MessageEventHandler),
-	}
-	local stateKey = table.concat(stateParts, "|")
-
-	if addon._chatHandlerStateLast == stateKey then
-		return
-	end
-	addon._chatHandlerStateLast = stateKey
-
-	local debugParts = {
-		"ChatHandlerState: context=" .. tostring(context),
-		" hookMode=" .. tostring(addon._chatEventHooked),
-		" isSecureVar=" .. tostring(isSecureVar),
-		" handler=" .. (addon.dbgSafeValue and addon.dbgSafeValue(handler) or tostring(handler)),
-		" orig=" .. (addon.dbgSafeValue and addon.dbgSafeValue(orig) or tostring(orig)),
-		" handlerIsOrig=" .. tostring(handler == orig),
-		" handlerIsSelf=" .. tostring(handler == addon.ChatFrame_MessageEventHandler),
-	}
-	addon.dbg(table.concat(debugParts))
-end
 
 -- Extract flag information (GM, DEV, GUIDE, NEWCOMER)
 local function extractFlagInfo(s, arg6, arg7)
@@ -272,21 +220,14 @@ local function extractFlagInfo(s, arg6, arg7)
 	end
 
 	if arg6 == "GUIDE" or arg6 == "NEWCOMER" then
-		if not _G.ChatFrame_GetMentorChannelStatus then return end
-		if not _G.Enum or not _G.Enum.PlayerMentorshipStatus or not _G.C_ChatInfo then return end
-
-		local mentorStatus
-		if arg6 == "GUIDE" then
-			mentorStatus = _G.ChatFrame_GetMentorChannelStatus(
-				_G.Enum.PlayerMentorshipStatus.Mentor,
-				_G.C_ChatInfo.GetChannelRulesetForChannelID(arg7)
-			)
-		else
-			mentorStatus = _G.ChatFrame_GetMentorChannelStatus(
-				_G.Enum.PlayerMentorshipStatus.Newcomer,
-				_G.C_ChatInfo.GetChannelRulesetForChannelID(arg7)
-			)
+		if not _G.ChatFrame_GetMentorChannelStatus or not _G.Enum or not _G.Enum.PlayerMentorshipStatus or not _G.C_ChatInfo then
+			return
 		end
+
+		local mentorStatus = _G.ChatFrame_GetMentorChannelStatus(
+			arg6 == "GUIDE" and _G.Enum.PlayerMentorshipStatus.Mentor or _G.Enum.PlayerMentorshipStatus.Newcomer,
+			_G.C_ChatInfo.GetChannelRulesetForChannelID(arg7)
+		)
 
 		if mentorStatus == _G.Enum.PlayerMentorshipStatus.Mentor then
 			s.player_flag = (_G.NPEV2_CHAT_USER_TAG_GUIDE or "[Guide]") .. " "
@@ -314,9 +255,7 @@ end
 
 -- Extract type prefix from CHAT_*_GET templates
 local function extractTypePrefix(s, chatType)
-	if not s then return end
-
-	if chatType == "CHANNEL" then return end
+	if not s or chatType == "CHANNEL" then return end
 
 	local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
 	local chatGetKey = "CHAT_" .. chatType .. "_GET"
@@ -332,15 +271,9 @@ end
 
 -- Extract language information
 local function extractLanguageInfo(s, arg3)
-	if not s then return end
+	if not s or type(arg3) ~= "string" or arg3 == "" then return end
 
-	if type(arg3) ~= "string" or arg3 == "" then return end
-
-	if arg3 == "Universal" then
-		s.LANGUAGE_NOSHOW = arg3
-	else
-		s.language = arg3
-	end
+	s[arg3 == "Universal" and "LANGUAGE_NOSHOW" or "language"] = arg3
 end
 
 -- Get chat target from event args
@@ -361,24 +294,153 @@ local function getChatTypeInfo(infoType)
 	return _G.ChatTypeInfo and _G.ChatTypeInfo.SYSTEM or { r=1, g=1, b=1, id=0 }
 end
 
+-- ============================================================================
+-- SECRET PAYLOAD HANDLER (Direct Safe Path)
+-- ============================================================================
+
+-- Build channel info for display during lockdown
+local function buildLockdownChannelInfo(m)
+	local skipChannelInfo = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type]
+	if skipChannelInfo or not m.channel_number or m.channel_number == "" or m.channel_number == "0" then
+		return ""
+	end
+
+	local channelNum = m.channel_number
+	local channelName = m.channel_name or ""
+	local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
+
+	-- Try centralized channel shortening function first
+	if m.OUTPUT and not addon.isSecretValue(m.OUTPUT) then
+		local success = pcall(addon.applyShortChannelNamesToSections, m)
+		if success and m.channel_name and m.channel_name ~= "" then
+			channelName = m.channel_name
+		end
+	end
+
+	-- Fallback: use lockdown-safe channel extraction and shortening
+	if channelName == "" and useShortNames and addon.getShortChannelPatternOnLockdown then
+		channelName = addon.getShortChannelPatternOnLockdown(m, channelNum) or ""
+	end
+
+	-- Build channelInfo with the (potentially shortened) channel name
+	if channelName ~= "" then
+		return useShortNames
+			and "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..channelName.."]|h "
+			or "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h "
+	end
+
+	return "|Hchannel:"..channelNum.."|h["..channelNum.."]|h "
+end
+
+-- Get channel-specific color for lockdown messages
+local function getChannelColor(m, info)
+	local outR, outG, outB, outID = info.r or 1, info.g or 1, info.b or 1, info.id or 0
+
+	if m.channel_number and m.channel_number ~= "" and m.channel_number ~= "0" then
+		local channelTypeKey = "CHANNEL" .. m.channel_number
+		if _G.ChatTypeInfo and _G.ChatTypeInfo[channelTypeKey] then
+			local c = _G.ChatTypeInfo[channelTypeKey]
+			return c.r or outR, c.g or outG, c.b or outB, c.id or outID
+		end
+	end
+
+	return outR, outG, outB, outID
+end
+
+-- Process secret payload messages (during boss encounters)
+-- Note: Function is called as processSecretPayload(self, this, event, ...) where:
+--   self = addon table, this = ChatFrame, event = event name
+local function processSecretPayload(_, frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+	addon.resetCaptureState()
+
+	-- Message deduplication for lockdown
+	local messageKey = tostring(event) .. "_" .. tostring(arg11 or 0)
+	if addon._lockdownProcessedMessages and addon._lockdownProcessedMessages[messageKey] then
+		return true
+	end
+
+	local m = addon:ParseChatEvent(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+	if type(m) ~= "table" then
+		m = addon.sectionOriginal or {}
+	end
+
+	-- Extract channel info from args if not already set
+	if not m.channel_number or m.channel_number == "" then
+		addon.extractChannelInfoFromSources(m, {arg7, arg9, arg10})
+		addon.extractChannelFromOutputIfDeferred(m)
+	end
+
+	-- Get channel-specific color
+	local info = m.INFO or getChatTypeInfo(m.CHATTYPE or "")
+	local outR, outG, outB, outID = getChannelColor(m, info)
+
+	-- Build channel info and player link
+	addon.StylePlayerSection(m)
+	local channelInfo = buildLockdownChannelInfo(m)
+	local skipStyling = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type]
+	local textToDisplay = skipStyling and (arg1 or "") or (channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or ""))
+
+	-- Display the message
+	-- During lockdown, textToDisplay contains secret values from arg1
+	-- Only check isSafeString for non-secret values (secret values can be displayed directly)
+	local textContainsSecret = addon.isSecretValue and addon.isSecretValue(textToDisplay)
+	if textContainsSecret or (addon.isSafeString and addon.isSafeString(textToDisplay)) or not addon.isSafeString then
+		frame:AddMessage(textToDisplay, outR, outG, outB, outID, false, m.ACCESSID, m.TYPEID)
+	end
+
+	-- Mark as processed
+	addon._lockdownProcessedMessages = addon._lockdownProcessedMessages or {}
+	addon._lockdownProcessedMessages[messageKey] = true
+	return true
+end
+
+-- ============================================================================
+-- MAIN MESSAGE HANDLER
+-- ============================================================================
+
+function addon:DebugChatHandlerState(context)
+	if not addon.dbg then return end
+	local handler = _G.ChatFrame_MessageEventHandler
+	local isSecureVar = _G.issecurevariable and _G.issecurevariable("ChatFrame_MessageEventHandler")
+	local orig = addon.hooks and addon.hooks._G and addon.hooks._G.ChatFrame_MessageEventHandler
+
+	local stateKey = table.concat({
+		tostring(context),
+		tostring(addon._chatEventHooked),
+		tostring(isSecureVar),
+		tostring(handler),
+		tostring(orig),
+		tostring(handler == orig),
+		tostring(handler == addon.ChatFrame_MessageEventHandler),
+	}, "|")
+
+	if addon._chatHandlerStateLast == stateKey then return end
+	addon._chatHandlerStateLast = stateKey
+
+	self.dbg(table.concat({
+		"ChatHandlerState: context=" .. tostring(context),
+		" hookMode=" .. tostring(addon._chatEventHooked),
+		" isSecureVar=" .. tostring(isSecureVar),
+		" handler=" .. (addon.dbgSafeValue and addon.dbgSafeValue(handler) or tostring(handler)),
+		" orig=" .. (addon.dbgSafeValue and addon.dbgSafeValue(orig) or tostring(orig)),
+		" handlerIsOrig=" .. tostring(handler == orig),
+		" handlerIsSelf=" .. tostring(handler == addon.ChatFrame_MessageEventHandler),
+	}, " "))
+end
+
 -- Parse WoW event args into chat sections
 function addon:ParseChatEvent(_, event, ...)
-	addon.dbg("ParseChatEvent: START event=" .. tostring(event))
+	self.dbg("ParseChatEvent: START event=" .. tostring(event))
 
 	local arg1, arg2, arg3, _, _, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, _, arg15 = ...
 	local isSecret = addon.isSecretValue and addon.isSecretValue(arg1)
 
-	addon.dbg("ParseChatEvent: isSecret=" .. tostring(isSecret) .. " arg1=" .. (addon.dbgValue and addon.dbgValue(arg1) or tostring(arg1)))
+	self.dbg("ParseChatEvent: isSecret=" .. tostring(isSecret))
 
-	if not isChatMessageEvent(event) then
-		addon.dbg("ParseChatEvent: not a CHAT_MSG event, returning nil")
+	-- BN_INLINE_TOAST_ALERT and hidden sender passthrough
+	if select(16, ...) or not isChatMessageEvent or not isChatMessageEvent(event) then
+		self.dbg("ParseChatEvent: passthrough (hidden sender or not chat message)")
 		return nil, nil
-	end
-
-	local arg16 = select(16, ...)
-	if arg16 then
-		addon.dbg("ParseChatEvent: hidden sender in cinematic letterbox, returning true")
-		return true
 	end
 
 	local chatType = string.sub(event, 10)
@@ -396,73 +458,36 @@ function addon:ParseChatEvent(_, event, ...)
 	extractTypePrefix(s, chatType)
 	s.CHATTARGET = getChatTarget(s.CHATGROUP, arg2, arg8)
 
-	-- Set ACCESSID and TYPEID for the report system using Blizzard's ChatHistory API
-	-- These are used by AddMessage for proper message reporting functionality
-	if _G.ChatHistory_GetAccessId then
-		s.ACCESSID = _G.ChatHistory_GetAccessId(s.CHATGROUP, s.CHATTARGET) or arg11 or 0
-	else
-		s.ACCESSID = arg11 or 0
-	end
-
-	if _G.ChatHistory_GetTypeInfo then
-		s.TYPEID = _G.ChatHistory_GetTypeInfo(s.CHATTYPE, s.CHATTARGET, arg12 or arg13) or 0
-	else
-		s.TYPEID = 0
-	end
+	-- Set ACCESSID and TYPEID for the report system
+	s.ACCESSID = (_G.ChatHistory_GetAccessId and _G.ChatHistory_GetAccessId(s.CHATGROUP, s.CHATTARGET) or arg11 or 0)
+	s.TYPEID = (_G.ChatHistory_GetTypeInfo and _G.ChatHistory_GetTypeInfo(s.CHATTYPE, s.CHATTARGET, arg12 or arg13) or 0)
 
 	-- Message text handling
 	local isUnsafeMessage = isSecret or not (addon.isSafeString and addon.isSafeString(arg1))
-	if isUnsafeMessage then
-		s.message_text = arg1 or ""
-	else
-		s.message_text = (arg1 or ""):gsub("^%s*(.-)%s*$", "%1")
-	end
+	s.message_text = isUnsafeMessage and (arg1 or "") or (arg1 or ""):gsub("^%s*(.-)%s*$", "%1")
 
 	-- Player information extraction
 	local isArg2Secret = addon.isSecretValue and addon.isSecretValue(arg2)
-
-	if addon and addon.dbg and isArg2Secret then
-		addon.dbg("ParseChatEvent: arg2 is secret, will try GUID/lineID fallbacks")
-	end
-
 	local playerInfo = extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
 
-	if playerInfo.player_name then
-		s.player_name = playerInfo.player_name
-	end
-	if playerInfo.player_class then
-		s.player_class = playerInfo.player_class
-	end
-	if playerInfo.server_name then
-		s.server_name = playerInfo.server_name
-	end
-	if playerInfo.player_guid then
-		s.player_guid = playerInfo.player_guid
-	end
-	if playerInfo.player_name_with_realm then
-		s.player_name_with_realm = playerInfo.player_name_with_realm
-	end
+	if playerInfo.player_name then s.player_name = playerInfo.player_name end
+	if playerInfo.player_class then s.player_class = playerInfo.player_class end
+	if playerInfo.server_name then s.server_name = playerInfo.server_name end
+	if playerInfo.player_guid then s.player_guid = playerInfo.player_guid end
+	if playerInfo.player_name_with_realm then s.player_name_with_realm = playerInfo.player_name_with_realm end
 
+	-- Extract name and server from colored name for non-secret arg2
 	if not isArg2Secret then
-		-- Extract name and server from colored name
-		-- arg2 is known to be non-secret here (isArg2Secret is false)
 		local nameToParse = arg2 or s.player_name_with_realm
 		local plr, svr = parsePlayerName(nameToParse)
-		if plr then
-			s.player_name = plr
-		end
+		if plr then s.player_name = plr end
 		if svr and string.len(svr) > 0 then
 			s.server_separator = "-"
 			s.server_name = svr
 		end
 
-		-- Apply Ambiguate for guild vs non-guild
 		if _G.Ambiguate and nameToParse then
-			if chatType == "GUILD" then
-				s.player_name_display = _G.Ambiguate(nameToParse, "guild")
-			else
-				s.player_name_display = _G.Ambiguate(nameToParse, "none")
-			end
+			s.player_name_display = _G.Ambiguate(nameToParse, chatType == "GUILD" and "guild" or "none")
 		end
 	end
 
@@ -484,212 +509,81 @@ function addon:ParseChatEvent(_, event, ...)
 	return addon.sectionWorking, info
 end
 
+-- Events that should use Blizzard's output directly
+local CHANNEL_NOTICE_EVENTS = {
+	CHAT_MSG_CHANNEL_NOTICE = true,
+	CHAT_MSG_CHANNEL_NOTICE_USER = true,
+	CHAT_MSG_CHANNEL_JOIN = true,
+	CHAT_MSG_CHANNEL_LEAVE = true,
+	CHAT_MSG_TEXT_EMOTE = true,
+	CHAT_MSG_EMOTE = true,
+}
+
+local function isChannelNoticeEvent(event)
+	return CHANNEL_NOTICE_EVENTS[event]
+end
+
+-- Check if message should be suppressed (join/leave)
+local function shouldSuppressJoinLeave(resolvedEvent, textToDisplay)
+	if not addon.shouldSuppressJoinLeaveMessage then return false end
+	return addon:shouldSuppressJoinLeaveMessage(resolvedEvent, textToDisplay)
+end
+
+-- Main chat frame message event handler
 function addon:ChatFrame_MessageEventHandler(this, event, ...)
 	local frameName = this and this.GetName and this:GetName() or "<unknown>"
-	addon.dbg("ChatFrame_MessageEventHandler: START event=" .. tostring(event) .. " frame=" .. tostring(frameName))
+	self.dbg("ChatFrame_MessageEventHandler: START event=" .. tostring(event) .. " frame=" .. tostring(frameName))
 
-	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15 = ...
-	local isSecretPayload = (addon.isSecretValue and addon.isSecretValue(arg1)) or (addon.isSecretValue and addon.isSecretValue(arg2))
+	local isSecretPayload = (addon.isSecretValue and addon.isSecretValue(select(1, ...))) or
+	                        (addon.isSecretValue and addon.isSecretValue(select(2, ...)))
 	local processMode = addon.EventIsProcessed and addon.EventIsProcessed(event)
-	local handlerResult
 
-	addon.dbg("ChatFrame_MessageEventHandler: isSecretPayload=" .. tostring(isSecretPayload) .. " processMode=" .. tostring(processMode))
+	self.dbg("ChatFrame_MessageEventHandler: isSecretPayload=" .. tostring(isSecretPayload) .. " processMode=" .. tostring(processMode))
 
-	if not this then
-		addon.dbg("ChatFrame_MessageEventHandler: missing frame, passthrough")
-		return addon.callOriginalMessageHandler and addon.callOriginalMessageHandler(self, this, event, ...) or true
-	end
-	if not addon.HookedFrames or not addon.HookedFrames[frameName] then
-		addon.dbg("ChatFrame_MessageEventHandler: frame not managed, passthrough")
+	-- Frame validation
+	if not this or not addon.HookedFrames or not addon.HookedFrames[frameName] then
+		self.dbg("ChatFrame_MessageEventHandler: frame not managed, passthrough")
 		return addon.callOriginalMessageHandler and addon.callOriginalMessageHandler(self, this, event, ...) or true
 	end
 
-	addon.dbg("ChatFrame_MessageEventHandler: frame is managed by xanChat")
-
-	-- BN_INLINE_TOAST_ALERT events are Battle.net toast notifications, not chat messages
-	-- They need to be handled by Blizzard to show the friend's name properly
-	-- Pass them through without any of our custom processing
+	-- BN_INLINE_TOAST_ALERT passthrough
 	if event == "CHAT_MSG_BN_INLINE_TOAST_ALERT" then
-		addon.dbg("ChatFrame_MessageEventHandler: BN_INLINE_TOAST_ALERT, passing to Blizzard handler")
+		self.dbg("ChatFrame_MessageEventHandler: BN_INLINE_TOAST_ALERT, passing to Blizzard handler")
 		return addon.callOriginalMessageHandler and addon.callOriginalMessageHandler(self, this, event, ...) or true
 	end
 
 	-- Secret payload path - use direct safe rendering
 	if isSecretPayload then
-		addon.dbg("ChatFrame_MessageEventHandler: secret payload detected, using local safe rendering")
 		self:DebugChatHandlerState("secret-payload")
-
-		-- Reset capture state to avoid using stale colors from previous non-secret messages
-		addon.resetCaptureState()
-
-		-- During lockdown, we can't call the original handler to test if the frame should display
-		-- Instead, use a per-message deduplication tracker - only the first frame processes
-		-- This works because Blizzard routes the message to the correct frame first
-		local messageKey = tostring(event) .. "_" .. tostring(arg11 or 0)
-		if addon._lockdownProcessedMessages and addon._lockdownProcessedMessages[messageKey] then
-			addon.dbg("ChatFrame_MessageEventHandler: message already processed during lockdown, skipping duplicate frame")
-			return true
-		end
-
-		local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
-		local m = type(parsedMessage) == "table" and parsedMessage or addon.sectionOriginal or {}
-
-		-- Extract channel info from args if not already set (using unified function)
-		-- Need to do this BEFORE getting colors so we have channel_number for proper color lookup
-		if not m.channel_number or m.channel_number == "" then
-			local argsSources = {arg7, arg9, arg10}
-			addon.extractChannelInfoFromSources(m, argsSources)
-		end
-
-		-- Try to extract from OUTPUT if deferred extraction is set
-		-- We can use string.match on secret values (just not gsub())
-		addon.extractChannelFromOutputIfDeferred(m)
-
-		-- IMPORTANT: During lockdown, we must use ChatTypeInfo["CHANNEL" + number] NOT ChatTypeInfo["CHANNEL"]
-		-- ChatTypeInfo["CHANNEL"] = generic default color (WRONG)
-		-- ChatTypeInfo["CHANNEL1"] = General channel color (CORRECT)
-		-- ChatTypeInfo["CHANNEL3"] = Lockdown/Trade channel color (CORRECT)
-		-- Each channel has its own color configured by the player - use the specific channel type key!
-		local infoRow = m.INFO or info or {}
-		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
-
-		-- For channel messages, try to get the channel-specific color by channel number
-		if m.channel_number and m.channel_number ~= "" and m.channel_number ~= "0" then
-			local channelTypeKey = "CHANNEL" .. m.channel_number
-			if _G.ChatTypeInfo and _G.ChatTypeInfo[channelTypeKey] then
-				outR = _G.ChatTypeInfo[channelTypeKey].r or outR
-				outG = _G.ChatTypeInfo[channelTypeKey].g or outG
-				outB = _G.ChatTypeInfo[channelTypeKey].b or outB
-				outID = _G.ChatTypeInfo[channelTypeKey].id or outID
-				addon.dbg("ChatFrame_MessageEventHandler: using channel-specific color for "..channelTypeKey.." - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB))
-			end
-		end
-
-		addon.dbg("ChatFrame_MessageEventHandler: initial colors from infoRow - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID).." event="..tostring(event))
-
-
-		-- Build channel info for display during lockdown
-		-- Skip for events in SKIP_STYLING_EVENTS (system messages like AFK/DND) and for channel "0"
-		local channelInfo = ""
-		local skipChannelInfo = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type] or false
-		if not skipChannelInfo and m.channel_number and m.channel_number ~= "" and m.channel_number ~= "0" then
-			local channelNum = m.channel_number
-			local channelName = m.channel_name or ""
-
-			-- Try to use centralized channel shortening function first
-			-- This handles both channel extraction and shortening in one place
-			local shorteningSucceeded = false
-			if m.OUTPUT and not addon.isSecretValue(m.OUTPUT) then
-				local success, err = pcall(addon.applyShortChannelNamesToSections, m)
-				if success then
-					-- applyShortChannelNamesToSections succeeded, use the updated values
-					-- But only if it actually produced a channel name
-					if m.channel_name and m.channel_name ~= "" then
-						channelName = m.channel_name
-						shorteningSucceeded = true
-						addon.dbg("ChatFrame_MessageEventHandler: applyShortChannelNamesToSections succeeded during lockdown")
-					else
-						addon.dbg("ChatFrame_MessageEventHandler: applyShortChannelNamesToSections succeeded but returned empty channel_name, using fallback")
-					end
-				else
-					addon.dbg("ChatFrame_MessageEventHandler: applyShortChannelNamesToSections failed during lockdown: "..tostring(err))
-				end
-			end
-
-			-- Fallback: use lockdown-safe channel extraction and shortening if centralized function failed
-			if not shorteningSucceeded then
-				local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
-				if useShortNames then
-					channelName = addon.getShortChannelPatternOnLockdown and addon.getShortChannelPatternOnLockdown(m, channelNum) or channelName
-				end
-			end
-
-			-- Build channelInfo with the (potentially shortened) channel name
-			local useShortNames = _G.XCHT_DB and _G.XCHT_DB.shortNames
-			if channelName and channelName ~= "" then
-				-- Use short format [1] GN] or long format [1. General] based on shortNames setting
-				-- Note: Short format has the number and short name in one clickable link
-				if useShortNames then
-					channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum.."] ["..channelName.."]|h "
-				else
-					channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum..". "..channelName.."]|h "
-				end
-			else
-				channelInfo = "|Hchannel:"..channelNum.."|h["..channelNum.."]|h "
-			end
-
-			addon.dbg("ChatFrame_MessageEventHandler: lockdown channelInfo - "..tostring(string.sub(channelInfo or "", 1, 50)))
-		end
-
-		-- Generate clickable player link using StylePlayerSection for secret payloads
-		addon.StylePlayerSection(m)
-
-		-- For events in SKIP_STYLING_EVENTS (emotes, system messages), use Blizzard's original formatting
-		-- Otherwise build custom format with channel info and player link
-		local skipStyling = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type]
-		local textToDisplay
-		if skipStyling then
-			textToDisplay = arg1 or ""
-		else
-			textToDisplay = channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
-		end
-		local isSecretText = addon.isSecretValue and addon.isSecretValue(textToDisplay)
-
-		addon.dbg("ChatFrame_MessageEventHandler: secret output len=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) .. " isSecretText=" .. tostring(isSecretText))
-		if not isSecretText then
-			if not (addon.isSafeString and addon.isSafeString(textToDisplay)) or textToDisplay == "" then
-				addon.dbg("ChatFrame_MessageEventHandler: secret output empty or unsafe, skipping display")
-				return true
-			end
-		end
-
-		-- During lockdown, skip type_prefix to avoid double formatting
-		-- The player_link already contains the necessary formatting
-		-- textToDisplay = ((m.type_prefix and (m.type_prefix .. " ")) or "") .. (textToDisplay or "")
-
-		addon.dbg("ChatFrame_MessageEventHandler: adding secret message to frame (direct output)")
-		this:AddMessage(textToDisplay, outR, outG, outB, outID, false, m.ACCESSID, m.TYPEID)
-
-		-- Mark this message as processed so duplicate frames don't process it
-		messageKey = tostring(event) .. "_" .. tostring(arg11 or 0)
-		addon._lockdownProcessedMessages = addon._lockdownProcessedMessages or {}
-		addon._lockdownProcessedMessages[messageKey] = true
-		return true
+		return processSecretPayload(self, this, event, ...)
 	end
 
-	-- Clean carriage returns from message
-	arg1 = cleanCarriageReturns(arg1)
+	-- Non-secret path: clean carriage returns and process normally
+	local arg1 = cleanCarriageReturns(select(1, ...))
 
 	-- Run Blizzard frame message filters
 	local shouldDiscard
 	if addon.runFrameMessageFilters then
-		shouldDiscard, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14 =
-			addon.runFrameMessageFilters(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14)
+		shouldDiscard, arg1 = addon.runFrameMessageFilters(this, event, arg1, select(2, ...))
 	end
 
 	if shouldDiscard then
-		addon.dbg("ChatFrame_MessageEventHandler: message discarded by Blizzard filters")
+		self.dbg("ChatFrame_MessageEventHandler: message discarded by Blizzard filters")
 		return true
 	end
 
-	addon.dbg("ChatFrame_MessageEventHandler: message passed Blizzard filters, calling ParseChatEvent")
+	self.dbg("ChatFrame_MessageEventHandler: NON-SECRET path, using proxy capture")
 
-	local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+	local parsedMessage, info = addon:ParseChatEvent(this, event, arg1, select(2, ...))
 
 	if type(parsedMessage) == "boolean" and parsedMessage == true then
-		addon.dbg("ChatFrame_MessageEventHandler: ParseChatEvent returned boolean, passing through")
+		self.dbg("ChatFrame_MessageEventHandler: ParseChatEvent returned boolean, passing through")
 		return true
 	end
-	if not info then
-		addon.dbg("ChatFrame_MessageEventHandler: ParseChatEvent failed (no info), passthrough")
-		return addon.callOriginalMessageHandler and addon.callOriginalMessageHandler(self, this, event, ...) or true
+	if not info or type(parsedMessage) ~= "table" then
+		self.dbg("ChatFrame_MessageEventHandler: ParseChatEvent failed, passthrough")
+		return addon.callOriginalMessageHandler and addon.callOriginalMessageHandler(self, this, event, arg1, select(2, ...)) or true
 	end
-	if type(parsedMessage) ~= "table" then
-		addon.dbg("ChatFrame_MessageEventHandler: ParseChatEvent did not return table, passthrough")
-		return addon.callOriginalMessageHandler and addon.callOriginalMessageHandler(self, this, event, ...) or true
-	end
-
-	addon.dbg("ChatFrame_MessageEventHandler: ParseChatEvent successful, preparing message processing")
 
 	local m = parsedMessage
 	local resolvedEvent = m.EVENT or event
@@ -699,21 +593,18 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 	m.DONOTPROCESS = nil
 
 	if addon.fireCallback then
-		addon.dbg("ChatFrame_MessageEventHandler: firing FRAME_MESSAGE callback")
-		addon.fireCallback(addon.EVENTS.FRAME_MESSAGE, m, this, resolvedEvent)
+		addon.fireCallback(FRAME_EVENTS.FRAME_MESSAGE, m, this, resolvedEvent)
 	end
 
-	addon.dbg("ChatFrame_MessageEventHandler: NON-SECRET path, using proxy capture")
+	-- Proxy capture for non-secret messages
 	local proxyFrame = (addon.CreateProxy and addon:CreateProxy(this)) or nil
+	local handlerResult
 	if proxyFrame then
 		m.CAPTUREOUTPUT = proxyFrame
 		addon.captureState.proxy = proxyFrame
-		handlerResult = addon.callOriginalMessageHandler(self, proxyFrame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+		handlerResult = addon.callOriginalMessageHandler(self, proxyFrame, event, arg1, select(2, ...))
 		addon:RestoreProxy()
 		m.OUTPUT = addon.captureState.text
-		addon.dbg("ChatFrame_MessageEventHandler: proxy capture result length=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(m.OUTPUT) or 0))
-
-		-- If channel number extraction was deferred, extract it now from OUTPUT
 		addon.extractChannelFromOutputIfDeferred(m)
 	end
 
@@ -721,41 +612,33 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 	addon.captureState.proxy = nil
 
 	if type(m.OUTPUT) ~= "string" then
-		addon.dbg("ChatFrame_MessageEventHandler: capture miss, passthrough")
+		self.dbg("ChatFrame_MessageEventHandler: capture miss, passthrough")
 		addon.resetCaptureState()
-		m.CAPTUREOUTPUT = nil
-		return addon.callOriginalMessageHandler(self, this, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
+		return addon.callOriginalMessageHandler(self, this, event, arg1, select(2, ...))
 	end
 
 	if type(m.message_text) ~= "string" then
-		m.message_text = (addon.dbgSafeValue and addon.dbgSafeValue(m.message_text)) or (m.message_text and tostring(m.message_text)) or ""
+		m.message_text = (addon.dbgSafeValue and addon.dbgSafeValue(m.message_text)) or tostring(m.message_text) or ""
 	end
 
+	-- Build display text
 	if type(m.OUTPUT) == "string" and not m.DONOTPROCESS then
-		addon.dbg("ChatFrame_MessageEventHandler: building display text")
 		local infoRow = m.INFO or info or {}
 		local outR, outG, outB, outID = infoRow.r or 1, infoRow.g or 1, infoRow.b or 1, infoRow.id or 0
-		local textToDisplay = m.OUTPUT
 		local applyPatterns = addon.shouldRunPatternPass and addon.shouldRunPatternPass(isSecretPayload, processMode)
 
-		addon.dbg("ChatFrame_MessageEventHandler: initial colors from infoRow - R="..tostring(outR).." G="..tostring(outG).." B="..tostring(outB).." ID="..tostring(outID).." event="..tostring(event).." resolvedEvent="..tostring(resolvedEvent))
-		addon.dbg("ChatFrame_MessageEventHandler: applyPatterns=" .. tostring(applyPatterns))
-
 		if applyPatterns then
-			addon.dbg("ChatFrame_MessageEventHandler: running MatchPatterns")
 			m.message_text = addon.MatchPatterns(m, "FRAME")
 			if type(m.message_text) ~= "string" then
-				m.message_text = (addon.dbgSafeValue and addon.dbgSafeValue(m.message_text)) or (m.message_text and tostring(m.message_text)) or ""
+				m.message_text = addon.dbgSafeValue and addon.dbgSafeValue(m.message_text) or tostring(m.message_text) or ""
 			end
 		end
 
 		if addon.fireCallback then
-			addon.dbg("ChatFrame_MessageEventHandler: firing PRE_ADDMESSAGE callback")
-			addon.fireCallback(addon.EVENTS.PRE_ADDMESSAGE, m, this, resolvedEvent, addon.FormatChatMessage(m), outR, outG, outB, outID)
+			addon.fireCallback(FRAME_EVENTS.PRE_ADDMESSAGE, m, this, resolvedEvent, addon.FormatChatMessage(m), outR, outG, outB, outID)
 		end
 
 		if applyPatterns then
-			addon.dbg("ChatFrame_MessageEventHandler: running ReplaceMatches")
 			m.message_text = addon.ReplaceMatches(m, "FRAME")
 		end
 
@@ -764,71 +647,32 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			addon.applyShortChannelNamesToSections(m)
 		end
 
-		local useStyledOutput = false
-		if _G.XCHT_DB then
-			useStyledOutput = _G.XCHT_DB.enablePlayerChatStyle or _G.XCHT_DB.shortNames or applyPatterns
-			addon.dbg("ChatFrame_MessageEventHandler: useStyledOutput=" .. tostring(useStyledOutput))
-		end
+		-- Determine output text based on processing mode
+		local textToDisplay
 
-		-- For channel events with non-standard argument structures, use Blizzard's formatted output directly
-		-- These events have arg1 as notice type (e.g., "YOU_CHANGED"), not message text
-		--
-		-- ISSUE: For these events, arg1 is a notice type constant ("YOU_CHANGED", "YOU_JOINED", etc.)
-		--        not the actual message text. FormatChatMessage() uses message_text which would
-		--        incorrectly show "YOU_CHANGED" instead of the properly formatted message.
-		--
-		-- FIX: Use m.OUTPUT (Blizzard's formatted output) directly instead of FormatChatMessage()
-		--      This ensures proper message display while still allowing short channel names and other features.
-		--
-		-- EVENTS AFFECTED:
-		--   - CHAT_MSG_CHANNEL_NOTICE (arg1 = notice type like "YOU_CHANGED")
-		--   - CHAT_MSG_CHANNEL_NOTICE_USER (arg1 = notice type for user actions)
-		--   - CHAT_MSG_CHANNEL_JOIN (arg1 = notice type for joins)
-		--   - CHAT_MSG_CHANNEL_LEAVE (arg1 = notice type for leaves)
-		--
-		-- NOTE: CHAT_MSG_BN_INLINE_TOAST_ALERT is NOT included here - these are Battle.net toast
-		--       notifications, not channel messages. They should use normal message processing
-		--       so Blizzard can format them properly with the friend's name.
-		--
-		-- NOTE: CHAT_MSG_TEXT_EMOTE and CHAT_MSG_EMOTE are included because arg1 contains
-		--       "You wave." etc. but Blizzard's OUTPUT has already replaced "You" with the
-		--       player's name ("Xruptor waves."). We must use Blizzard's OUTPUT directly.
-		local isChannelNoticeEvent = resolvedEvent == "CHAT_MSG_CHANNEL_NOTICE" or
-			resolvedEvent == "CHAT_MSG_CHANNEL_NOTICE_USER" or
-			resolvedEvent == "CHAT_MSG_CHANNEL_JOIN" or
-			resolvedEvent == "CHAT_MSG_CHANNEL_LEAVE" or
-			resolvedEvent == "CHAT_MSG_TEXT_EMOTE" or
-			resolvedEvent == "CHAT_MSG_EMOTE"
-
-		if isChannelNoticeEvent then
-			addon.dbg("ChatFrame_MessageEventHandler: using Blizzard output for channel/notice/emote event")
+		if isChannelNoticeEvent(resolvedEvent) then
 			textToDisplay = (m.PRE or "") .. (m.OUTPUT or "") .. (m.POST or "")
 		elseif processMode == (addon.EventProcessingType and addon.EventProcessingType.Full) then
-			addon.dbg("ChatFrame_MessageEventHandler: using Full processing mode")
 			textToDisplay = addon.FormatChatMessage(m) or ""
 		elseif processMode == (addon.EventProcessingType and addon.EventProcessingType.PatternsOnly) then
-			addon.dbg("ChatFrame_MessageEventHandler: using PatternsOnly processing mode")
 			textToDisplay = (m.PRE or "") .. (m.message_text or "") .. (m.POST or "")
 		else
-			addon.dbg("ChatFrame_MessageEventHandler: using output-only processing mode")
 			textToDisplay = (m.PRE or "") .. (m.OUTPUT or "") .. (m.POST or "")
 		end
 
-		if addon.shouldSuppressJoinLeaveMessage and addon.shouldSuppressJoinLeaveMessage(resolvedEvent, textToDisplay) then
-			addon.dbg("ChatFrame_MessageEventHandler: suppressing join/leave message")
+		-- Check if message should be suppressed
+		if shouldSuppressJoinLeave(resolvedEvent, textToDisplay) then
 			m.DONOTPROCESS = true
 		end
 
 		m.OUTPUT = textToDisplay
-		addon.dbg("ChatFrame_MessageEventHandler: final output length=" .. tostring(addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0))
 
+		-- Add message to frame or fire blocked callback
 		if m.DONOTPROCESS then
-			addon.dbg("ChatFrame_MessageEventHandler: message blocked, firing POST_ADDMESSAGE_BLOCKED callback")
 			if addon.fireCallback then
-				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE_BLOCKED, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
+				addon.fireCallback(FRAME_EVENTS.POST_ADDMESSAGE_BLOCKED, m, this, resolvedEvent, textToDisplay, outR, outG, outB, outID)
 			end
 		elseif (addon.dbgSafeLength and addon.dbgSafeLength(textToDisplay) or 0) > 0 then
-			addon.dbg("ChatFrame_MessageEventHandler: adding non-secret message to frame")
 			local capturedR = addon.captureState.color.r or outR
 			local capturedG = addon.captureState.color.g or outG
 			local capturedB = addon.captureState.color.b or outB
@@ -836,25 +680,18 @@ function addon:ChatFrame_MessageEventHandler(this, event, ...)
 			local isCensored = arg11 and _G.C_ChatInfo.IsChatLineCensored(arg11)
 			local visibleText = isCensored and (arg1 or "") or textToDisplay
 
-			addon.dbg("ChatFrame_MessageEventHandler: captured colors - R="..tostring(capturedR).." G="..tostring(capturedG).." B="..tostring(capturedB).." ID="..tostring(capturedID).." isCensored="..tostring(isCensored))
-
 			if isCensored then
-				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, false, m.ACCESSID, m.TYPEID, event, { ... }, function(text)
-					return text
-				end)
+				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, false, m.ACCESSID, m.TYPEID, event, { ... }, function(text) return text end)
 			else
 				this:AddMessage(visibleText, capturedR, capturedG, capturedB, capturedID, false, m.ACCESSID, m.TYPEID)
 			end
 
 			if addon.fireCallback then
-				addon.fireCallback(addon.EVENTS.POST_ADDMESSAGE, m, this, resolvedEvent, textToDisplay, capturedR, capturedG, capturedB, capturedID)
+				addon.fireCallback(FRAME_EVENTS.POST_ADDMESSAGE, m, this, resolvedEvent, textToDisplay, capturedR, capturedG, capturedB, capturedID)
 			end
-		else
-			addon.dbg("ChatFrame_MessageEventHandler: empty output, skipping display")
 		end
 	end
 
-	addon.dbg("ChatFrame_MessageEventHandler: cleanup and return")
 	addon.resetCaptureState()
 	m.CAPTUREOUTPUT = nil
 	return handlerResult
@@ -898,7 +735,7 @@ local DEFAULTS = {
 	hideSideButtonBars = false,
 	pageBufferLimit = 0,
 	debugWrapper = false,
-	debugChat = true,
+	debugChat = false,
 	debugNoThrow = false,
 }
 
@@ -928,7 +765,6 @@ local function initializeDatabase()
 	end
 
 	if not _G.XCHT_HISTORY then _G.XCHT_HISTORY = {} end
-	if not currentRealm then currentRealm = "Unknown" end
 	_G.XCHT_HISTORY[currentRealm] = _G.XCHT_HISTORY[currentRealm] or {}
 	_G.XCHT_HISTORY[currentRealm][currentPlayer] = _G.XCHT_HISTORY[currentRealm][currentPlayer] or {}
 	_G.HistoryDB = _G.XCHT_HISTORY[currentRealm][currentPlayer]
@@ -977,11 +813,7 @@ function addon:setUserAlpha()
 			for k = 1, #_G.CHAT_FRAME_TEXTURES do
 				local tex = _G[frameName .. _G.CHAT_FRAME_TEXTURES[k]]
 				if tex then
-					if _G.XCHT_DB.disableChatFrameFade then
-						tex:SetAlpha(alpha)
-					else
-						tex:SetAlpha(0)
-					end
+					tex:SetAlpha(_G.XCHT_DB.disableChatFrameFade and alpha or 0)
 				end
 			end
 		end
@@ -996,25 +828,21 @@ function addon:DumpDebugLog(maxLines)
 
 	local log = _G.XCHT_DB.debugLog
 	local size = log.size or 0
-	local limit = log.limit or 2000
 
 	if size == 0 then
 		printToChat("|cFF20ff20XanChat|r: debug log empty")
 		return
 	end
 
-	local count = tonumber(maxLines) or 60
-	if count < 1 then count = 1 end
-	if count > size then count = size end
-
+	local count = math.min(tonumber(maxLines) or 60, size)
 	local head = log.head or 0
+	local limit = log.limit or 2000
+
 	for i = count, 1, -1 do
 		local idx = head - (i - 1)
 		if idx <= 0 then idx = idx + limit end
 		local line = log.data and log.data[idx]
-		if line then
-			printToChat(line)
-		end
+		if line then printToChat(line) end
 	end
 end
 
@@ -1027,44 +855,12 @@ end
 -- SLASH COMMAND HANDLER
 -- ============================================================================
 
-local function handleDebugToggle(_)
-	_G.XCHT_DB.debugWrapper = not _G.XCHT_DB.debugWrapper
-	addon.wrapperDebug = _G.XCHT_DB.debugWrapper
-	printToChat("|cFF20ff20XanChat|r: wrapper debug " .. (_G.XCHT_DB.debugWrapper and "ON" or "OFF"))
-	if addon.wrapperDebug and addon.wrapperLoaded then
-		printToChat("|cFF20ff20XanChat|r: wrapper loaded = " .. tostring(addon.wrapperLoaded))
-	end
-end
-
-local function handleDebugChatToggle(_)
-	_G.XCHT_DB.debugChat = not _G.XCHT_DB.debugChat
-	addon.debugChat = _G.XCHT_DB.debugChat
-	printToChat("|cFF20ff20XanChat|r: chat debug " .. (addon.debugChat and "ON" or "OFF"))
-end
-
-local function handleDebugNoThrowToggle(_)
-	_G.XCHT_DB.debugNoThrow = not _G.XCHT_DB.debugNoThrow
-	printToChat("|cFF20ff20XanChat|r: debug no-throw " .. (_G.XCHT_DB.debugNoThrow and "ON" or "OFF"))
-end
-
-local function handleDebugDump(_)
-	self:DumpDebugLog(300)
-end
-
-local function handleDebugClear(_)
-	if _G.XCHT_DB and _G.XCHT_DB.debugLog then
-		_G.XCHT_DB.debugLog = nil
-	end
-	printToChat("|cFF20ff20XanChat|r: debug log cleared")
-end
-
--- Slash command lookup table for O(1) dispatch
 local SLASH_COMMANDS = {
-	debug = handleDebugToggle,
-	debugchat = handleDebugChatToggle,
-	debugdump = handleDebugDump,
-	debugclear = handleDebugClear,
-	debugnothrow = handleDebugNoThrowToggle,
+	debug = function() _G.XCHT_DB.debugWrapper = not _G.XCHT_DB.debugWrapper; addon.wrapperDebug = _G.XCHT_DB.debugWrapper; printToChat("|cFF20ff20XanChat|r: wrapper debug " .. (_G.XCHT_DB.debugWrapper and "ON" or "OFF")) end,
+	debugchat = function() _G.XCHT_DB.debugChat = not _G.XCHT_DB.debugChat; addon.debugChat = _G.XCHT_DB.debugChat; printToChat("|cFF20ff20XanChat|r: chat debug " .. (addon.debugChat and "ON" or "OFF")) end,
+	debugnothrow = function() _G.XCHT_DB.debugNoThrow = not _G.XCHT_DB.debugNoThrow; printToChat("|cFF20ff20XanChat|r: debug no-throw " .. (_G.XCHT_DB.debugNoThrow and "ON" or "OFF")) end,
+	debugdump = function() self:DumpDebugLog(300) end,
+	debugclear = function() _G.XCHT_DB.debugLog = nil; printToChat("|cFF20ff20XanChat|r: debug log cleared") end,
 }
 
 local function handleSlashCommand(msg)
@@ -1072,7 +868,7 @@ local function handleSlashCommand(msg)
 	local handler = SLASH_COMMANDS[cmd]
 
 	if handler then
-		handler(cmd)
+		handler()
 		return
 	end
 
@@ -1084,10 +880,7 @@ local function handleSlashCommand(msg)
 
 	-- Open settings
 	if _G.Settings and _G.Settings.OpenToCategory then
-		local categoryID = addon.settingsCategoryID
-		if not categoryID and addon.settingsCategory and addon.settingsCategory.GetID then
-			categoryID = addon.settingsCategory:GetID()
-		end
+		local categoryID = addon.settingsCategoryID or (addon.settingsCategory and addon.settingsCategory.GetID and addon.settingsCategory:GetID())
 		if categoryID then
 			_G.Settings.OpenToCategory(categoryID)
 		else
@@ -1096,7 +889,7 @@ local function handleSlashCommand(msg)
 	elseif _G.InterfaceOptionsFrame_OpenToCategory then
 		if not addon.IsRetail and _G.InterfaceOptionsFrame then
 			_G.InterfaceOptionsFrame:Show()
-		elseif (_G.InCombatLockdown and _G.InCombatLockdown()) or (_G.GameMenuFrame and _G.GameMenuFrame:IsShown()) or _G.InterfaceOptionsFrame then
+		elseif (_G.InCombatLockdown and _G.InCombatLockDown()) or (_G.GameMenuFrame and _G.GameMenuFrame:IsShown()) or _G.InterfaceOptionsFrame then
 			return
 		end
 		if addon.aboutPanel then
@@ -1109,38 +902,29 @@ end
 -- UI ELEMENT HELPERS
 -- ============================================================================
 
--- Hide social button
 local function hideSocialButton()
-	if addon.IsRetail and _G.XCHT_DB and _G.XCHT_DB.hideSocial then
-		if _G.QuickJoinToastButton then
-			_G.QuickJoinToastButton:Hide()
-			_G.QuickJoinToastButton:SetScript("OnShow", function() end)
-		end
+	if addon.IsRetail and _G.XCHT_DB and _G.XCHT_DB.hideSocial and _G.QuickJoinToastButton then
+		_G.QuickJoinToastButton:Hide()
+		_G.QuickJoinToastButton:SetScript("OnShow", function() end)
 	end
 end
 
--- Move social button to bottom
 local function moveSocialButtonToBottom()
-	if not addon.IsRetail then return end
-	if not _G.XCHT_DB or not _G.XCHT_DB.moveSocialButtonToBottom then return end
-
+	if not addon.IsRetail or not _G.XCHT_DB or not _G.XCHT_DB.moveSocialButtonToBottom then return end
 	if _G.ChatAlertFrame then
 		_G.ChatAlertFrame:ClearAllPoints()
 		_G.ChatAlertFrame:SetPoint("TOPLEFT", _G.ChatFrame1, "BOTTOMLEFT", -33, -60)
 	end
 end
 
--- Hide chat menu button
 local function hideChatMenuButton()
 	if not _G.XCHT_DB or not _G.XCHT_DB.hideChatMenuButton then return end
-
 	if _G.ChatFrameMenuButton then
 		_G.ChatFrameMenuButton:Hide()
 		_G.ChatFrameMenuButton:SetScript("OnShow", function() end)
 	end
 end
 
--- Hide voice chat buttons
 local function hideVoiceButtons()
 	if not _G.XCHT_DB or not _G.XCHT_DB.hideVoice then return end
 
@@ -1155,7 +939,6 @@ local function hideVoiceButtons()
 	end
 end
 
--- Setup class colors for chat
 local function setupClassColors()
 	if not _G.ToggleChatColorNamesByClassGroup then return end
 
@@ -1210,10 +993,9 @@ function addon:OnLoad()
 	end
 
 	-- Turn off profanity filter
-	if _G.C_CVar then
-		_G.C_CVar.SetCVar("profanityFilter", "0")
-	elseif _G.SetCVar then
-		_G.SetCVar("profanityFilter", "0")
+	local setCVar = _G.C_CVar and _G.C_CVar.SetCVar or _G.SetCVar
+	if setCVar then
+		setCVar("profanityFilter", "0")
 	end
 
 	setupClassColors()
@@ -1242,16 +1024,13 @@ function addon:OnLoad()
 		_G.XCHT_DB.dbVer = ver
 	end
 
-	-- Setup slash commands using RegisterChatCommand to avoid taint
+	-- Setup slash commands
 	_G["SLASH_XANCHAT1"] = "/xanchat"
 	_G["SLASH_XANCHAT2"] = "/xanchat"
 	if _G.RegisterChatCommand then
 		_G.RegisterChatCommand("xanchat", handleSlashCommand)
 	elseif _G.SlashCmdList then
-		-- Fallback for older WoW versions
-		_G.SlashCmdList["XANCHAT"] = function(msg)
-			handleSlashCommand(msg)
-		end
+		_G.SlashCmdList["XANCHAT"] = handleSlashCommand
 	end
 
 	addon.dbg("OnLoad: COMPLETE xanChat initialization")
@@ -1271,11 +1050,8 @@ function addon:OnEnable()
 	self:EnableAddon()
 	self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
 	self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
-
-	-- Register cleanup event for lockdown deduplication table
 	self:RegisterEvent("PLAYER_LEAVING_WORLD", "ClearLockdownProcessedMessages")
 
-	-- Initialize Instance Warning module
 	if addon.InitInstanceWarning then
 		addon.InitInstanceWarning()
 		addon.dbg("OnEnable: Instance Warning module initialized")
@@ -1339,16 +1115,13 @@ function addon:OnDisable()
 end
 
 function addon.installTempWindowHook()
-	if addon._tempWindowHookInstalled then return end
-	if not _G.FCF_OpenTemporaryWindow then return end
+	if addon._tempWindowHookInstalled or not _G.FCF_OpenTemporaryWindow then return end
 
 	addon._origFCF_OpenTemporaryWindow = addon._origFCF_OpenTemporaryWindow or _G.FCF_OpenTemporaryWindow
 	_G.FCF_OpenTemporaryWindow = function(...)
 		local frame = addon._origFCF_OpenTemporaryWindow(...)
-		if frame and frame.GetID then
-			if addon.setupChatFrame then
-				addon.setupChatFrame(frame:GetID())
-			end
+		if frame and frame.GetID and addon.setupChatFrame then
+			addon.setupChatFrame(frame:GetID())
 		end
 		return frame
 	end

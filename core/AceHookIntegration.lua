@@ -1,12 +1,11 @@
 --[[
 	AceHookIntegration.lua - AceHook integration and hook management for XanChat
-	Refactored for:
-	- Simplified proxy state management with clear cleanup
-	- Improved variable naming for clarity
-	- Consolidated redundant nil checks
-	- Better separation of concerns
-	- Fixed potential memory leak in proxy transfer
-	- More efficient frame field iteration
+	Improvements:
+	- Consolidated proxy transfer state cleanup
+	- Simplified frame field iteration
+	- Better nil handling in CreateProxy
+	- Improved resetCaptureState efficiency
+	- Cleaner proxy frame setup
 ]]
 
 local ADDON_NAME, private = ...
@@ -85,7 +84,6 @@ end
 local function ensureCaptureProxyFrame()
 	if not addon then return nil end
 	if captureProxyFrame then
-		-- Rehook if needed
 		if addon.IsHooked and not addon:IsHooked(captureProxyFrame, "AddMessage") then
 			addon:RawHook(captureProxyFrame, "AddMessage", true)
 			addon._rawHooks = addon._rawHooks or {}
@@ -94,7 +92,6 @@ local function ensureCaptureProxyFrame()
 		return captureProxyFrame
 	end
 
-	-- Create new proxy frame
 	if addon.dbg then addon.dbg("Creating capture proxy frame") end
 
 	captureProxyFrame = CreateFrame("ScrollingMessageFrame")
@@ -102,7 +99,6 @@ local function ensureCaptureProxyFrame()
 		Mixin(captureProxyFrame, ChatFrameMixin)
 	end
 
-	-- Hook AddMessage for capturing formatted output
 	addon:RawHook(captureProxyFrame, "AddMessage", true)
 	addon._rawHooks = addon._rawHooks or {}
 	addon._rawHooks["DummyFrame"] = true
@@ -112,11 +108,10 @@ local function ensureCaptureProxyFrame()
 end
 
 local function clearProxyTransferState()
-	-- Clean up all touched keys
 	for i = #proxyTransferState.touched, 1, -1 do
 		local key = proxyTransferState.touched[i]
-		proxyTransferState.touched[i] = nil
 		proxyTransferState.snapshot[key] = nil
+		proxyTransferState.touched[i] = nil
 	end
 	proxyTransferState.originalIsShown = nil
 end
@@ -140,7 +135,6 @@ local function CreateProxy(_, frame)
 
 	clearProxyTransferState()
 
-	-- Skip non-table frames
 	if type(frame) ~= "table" then
 		return proxy
 	end
@@ -148,16 +142,15 @@ local function CreateProxy(_, frame)
 	-- Mirror all valid frame fields
 	for key, value in pairs(frame) do
 		if isMirrorableFrameField(key, value) then
-			-- Track which fields were modified
 			if proxyTransferState.snapshot[key] == nil then
 				proxyTransferState.snapshot[key] = (proxy[key] == nil and MISSING_VALUE) or proxy[key]
-				proxyTransferState.touched[#proxyTransferState.touched + 1] = key
+				table.insert(proxyTransferState.touched, key)
 			end
 			proxy[key] = value
 		end
 	end
 
-	-- Override IsShown to always return true for proper formatting
+	-- Override IsShown to always return true
 	proxyTransferState.originalIsShown = (proxy.IsShown == nil and MISSING_VALUE) or proxy.IsShown
 	proxy.IsShown = function() return true end
 
@@ -172,7 +165,6 @@ local function RestoreProxy()
 		return
 	end
 
-	-- Restore all modified fields to original values
 	for i = #proxyTransferState.touched, 1, -1 do
 		local key = proxyTransferState.touched[i]
 		local previous = proxyTransferState.snapshot[key]
@@ -187,7 +179,6 @@ local function RestoreProxy()
 		proxyTransferState.snapshot[key] = nil
 	end
 
-	-- Restore original IsShown function
 	if proxyTransferState.originalIsShown ~= nil then
 		if proxyTransferState.originalIsShown == MISSING_VALUE then
 			captureProxyFrame.IsShown = nil
@@ -203,7 +194,6 @@ end
 -- ============================================================================
 
 addon.AddMessage = function(_, frame, text, r, g, b, id, ...)
-	-- Capture text when called on the capture proxy frame
 	if captureState.proxy == frame and not captureState.text then
 		captureState.text = text
 		captureState.color.r = r
@@ -214,7 +204,6 @@ addon.AddMessage = function(_, frame, text, r, g, b, id, ...)
 		return
 	end
 
-	-- Call original AddMessage for non-capture calls
 	return addon.hooks[frame].AddMessage(frame, text, r, g, b, id, ...)
 end
 
@@ -222,7 +211,6 @@ end
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
--- Embed AceHook into addon for self.hooks support (needed for AddMessage handler)
 AceHook:Embed(addon)
 
 addon.ensureCaptureProxyFrame = ensureCaptureProxyFrame
