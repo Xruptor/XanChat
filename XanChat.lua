@@ -189,10 +189,10 @@ end
 
 -- Extract player name from sender arg (arg2) with fallbacks
 local function extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
-	if not isArg2Secret then
-		local senderName = arg2 or ""
-		local coloredName = senderName
+	local senderName = arg2 or ""
+	local coloredName = senderName
 
+	if not isArg2Secret then
 		-- Apply Ambiguate for name display
 		if _G.Ambiguate then
 			coloredName = _G.Ambiguate(coloredName, "none")
@@ -217,6 +217,9 @@ local function extractPlayerInfo(arg2, arg12, arg11, isArg2Secret)
 	else
 		playerInfo = tryGetPlayerFromLineID(arg11)
 	end
+
+	--for secret values
+	playerInfo.sender_name = senderName
 
 	return playerInfo or {}
 end

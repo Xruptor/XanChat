@@ -251,9 +251,39 @@ local function StylePlayerSection(m)
 			end
 		end
 
+		-- Get player info for level (supports level display even during lockdown)
+		local coloredLevel = ""
+		if addon.getPlayerInfo then
+			local playerInfo = addon.getPlayerInfo(m.player_guid, m.player_name_with_realm, m.player_name, m.server_name)
+			if playerInfo and playerInfo.level then
+				local level = tonumber(playerInfo.level) or 0
+				if level > 0 then
+					local colorFunc = _G.GetQuestDifficultyColor or _G.GetDifficultyColor
+					if colorFunc then
+						local difficultyColor = colorFunc(level)
+						if difficultyColor then
+							coloredLevel = wrapInColor(tostring(level), difficultyColor.r, difficultyColor.g, difficultyColor.b)
+						end
+					end
+				end
+			end
+		end
+
 		-- Create clickable player link
-		local displayText = addTimeRunningIcon(m.player_guid, coloredPlayerName, isSecret)
-		local playerLink = createPlayerLink(m, m.sender_name, displayText)
+		-- IMPORTANT: Use Ambiguate to strip realm for same-realm players in the link target
+		-- sender_name may be in "Name-Realm" format, but WoW player links work better with proper format
+		local linkTarget = m.sender_name
+		if linkTarget and _G.Ambiguate then
+			linkTarget = _G.Ambiguate(linkTarget, "none")
+		end
+
+		-- Build display text with level if available
+		local displayText = coloredPlayerName
+		if coloredLevel ~= "" then
+			displayText = coloredLevel..":"..coloredPlayerName
+		end
+		displayText = addTimeRunningIcon(m.player_guid, displayText, isSecret)
+		local playerLink = createPlayerLink(m, linkTarget, displayText)
 		if playerLink then
 			m.player_link = playerLink
 			m.styled_player_name = displayText
@@ -275,9 +305,9 @@ local function StylePlayerSection(m)
 		local playerNamePattern = string.gsub(m.player_name, "([%-%^%$%(%)%%%[%]%.%*%+%?])", "%%%1")
 
 		for _, pattern in ipairs({
-			"|cff(%x%x%x%x%x)%["..playerNamePattern.."%]|r",
-			"|cff(%x%x%x%x%x)"..playerNamePattern.."|r",
-			"|cff(%x%x%x%x%x)%|"..playerNamePattern.."|h",
+			"|cff(%x%x%x%x%x%x)%["..playerNamePattern.."%]|r",
+			"|cff(%x%x%x%x%x%x)"..playerNamePattern.."|r",
+			"|cff(%x%x%x%x%x%x)%|"..playerNamePattern.."|h",
 		}) do
 			local colorMatch = string.match(m.OUTPUT, pattern)
 			if colorMatch then
@@ -307,10 +337,8 @@ local function StylePlayerSection(m)
 		addon.dbg("-->StylePlayerSection: name="..addon.dbgSafeValue(m.player_name).." extractedColor="..tostring(extractedClassColor and "yes" or "no"))
 	end
 
-	-- Return early if no styling data available
-	if not playerInfo and not extractedClassColor and not (m.player_class and m.player_class ~= "") then
-		return
-	end
+	-- NOTE: Don't return early even without styling data - we still want to create clickable links
+	-- The styled name will just be the plain player name without level/class colors
 
 	-- Build level text with difficulty coloring
 	local coloredLevel = ""
@@ -353,7 +381,13 @@ local function StylePlayerSection(m)
 	end
 	displayText = addTimeRunningIcon(m.player_guid, displayText, false)
 
-	local playerLink = createPlayerLink(m, m.sender_name, displayText)
+	-- Strip realm for same-realm players in the link target
+	local linkTarget = m.sender_name
+	if linkTarget and _G.Ambiguate then
+		linkTarget = _G.Ambiguate(linkTarget, "none")
+	end
+
+	local playerLink = createPlayerLink(m, linkTarget, displayText)
 	if playerLink then
 		m.player_link = playerLink
 		m.styled_player_name = playerLink
