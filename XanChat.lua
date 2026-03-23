@@ -353,20 +353,47 @@ end
 local function processSecretPayload(_, frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 	addon.resetCaptureState()
 
-	-- Message deduplication for lockdown
-	local messageKey = tostring(event) .. "_" .. tostring(arg11 or 0)
-	if addon._lockdownProcessedMessages and addon._lockdownProcessedMessages[messageKey] then
-		return true
-	end
-
 	local m = addon:ParseChatEvent(frame, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15)
 	if type(m) ~= "table" then
 		m = addon.sectionOriginal or {}
 	end
 
-	-- Extract channel info from args if not already set
+	-- Check if this frame should receive this message by replicating Blizzard's routing logic
+	-- This replaces the old _lockdownProcessedMessages deduplication approach
+	local targetFrames = addon.getTargetChatFrames and addon.getTargetChatFrames(m.CHATTYPE or event, m.channel_number or "")
+	local frameShouldReceive = false
+
+	if targetFrames and #targetFrames > 0 then
+		-- Check if the current frame is in the target list
+		for _, targetFrame in ipairs(targetFrames) do
+			if targetFrame == frame then
+				frameShouldReceive = true
+				break
+			end
+		end
+	else
+		-- Fallback: if we couldn't determine target frames, allow the message through
+		-- This preserves the original behavior if the new logic fails
+		frameShouldReceive = true
+	end
+
+	-- Debug output for frame routing decision
+	if addon.dbg then
+		local frameName = frame and frame.GetName and frame:GetName() or "<unknown>"
+		local targetCount = targetFrames and #targetFrames or 0
+		addon.dbg("processSecretPayload: frame=" .. frameName .. " event=" .. tostring(event) ..
+			" channel=" .. tostring(m.channel_number or "") .. " frameShouldReceive=" .. tostring(frameShouldReceive) ..
+			" targetFrames=" .. tostring(targetCount))
+	end
+
+	if not frameShouldReceive then
+		-- This frame shouldn't receive this message, skip it
+		return true
+	end
+
+	-- Extract channel info from OUTPUT if deferred (already attempted in ParseChatEvent)
+	-- ParseChatEvent calls extractChannelInfo which sets deferredChannelExtraction if needed
 	if not m.channel_number or m.channel_number == "" then
-		addon.extractChannelInfoFromSources(m, {arg7, arg9, arg10})
 		addon.extractChannelFromOutputIfDeferred(m)
 	end
 
@@ -388,9 +415,6 @@ local function processSecretPayload(_, frame, event, arg1, arg2, arg3, arg4, arg
 		frame:AddMessage(textToDisplay, outR, outG, outB, outID, false, m.ACCESSID, m.TYPEID)
 	end
 
-	-- Mark as processed
-	addon._lockdownProcessedMessages = addon._lockdownProcessedMessages or {}
-	addon._lockdownProcessedMessages[messageKey] = true
 	return true
 end
 
@@ -1050,7 +1074,6 @@ function addon:OnEnable()
 	self:EnableAddon()
 	self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
 	self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
-	self:RegisterEvent("PLAYER_LEAVING_WORLD", "ClearLockdownProcessedMessages")
 
 	if addon.InitInstanceWarning then
 		addon.InitInstanceWarning()
@@ -1075,14 +1098,8 @@ function addon:OnEnable()
 	end
 end
 
-function addon:ClearLockdownProcessedMessages()
-	addon._lockdownProcessedMessages = {}
-	addon.dbg("ClearLockdownProcessedMessages: cleared deduplication table")
-end
-
 function addon:OnDisable()
 	addon.dbg("OnDisable: removing hooks and cleaning up")
-	self:ClearLockdownProcessedMessages()
 
 	if addon.unregisterAllCallbacks then
 		addon.unregisterAllCallbacks()

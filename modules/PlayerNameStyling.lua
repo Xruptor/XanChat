@@ -90,7 +90,28 @@ local SKIP_STYLING_EVENTS = {
 	IGNORED = true,
 	PING = true,
 	EMOTE = true,
-	TEXT_EMOTE = true
+	TEXT_EMOTE = true,
+	-- NPC/non-player messages - should not get player styling
+	MONSTER_SAY = true,
+	MONSTER_YELL = true,
+	MONSTER_WHISPER = true,
+	MONSTER_EMOTE = true,
+	MONSTER_PARTY = true,
+	MONSTER_RAID = true,
+	-- Raid boss messages
+	RAID_BOSS_EMOTE = true,
+	RAID_BOSS_WHISPER = true,
+	-- Lockpicking/casting opening messages
+	OPENING = true,
+	-- Pet battle messages
+	PET_BATTLE_COMBAT_LOG = true,
+	PET_BATTLE_INFO = true,
+	-- Battleground system messages
+	BG_SYSTEM_ALLIANCE = true,
+	BG_SYSTEM_HORDE = true,
+	BG_SYSTEM_NEUTRAL = true,
+	-- Voice transcription
+	VOICE_TEXT = true
 }
 
 local function shouldSkipStyling(chatType)
@@ -133,14 +154,6 @@ local function createPlayerLink(m, linkTarget, displayText)
 	if not linkTarget or not displayText then return nil end
 
 	local chatType = m.chat_type or ""
-
-	-- Skip for emotes, monster emotes, and channel notices
-	if string.sub(chatType, 1, 7) == "MONSTER" or
-	   string.sub(chatType, 1, 18) == "RAID_BOSS_EMOTE" or
-	   chatType == "EMOTE" or chatType == "TEXT_EMOTE" or
-	   chatType == "CHANNEL_NOTICE" or chatType == "CHANNEL_NOTICE_USER" then
-		return nil
-	end
 
 	-- Handle achievement events
 	if chatType == "ACHIEVEMENT" or chatType == "GUILD_ACHIEVEMENT" then

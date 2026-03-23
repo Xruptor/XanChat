@@ -88,6 +88,163 @@ local function safestr_bool(v)
 end
 
 -- ============================================================================
+-- CHAT FRAME ROUTING
+-- ============================================================================
+
+-- Check if a chat frame is valid and should receive messages
+local function isChatFrameValid(frame)
+	if not frame then return false end
+	if type(frame) ~= "table" then return false end
+	if not frame.GetObjectType then return false end
+	if frame:GetObjectType() ~= "Frame" then return false end
+
+	-- Check if frame is registered in CHAT_FRAMES
+	local frameName = frame:GetName()
+	if not frameName then return false end
+
+	if _G.CHAT_FRAMES then
+		for _, name in ipairs(_G.CHAT_FRAMES) do
+			if name == frameName then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+-- Check if a frame is visible (shown and not hidden)
+local function isFrameVisible(frame)
+	if not frame then return false end
+
+	-- Check IsShown safely
+	local isShown = true
+	if frame.IsShown then
+		local ok = pcall(function()
+			isShown = frame:IsShown()
+		end)
+		if not ok then
+			isShown = true
+		end
+	end
+
+	return isShown
+end
+
+-- Check if a frame is the active tab in its dock
+-- When frames are docked together, only the active tab receives messages
+local function isActiveDockTab(frame)
+	if not frame then return false end
+
+	-- If the frame isn't docked, it's always "active" for receiving messages
+	local isDocked = false
+	if frame.IsDocked then
+		local ok = pcall(function()
+			isDocked = frame:IsDocked()
+		end)
+		if not ok then
+			isDocked = false
+		end
+	end
+
+	if not isDocked then
+		return true
+	end
+
+	-- Frame is docked - check if it's the selected frame in the dock
+	-- Use FCFDock_GetSelectedFrame if available (modern API)
+	if _G.FCFDock_GetSelectedFrame then
+		-- Get the dock for this frame
+		local dock = frame:GetDock()
+		if dock then
+			local selectedFrame = _G.FCFDock_GetSelectedFrame(dock)
+			return selectedFrame == frame
+		end
+	end
+
+	-- Fallback: check if the frame has a dock reference and compare
+	if frame.dock then
+		local dock = frame.dock
+		if dock.GetSelectedFrame then
+			local selectedFrame = dock:GetSelectedFrame()
+			return selectedFrame == frame
+		end
+	end
+
+	-- If we can't determine, assume active (conservative approach)
+	return true
+end
+
+-- Get all chat frames that should receive a message for a given event/channel
+-- Returns a table of frame objects that are valid, visible, and configured for the event
+-- @param event string: The chat event (e.g., "CHAT_MSG_CHANNEL", "CHAT_MSG_GUILD")
+-- @param channelNumber string|number|nil: Optional channel number for channel events
+-- @return table: Array of chat frames that should receive the message
+local function getTargetChatFrames(event, channelNumber)
+	local targetFrames = {}
+
+	if not _G.CHAT_FRAMES then
+		return targetFrames
+	end
+
+	for i = 1, #_G.CHAT_FRAMES do
+		local frameName = _G.CHAT_FRAMES[i]
+		local frame = _G[frameName]
+
+		if not frame then
+			-- Try direct lookup
+			frame = _G["ChatFrame" .. i]
+		end
+
+		-- Check if frame is valid
+		if not isChatFrameValid(frame) then
+			-- skip this frame
+		elseif not isFrameVisible(frame) then
+			-- skip this frame
+		elseif not isActiveDockTab(frame) then
+			-- skip this frame (docked but not the active tab)
+		else
+			local shouldAdd = true
+
+			-- For channel events, check if the specific channel is enabled
+			if channelNumber and channelNumber ~= "" and channelNumber ~= "0" then
+				local channelNum = tostring(channelNumber)
+				local hasChannel = false
+
+				-- Check frame's channel list
+				if frame.channelList then
+					for _, chan in ipairs(frame.channelList) do
+						if tostring(chan) == channelNum then
+							hasChannel = true
+							break
+						end
+					end
+				end
+
+				-- Alternative check using Blizzard API
+				if not hasChannel and _G.FCF_IsChatFrameEnabledForChannel then
+					local ok, result = pcall(_G.FCF_IsChatFrameEnabledForChannel, frame, tonumber(channelNum))
+					if ok and result then
+						hasChannel = true
+					end
+				end
+
+				if not hasChannel then
+					shouldAdd = false
+				end
+			end
+
+			-- Add frame to target list
+			if shouldAdd then
+				table.insert(targetFrames, frame)
+			end
+		end
+	end
+
+	return targetFrames
+end
+
+-- ============================================================================
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
@@ -99,3 +256,7 @@ addon.isSafeString = isSafeString
 addon.safestr = safestr
 addon.safestr_bool = safestr_bool
 addon.SafeType = SafeType
+addon.isChatFrameValid = isChatFrameValid
+addon.isFrameVisible = isFrameVisible
+addon.isActiveDockTab = isActiveDockTab
+addon.getTargetChatFrames = getTargetChatFrames

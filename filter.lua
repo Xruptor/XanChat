@@ -73,7 +73,7 @@ end
 local function createScrollFrame(parent, yOffset)
 	local scrollFrame = CreateFrame("ScrollFrame", parent:GetName().."_Scroll", parent, "UIPanelScrollFrameTemplate")
 	local scrollChild = CreateFrame("frame", parent:GetName().."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
-	scrollFrame:SetPoint("TOPLEFT", 10, -yOffset)
+	scrollFrame:SetPoint("TOPLEFT", 10, yOffset)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
 	scrollFrame:SetScrollChild(scrollChild)
 
