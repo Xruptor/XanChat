@@ -129,9 +129,28 @@ local function FormatChatMessage(message)
 		parts[#parts + 1] = mobileIcon
 	end
 
+	-- Check if message text contains a format placeholder (e.g., %s, %d)
+	-- This is common in Blizzard system messages like achievements
+	-- ONLY apply to system events, not user chat channels
+	local chatType = m.chat_type or m.CHATTYPE or ""
+	local isSystemEvent = addon.isSystemOnlyEvent and addon.isSystemOnlyEvent(chatType)
+
+	local hasFormatPlaceholder = false
+	if isSystemEvent and addon.SafeMatch then
+		-- Check for common format placeholders (avoid matching escaped %% or color codes |c)
+		hasFormatPlaceholder = addon.SafeMatch(messageText, "^(.-)[%%][1-9dsfgx]") ~= nil
+	end
+
 	-- Add message text with colon separator if we have player info
 	if messageText ~= "" then
-		if styledPlayer ~= "" or playerLink ~= "" or playerName ~= "" then
+		if hasFormatPlaceholder and (styledPlayer ~= "" or playerLink ~= "" or playerName ~= "") then
+			-- Replace the format placeholder with the styled player name
+			-- Prefer styledPlayer (clickable link), fall back to playerLink or plain name
+			local nameForReplacement = styledPlayer ~= "" and styledPlayer or playerLink ~= "" and playerLink or playerName
+			local gsubFn = addon.SafeGSub or string.gsub
+			local formattedMessage = gsubFn(messageText, "([%%][1-9dsfgx])", nameForReplacement, 1)
+			parts[#parts + 1] = formattedMessage
+		elseif styledPlayer ~= "" or playerLink ~= "" or playerName ~= "" then
 			local lastIdx = #parts
 			if lastIdx > 0 then
 				parts[lastIdx] = parts[lastIdx]..": "..messageText

@@ -405,7 +405,33 @@ local function processSecretPayload(_, frame, event, arg1, arg2, arg3, arg4, arg
 	addon.StylePlayerSection(m)
 	local channelInfo = buildLockdownChannelInfo(m)
 	local skipStyling = addon.SKIP_STYLING_EVENTS and m.chat_type and addon.SKIP_STYLING_EVENTS[m.chat_type]
-	local textToDisplay = skipStyling and (arg1 or "") or (channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or ""))
+	local textToDisplay
+
+	if skipStyling then
+		textToDisplay = arg1 or ""
+	else
+		-- Check if arg1 contains a format placeholder (e.g., %s in achievement messages)
+		-- ONLY apply to system events, not user chat channels
+		local chatType = m.chat_type or ""
+		local isSystemEvent = addon.isSystemOnlyEvent and addon.isSystemOnlyEvent(chatType)
+
+		-- During lockdown, we can't safely use string operations on secret values
+		-- Use SafeMatch/SafeGSub which handle secret values via pcall
+		local hasFormatPlaceholder = false
+		local arg1Str = arg1 or ""
+		if isSystemEvent and addon.SafeMatch then
+			hasFormatPlaceholder = addon.SafeMatch(arg1Str, "^(.-)[%%][1-9dsfgx]") ~= nil
+		end
+
+		if hasFormatPlaceholder and m.styled_player_name and m.styled_player_name ~= "" then
+			-- Replace the format placeholder with the styled player name
+			local gsubFn = addon.SafeGSub or string.gsub
+			textToDisplay = channelInfo .. gsubFn(arg1Str, "([%%][1-9dsfgx])", m.styled_player_name, 1)
+		else
+			-- Default: prepend player link with colon
+			textToDisplay = channelInfo .. (m.player_link or "") .. (m.player_link and ": " or "") .. (arg1 or "")
+		end
+	end
 
 	-- Display the message
 	-- During lockdown, textToDisplay contains secret values from arg1

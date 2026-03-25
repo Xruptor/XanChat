@@ -88,6 +88,80 @@ local function safestr_bool(v)
 end
 
 -- ============================================================================
+-- SAFE STRING OPERATIONS FOR SECRET VALUES
+-- ============================================================================
+
+-- Safely perform string.match, returns nil on error (e.g., secret values)
+local function SafeMatch(str, pattern, init)
+	if isSecretValue(str) then
+		return nil
+	end
+	if not canAccessValue(str) then
+		return nil
+	end
+	if SafeType(str) ~= "string" then
+		return nil
+	end
+
+	local ok, result = pcall(function()
+		return string.match(str, pattern, init)
+	end)
+
+	if ok then
+		return result
+	end
+	return nil
+end
+
+-- Safely perform string.gsub, returns original string on error
+local function SafeGSub(str, pattern, repl, n)
+	if isSecretValue(str) then
+		return str
+	end
+	if not canAccessValue(str) then
+		return str
+	end
+	if SafeType(str) ~= "string" then
+		return str
+	end
+
+	local ok, result = pcall(function()
+		return string.gsub(str, pattern, repl, n)
+	end)
+
+	if ok then
+		return result
+	end
+	return str
+end
+
+-- Safely perform string.format, returns original string on error
+-- Takes a table of args for Lua 5.1 compatibility
+local function SafeFormat(fmt, args)
+	if isSecretValue(fmt) then
+		return fmt
+	end
+	if not canAccessValue(fmt) then
+		return fmt
+	end
+	if SafeType(fmt) ~= "string" then
+		return fmt
+	end
+	if type(args) ~= "table" then
+		return fmt
+	end
+
+	local ok, result = pcall(function()
+		return string.format(fmt, unpack(args))
+	end)
+
+	if ok then
+		return result
+	end
+	return fmt
+end
+
+-- ============================================================================
 -- CHAT FRAME ROUTING
 -- ============================================================================
 
@@ -245,6 +319,120 @@ local function getTargetChatFrames(event, channelNumber)
 end
 
 -- ============================================================================
+-- CHAT EVENT CLASSIFICATION
+-- ============================================================================
+
+-- System-only CHAT_MSG events where users cannot type/communicate
+-- These events may contain format placeholders (%s, %d, etc.) in message text
+-- chatType is the event name with "CHAT_MSG_" prefix removed
+-- Source: Compare with SKIP_STYLING_EVENTS in PlayerNameStyling.lua
+local SYSTEM_ONLY_CHAT_EVENTS = {
+	-- Achievement system events
+	ACHIEVEMENT = true,
+	GUILD_ACHIEVEMENT = true,
+
+	-- System notifications
+	SYSTEM = true,
+	AFK = true,
+	DND = true,
+	IGNORED = true,
+	ERRORS = true,
+	ADDON = true,
+
+	-- Channel system messages (not user chat in channels)
+	CHANNEL_NOTICE = true,
+	CHANNEL_NOTICE_USER = true,
+
+	-- Combat and events
+	COMBAT_MISC_INFO = true,
+	COMBAT_XP_GAIN = true,
+	COMBAT_FACTION_CHANGE = true,
+	COMBAT_HONOR_GAIN = true,
+
+	-- Economy/Items
+	TRADESKILLS = true,
+	LOOT = true,
+	MONEY = true,
+	CURRENCY = true,
+
+	-- Pet system
+	PET_INFO = true,
+	PET_BATTLE_COMBAT_LOG = true,
+	PET_BATTLE_INFO = true,
+
+	-- NPC speech (not player-controlled)
+	MONSTER_SAY = true,
+	MONSTER_YELL = true,
+	MONSTER_WHISPER = true,
+	MONSTER_EMOTE = true,
+	MONSTER_PARTY = true,
+	MONSTER_RAID = true,
+
+	-- Raid boss emotes
+	RAID_BOSS_EMOTE = true,
+	RAID_BOSS_WHISPER = true,
+
+	-- Lockpicking/casting opening messages
+	OPENING = true,
+
+	-- Battleground system messages
+	BG_SYSTEM_ALLIANCE = true,
+	BG_SYSTEM_HORDE = true,
+	BG_SYSTEM_NEUTRAL = true,
+
+	-- Battle.net system notifications (not chat)
+	BN_INLINE_TOAST_ALERT = true,
+	BN_INLINE_TOAST_BROADCAST = true,
+	BN_INLINE_TOAST_BROADCAST_INFORM = true,
+	BN_INLINE_TOAST_CONVERSATION = true,
+	BN_WHISPER_PLAYER_OFFLINE = true,
+}
+
+-- User chat events where players can type/communicate
+-- These should NEVER have format placeholders replaced
+local USER_CHAT_EVENTS = {
+	SAY = true,
+	YELL = true,
+	EMOTE = true,          -- Player /emote commands
+	TEXT_EMOTE = true,     -- Player emotes from emote menu
+	WHISPER = true,
+	WHISPER_INFORM = true,
+	GUILD = true,
+	OFFICER = true,
+	PARTY = true,
+	PARTY_LEADER = true,
+	RAID = true,
+	RAID_LEADER = true,
+	RAID_WARNING = true,
+	CHANNEL = true,        -- User chat channels (1-10)
+	BN_WHISPER = true,
+	BN_WHISPER_INFORM = true,
+	BN_CONVERSATION = true,
+	BN_CONVERSATION_NOTICE = true,
+	COMMUNITIES_CHANNEL = true,
+}
+
+-- Check if a chat event type is a system-only event (not user chat)
+-- @param chatType string: The chat type (e.g., "ACHIEVEMENT", "GUILD", "SAY")
+-- @return boolean: true if this is a system-only event where users cannot type
+local function isSystemOnlyEvent(chatType)
+	if not chatType or type(chatType) ~= "string" then
+		return false
+	end
+	return SYSTEM_ONLY_CHAT_EVENTS[chatType] or false
+end
+
+-- Check if a chat event type is a user chat event (players can type)
+-- @param chatType string: The chat type (e.g., "GUILD", "SAY", "WHISPER")
+-- @return boolean: true if this is a user chat event
+local function isUserChatEvent(chatType)
+	if not chatType or type(chatType) ~= "string" then
+		return false
+	end
+	return USER_CHAT_EVENTS[chatType] or false
+end
+
+-- ============================================================================
 -- EXPORT FUNCTIONS TO ADDON
 -- ============================================================================
 
@@ -256,7 +444,14 @@ addon.isSafeString = isSafeString
 addon.safestr = safestr
 addon.safestr_bool = safestr_bool
 addon.SafeType = SafeType
+addon.SafeMatch = SafeMatch
+addon.SafeGSub = SafeGSub
+addon.SafeFormat = SafeFormat
 addon.isChatFrameValid = isChatFrameValid
 addon.isFrameVisible = isFrameVisible
 addon.isActiveDockTab = isActiveDockTab
 addon.getTargetChatFrames = getTargetChatFrames
+addon.isSystemOnlyEvent = isSystemOnlyEvent
+addon.isUserChatEvent = isUserChatEvent
+addon.SYSTEM_ONLY_CHAT_EVENTS = SYSTEM_ONLY_CHAT_EVENTS
+addon.USER_CHAT_EVENTS = USER_CHAT_EVENTS
