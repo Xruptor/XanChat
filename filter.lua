@@ -297,7 +297,7 @@ function addon:searchFilterList(event, text)
 		addon.DebugPrint("searchFilterList: event="..tostring(event).." text="..textDump)
 	end
 
-	if filterList.core[event] then
+	if filterList.core and filterList.core[event] then
 		if addon.DebugPrint then addon.DebugPrint("searchFilterList: core match") end
 		return true
 	end
