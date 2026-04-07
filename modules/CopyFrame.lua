@@ -19,8 +19,6 @@ local function unescape(str)
 	if string.find(str, "|Hchannel:officer", 1, true) then
 		isOfficerChat = true
 	end
-	--str = string.gsub(str, "|c%x%x%x%x%x%x%x%x", "") --color tag 1
-	--str = string.gsub(str, "|r", "") --color tag 2
 
     str = string.gsub(str, "|T.-|t", "") --textures in chat like currency coins and such
 	str = string.gsub(str, "|H.-|h(.-)|h", "%1") --links, just put the item description and chat color
@@ -93,11 +91,8 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 
 	-- lets create the pages
 	local pages = {}
-	local pageCount = 0 -- start at zero
 	for i = 1, msgCount, MAXLINES do
-	  pageCount = i-1 -- the block will extend by 1 past 150, so subtract 1
-	  if pageCount <= 0 then pageCount = 1 end -- this is the first page, so start at 1
-	  pages[#pages + 1] = pageCount
+		pages[#pages + 1] = i
 	end
 
 	-- check for custom buffer limit by the user, ignore if it's set to zero
@@ -143,18 +138,11 @@ local function getChatText(copyFrame, chatIndex, pageNum)
 	if endPos > msgCount then endPos = msgCount end
 
 	for i = startPos, endPos do
-		local chatMsg, r, g, b, chatTypeID = chatFrame:GetMessageInfo(i)
+		local chatMsg = chatFrame:GetMessageInfo(i)
 		if not chatMsg then break end
 
 		--check for secret values strings
 		chatMsg = (addon.safestr_bool(chatMsg) and addon.L.ProtectedSecretValue) or chatMsg
-
-		-- fix situations where links end the color prematurely
-		-- if (r and g and b and chatTypeID) then
-		-- 	local colorCode = RGBToColorCode(r, g, b)
-		-- 	chatMsg = string.gsub(chatMsg, "|r", "|r"..colorCode)
-		-- 	chatMsg = colorCode..chatMsg
-		-- end
 
 		if (i == startPos) then
 			lineText = unescape(chatMsg).."|r"

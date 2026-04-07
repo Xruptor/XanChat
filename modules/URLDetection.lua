@@ -25,7 +25,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "(%a+)://(%S+)%s?",
 		matchfunc = function(scheme, remainder)
-			return _G.RegisterMatch(buildUrlLink(scheme.."://"..remainder), "FRAME")
+			return addon.RegisterMatch(buildUrlLink(scheme.."://"..remainder), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -33,7 +33,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "www%.([_A-Za-z0-9-]+)%.(%S+)%s?",
 		matchfunc = function(domain, tail)
-			return _G.RegisterMatch(buildUrlLink("www."..domain.."."..tail), "FRAME")
+			return addon.RegisterMatch(buildUrlLink("www."..domain.."."..tail), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -41,7 +41,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "([_A-Za-z0-9-%.]+)@([_A-Za-z0-9-]+)(%.+)([_A-Za-z0-9-%.]+)%s?",
 		matchfunc = function(user, domain, dots, tld)
-			return _G.RegisterMatch(buildUrlLink(user.."@"..domain..dots..tld), "FRAME")
+			return addon.RegisterMatch(buildUrlLink(user.."@"..domain..dots..tld), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -49,7 +49,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?):(%d%d?%d?%d?%d?)%s?",
 		matchfunc = function(a, b, c, d, port)
-			return _G.RegisterMatch(buildUrlLink(a.."."..b.."."..c.."."..d..":"..port), "FRAME")
+			return addon.RegisterMatch(buildUrlLink(a.."."..b.."."..c.."."..d..":"..port), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",
@@ -57,7 +57,7 @@ local URL_PATTERNS = {
 	{
 		pattern = "(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%.(%d%d?%d?)%s?",
 		matchfunc = function(a, b, c, d)
-			return _G.RegisterMatch(buildUrlLink(a.."."..b.."."..c.."."..d), "FRAME")
+			return addon.RegisterMatch(buildUrlLink(a.."."..b.."."..c.."."..d), "FRAME")
 		end,
 		priority = 50,
 		type = "FRAME",

@@ -207,9 +207,7 @@ local function setEnabled(objType, obj, switch)
 end
 
 local function showReloadPopup()
-	if not addon.xanChatReloadPopup then
-		StaticPopup_Show("XANCHAT_APPLYCHANGES")
-	end
+	StaticPopup_Show("XANCHAT_APPLYCHANGES")
 end
 
 local function bindToggle(btn, key, opts)
@@ -386,10 +384,10 @@ function configFrame:EnableConfig()
 		{ key = "addFontShadow", info = L.ShadowInfo, messageOn = L.ShadowOn, messageOff = L.ShadowOff, reload = true, adjustX = 45 },
 		{ key = "hideVoice", info = L.VoiceInfo, messageOn = L.VoiceOff, messageOff = L.VoiceOn, reload = true },
 		{ key = "hideEditboxBorder", info = L.EditBoxBorderInfo, messageOn = L.EditBoxBorderOff, messageOff = L.EditBoxBorderOn, reload = true, onToggle = function() XCHT_DB.enableSimpleEditbox = false end },
-		{ key = "enableSimpleEditbox", info = L.SimpleEditBoxInfo, messageOn = L.SimpleEditBoxOn, messageOff = L.SimpleEditBoxOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox) end, onToggle = function(val, btn) XCHT_DB.hideEditboxBorder = false setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, val) end },
+		{ key = "enableSimpleEditbox", info = L.SimpleEditBoxInfo, messageOn = L.SimpleEditBoxOn, messageOff = L.SimpleEditBoxOff, reload = true, onShow = function(_) setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, XCHT_DB.enableSimpleEditbox) end, onToggle = function(val, _) XCHT_DB.hideEditboxBorder = false setEnabled("checkbox", addon.aboutPanel.btnSEBDesign, val) end },
 		{ key = "enableSEBDesign", info = L.SEBDesignInfo, messageOn = L.SEBDesignOn, messageOff = L.SEBDesignOff, reload = true, adjustX = 45 },
 		{ key = "enableEditboxAdjusted", info = L.AdjustedEditboxInfo, messageOn = L.AdjustedEditboxOn, messageOff = L.AdjustedEditboxOff, reload = true },
-		{ key = "enableCopyButton", info = L.CopyPasteInfo, messageOn = L.CopyPasteOn, messageOff = L.CopyPasteOff, reload = true, onShow = function(btn) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton) end, onToggle = function(val, btn) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, val) end },
+		{ key = "enableCopyButton", info = L.CopyPasteInfo, messageOn = L.CopyPasteOn, messageOff = L.CopyPasteOff, reload = true, onShow = function(_) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, XCHT_DB.enableCopyButton) end, onToggle = function(val, _) setEnabled("checkbox", addon.aboutPanel.btnCopyPasteLeft, val) end },
 		{ key = "enableCopyButtonLeft", info = L.CopyPasteLeftInfo, messageOn = L.CopyPasteLeftOn, messageOff = L.CopyPasteLeftOff, reload = true, adjustX = 45 },
 		{ key = "enableChatTextFade", info = L.ChatTextFadeInfo, messageOn = L.ChatTextFadeOn, messageOff = L.ChatTextFadeOff, reload = true },
 		{ key = "disableChatFrameFade", info = L.ChatFrameFadeInfo, messageOn = L.ChatFrameFadeOn, messageOff = L.ChatFrameFadeOff, reload = true },
@@ -424,10 +422,10 @@ function configFrame:EnableConfig()
 		DEFAULT_CHAT_FRAME:AddMessage(string.format(L.ChatAlphaSet, val))
 		addon:setUserAlpha()
 	end
-	sliderChatAlpha.sliderMouseUp = function(self, button)
+	sliderChatAlpha.sliderMouseUp = function()
 		sliderChatAlpha.func(sliderChatAlpha:GetValue())
 	end
-	sliderChatAlpha.sliderFunc = function(self, value)
+	sliderChatAlpha.sliderFunc = function(_, value)
 		sliderChatAlpha.currVal:SetText("("..floor(value)..")")
 	end
 	sliderChatAlpha:SetScript("OnValueChanged", sliderChatAlpha.sliderFunc)
@@ -502,10 +500,10 @@ function configFrame:EnableConfig()
 		sliderPageLimit:SetValue(val)
 		sliderPageLimit.currVal:SetText("("..val..")")
 	end
-	sliderPageLimit.sliderMouseUp = function(self, button)
+	sliderPageLimit.sliderMouseUp = function()
 		sliderPageLimit.func(sliderPageLimit:GetValue())
 	end
-	sliderPageLimit.sliderFunc = function(self, value)
+	sliderPageLimit.sliderFunc = function(_, value)
 		sliderPageLimit.currVal:SetText("("..floor(value)..")")
 	end
 	sliderPageLimit:SetScript("OnValueChanged", sliderPageLimit.sliderFunc)

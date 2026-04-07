@@ -488,7 +488,7 @@ function addon:ParseChatEvent(_, event, ...)
 	self.dbg("ParseChatEvent: isSecret=" .. tostring(isSecret))
 
 	-- BN_INLINE_TOAST_ALERT and hidden sender passthrough
-	if select(16, ...) or not isChatMessageEvent or not isChatMessageEvent(event) then
+	if select(16, ...) or not isChatMessageEvent(event) then
 		self.dbg("ParseChatEvent: passthrough (hidden sender or not chat message)")
 		return nil, nil
 	end
@@ -939,7 +939,7 @@ local function handleSlashCommand(msg)
 	elseif _G.InterfaceOptionsFrame_OpenToCategory then
 		if not addon.IsRetail and _G.InterfaceOptionsFrame then
 			_G.InterfaceOptionsFrame:Show()
-		elseif (_G.InCombatLockdown and _G.InCombatLockDown()) or (_G.GameMenuFrame and _G.GameMenuFrame:IsShown()) or _G.InterfaceOptionsFrame then
+		elseif (_G.InCombatLockdown and _G.InCombatLockdown()) or (_G.GameMenuFrame and _G.GameMenuFrame:IsShown()) or _G.InterfaceOptionsFrame then
 			return
 		end
 		if addon.aboutPanel then
@@ -1076,7 +1076,7 @@ function addon:OnLoad()
 
 	-- Setup slash commands
 	_G["SLASH_XANCHAT1"] = "/xanchat"
-	_G["SLASH_XANCHAT2"] = "/xanchat"
+	_G["SLASH_XANCHAT2"] = "/xc"
 	if _G.RegisterChatCommand then
 		_G.RegisterChatCommand("xanchat", handleSlashCommand)
 	elseif _G.SlashCmdList then

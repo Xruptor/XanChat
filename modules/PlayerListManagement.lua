@@ -101,16 +101,16 @@ local function getPlayerInfo(guid, nameWithRealm, playerName, serverName)
 		end
 	end
 
-	-- 3. If not found and we have separate name and realm, combine them
+	-- 3+4. Combined name lookups — only worth trying if both are safe strings
 	if not result and playerName and serverName then
 		local nameIsSecret = isSecret(playerName)
 		local realmIsSecret = isSecret(serverName)
 
 		if not nameIsSecret and not realmIsSecret and type(playerName) == "string" and type(serverName) == "string" then
+			-- 3. Try exact combined name (and lowercase variant)
 			local combinedName = playerName.."-"..serverName
 			result = addon.playerListByName and addon.playerListByName[combinedName]
 
-			-- Try lowercase version
 			if not result then
 				local lowerCombined = combinedName:lower()
 				result = addon.playerListByName and addon.playerListByName[lowerCombined]
@@ -120,22 +120,17 @@ local function getPlayerInfo(guid, nameWithRealm, playerName, serverName)
 			elseif result and addon.dbg then
 				addon.dbg("-->getPlayerInfo: found by combined name="..addon.dbgSafeValue(combinedName))
 			end
-		end
-	end
 
-	-- 4. Check cleanName + realmKey combination
-	if not result and playerName and serverName then
-		local nameIsSecret = isSecret(playerName)
-		local realmIsSecret = isSecret(serverName)
+			-- 4. Try cleanName + realmKey combination
+			if not result then
+				local cleanName = stripNameKey(playerName) or playerName:lower()
+				local realmKey = stripAndLowercase(serverName)
+				local key = cleanName.."-"..realmKey
+				result = addon.playerList and addon.playerList[key]
 
-		if not nameIsSecret and not realmIsSecret and type(playerName) == "string" and type(serverName) == "string" then
-			local cleanName = stripNameKey(playerName) or playerName:lower()
-			local realmKey = stripAndLowercase(serverName)
-			local key = cleanName.."-"..realmKey
-			result = addon.playerList and addon.playerList[key]
-
-			if result and addon.dbg then
-				addon.dbg("-->getPlayerInfo: found by cleanName-key="..addon.dbgSafeValue(key))
+				if result and addon.dbg then
+					addon.dbg("-->getPlayerInfo: found by cleanName-key="..addon.dbgSafeValue(key))
+				end
 			end
 		end
 	end

@@ -93,72 +93,25 @@ end
 
 -- Safely perform string.match, returns nil on error (e.g., secret values)
 local function SafeMatch(str, pattern, init)
-	if isSecretValue(str) then
-		return nil
-	end
-	if not canAccessValue(str) then
-		return nil
-	end
-	if SafeType(str) ~= "string" then
-		return nil
-	end
-
-	local ok, result = pcall(function()
-		return string.match(str, pattern, init)
-	end)
-
-	if ok then
-		return result
-	end
-	return nil
+	if not isSafeString(str) then return nil end
+	local ok, result = pcall(string.match, str, pattern, init)
+	return ok and result or nil
 end
 
 -- Safely perform string.gsub, returns original string on error
 local function SafeGSub(str, pattern, repl, n)
-	if isSecretValue(str) then
-		return str
-	end
-	if not canAccessValue(str) then
-		return str
-	end
-	if SafeType(str) ~= "string" then
-		return str
-	end
-
-	local ok, result = pcall(function()
-		return string.gsub(str, pattern, repl, n)
-	end)
-
-	if ok then
-		return result
-	end
-	return str
+	if not isSafeString(str) then return str end
+	local ok, result = pcall(string.gsub, str, pattern, repl, n)
+	return ok and result or str
 end
 
 -- Safely perform string.format, returns original string on error
 -- Takes a table of args for Lua 5.1 compatibility
 local function SafeFormat(fmt, args)
-	if isSecretValue(fmt) then
-		return fmt
-	end
-	if not canAccessValue(fmt) then
-		return fmt
-	end
-	if SafeType(fmt) ~= "string" then
-		return fmt
-	end
-	if type(args) ~= "table" then
-		return fmt
-	end
-
-	local ok, result = pcall(function()
-		return string.format(fmt, unpack(args))
-	end)
-
-	if ok then
-		return result
-	end
-	return fmt
+	if not isSafeString(fmt) then return fmt end
+	if type(args) ~= "table" then return fmt end
+	local ok, result = pcall(string.format, fmt, unpack(args))
+	return ok and result or fmt
 end
 
 -- ============================================================================
@@ -455,3 +408,69 @@ addon.isSystemOnlyEvent = isSystemOnlyEvent
 addon.isUserChatEvent = isUserChatEvent
 addon.SYSTEM_ONLY_CHAT_EVENTS = SYSTEM_ONLY_CHAT_EVENTS
 addon.USER_CHAT_EVENTS = USER_CHAT_EVENTS
+
+-- ============================================================================
+-- SHARED UI HELPERS (used by filter.lua, stickychannels.lua)
+-- ============================================================================
+
+local function isRestricted()
+	return addon.IsRestricted and addon:IsRestricted()
+end
+
+local function guardRestricted()
+	if isRestricted() then
+		if addon.NotifyConfigLocked then
+			addon:NotifyConfigLocked()
+		end
+		return true
+	end
+	return false
+end
+
+local function createDialogFrame(frameName, titleText)
+	local frame = _G.CreateFrame("frame", frameName, _G.UIParent, _G.BackdropTemplateMixin and "BackdropTemplate")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetToplevel(true)
+	frame:EnableMouse(true)
+	frame:SetMovable(true)
+	frame:SetClampedToScreen(true)
+	frame:SetWidth(380)
+	frame:SetHeight(570)
+
+	frame:SetBackdrop({
+		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+		edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+		tile = true,
+		tileSize = 16,
+		edgeSize = 32,
+		insets = { left = 5, right = 5, top = 5, bottom = 5 }
+	})
+	frame:SetBackdropColor(0, 0, 0, 1)
+	frame:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+
+	local closeButton = _G.CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+	closeButton:SetPoint("TOPRIGHT", frame, -15, -8)
+
+	local header = frame:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
+	header:SetJustifyH("LEFT")
+	header:SetFontObject("GameFontNormal")
+	header:SetPoint("CENTER", frame, "TOP", 0, -20)
+	header:SetText(titleText)
+
+	return frame
+end
+
+local function createScrollFrame(parent, yOffset)
+	local scrollFrame = _G.CreateFrame("ScrollFrame", parent:GetName().."_Scroll", parent, "UIPanelScrollFrameTemplate")
+	local scrollChild = _G.CreateFrame("frame", parent:GetName().."_ScrollChild", scrollFrame, _G.BackdropTemplateMixin and "BackdropTemplate")
+	scrollFrame:SetPoint("TOPLEFT", 10, yOffset)
+	scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
+	scrollFrame:SetScrollChild(scrollChild)
+
+	return scrollFrame, scrollChild
+end
+
+addon.isRestricted = isRestricted
+addon.guardRestricted = guardRestricted
+addon.createDialogFrame = createDialogFrame
+addon.createScrollFrame = createScrollFrame

@@ -16,69 +16,13 @@ local L = addon.L
 local strfind = string.find
 
 -- ============================================================================
--- SHARED UI HELPERS
--- ============================================================================
-
-local function isRestricted()
-	return addon.IsRestricted and addon:IsRestricted()
-end
-
-local function guardRestricted()
-	if isRestricted() then
-		if addon.NotifyConfigLocked then
-			addon:NotifyConfigLocked()
-		end
-		return true
-	end
-	return false
-end
-
--- ============================================================================
 -- FRAME SETUP
 -- ============================================================================
 
-local function createDialogFrame(frameName, titleText)
-	local frame = CreateFrame("frame", frameName, UIParent, BackdropTemplateMixin and "BackdropTemplate")
-	frame:SetFrameStrata("DIALOG")
-	frame:SetToplevel(true)
-	frame:EnableMouse(true)
-	frame:SetMovable(true)
-	frame:SetClampedToScreen(true)
-	frame:SetWidth(380)
-	frame:SetHeight(570)
-
-	frame:SetBackdrop({
-		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-		edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-		tile = true,
-		tileSize = 16,
-		edgeSize = 32,
-		insets = { left = 5, right = 5, top = 5, bottom = 5 }
-	})
-	frame:SetBackdropColor(0, 0, 0, 1)
-	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-
-	local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-	closeButton:SetPoint("TOPRIGHT", frame, -15, -8)
-
-	local header = frame:CreateFontString("$parentHeaderText", "ARTWORK", "GameFontNormalSmall")
-	header:SetJustifyH("LEFT")
-	header:SetFontObject("GameFontNormal")
-	header:SetPoint("CENTER", frame, "TOP", 0, -20)
-	header:SetText(titleText)
-
-	return frame
-end
-
-local function createScrollFrame(parent, yOffset)
-	local scrollFrame = CreateFrame("ScrollFrame", parent:GetName().."_Scroll", parent, "UIPanelScrollFrameTemplate")
-	local scrollChild = CreateFrame("frame", parent:GetName().."_ScrollChild", scrollFrame, BackdropTemplateMixin and "BackdropTemplate")
-	scrollFrame:SetPoint("TOPLEFT", 10, yOffset)
-	scrollFrame:SetPoint("BOTTOMRIGHT", -40, 70)
-	scrollFrame:SetScrollChild(scrollChild)
-
-	return scrollFrame, scrollChild
-end
+local isRestricted = function() return addon.isRestricted() end
+local guardRestricted = function() return addon.guardRestricted() end
+local createDialogFrame = function(...) return addon.createDialogFrame(...) end
+local createScrollFrame = function(...) return addon.createScrollFrame(...) end
 
 -- ============================================================================
 -- FILTER LIST FRAME

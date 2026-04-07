@@ -111,9 +111,7 @@ local function extractChannelInfoFromSources(m, sources)
 	local extractedName = m.channel_name or ""
 
 	for _, source in ipairs(sources) do
-		if not source or source == "" then
-			-- continue
-		else
+		if source and source ~= "" then
 			local sourceType = addon.SafeType and addon.SafeType(source) or type(source)
 
 			if extractedNum and extractedNum ~= "" then
@@ -157,7 +155,7 @@ local function extractChannelFromOutputIfDeferred(m)
 	if not m or not m.deferredChannelExtraction then return false end
 	local sourceType = addon.SafeType and addon.SafeType(m.OUTPUT) or type(m.OUTPUT)
 
-	if m.deferredChannelExtraction and sourceType == "string" and m.OUTPUT ~= "" then
+	if sourceType == "string" and m.OUTPUT ~= "" then
 		local numFromOutput = extractChannelNumberFromString(m.OUTPUT)
 		if numFromOutput then
 			m.channel_number = numFromOutput

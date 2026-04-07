@@ -61,7 +61,7 @@ local function UnregisterAllPatterns(owner)
 end
 
 -- Register a match token for temporary storage
-function RegisterMatch(text, ptype)
+local function RegisterMatch(text, ptype)
 	tokenCount = tokenCount + 1
 	local token = "@##"..tokenCount.."##@"
 
@@ -133,7 +133,7 @@ local function ReplaceMatches(m, ptype)
 		local match = mt and mt[token]
 
 		if match then
-			local cleaned = string.gsub(match, "([%%W])", "%%%1")
+			local cleaned = string.gsub(match, "%%", "%%%%")
 			text = string.gsub(text, token, cleaned)
 		elseif addon.dbg then
 			addon.dbg("ReplaceMatches: token not found: "..token)
@@ -156,3 +156,4 @@ addon.MatchPatterns = MatchPatterns
 addon.ReplaceMatches = ReplaceMatches
 addon.RegisterPattern = RegisterPattern
 addon.UnregisterAllPatterns = UnregisterAllPatterns
+addon.RegisterMatch = RegisterMatch
