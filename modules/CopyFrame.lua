@@ -51,10 +51,18 @@ local function unescape(str)
 		end
 	end
 
-	--remove colored strings
+	-- protect safe |cFFxxxxxx color codes and |r resets before blanket | replacement
+	local PIPE_PH = "\001"
+	str = string.gsub(str, "|c(%x%x%x%x%x%x%x%x)", PIPE_PH.."c%1")
+	str = string.gsub(str, "|r", PIPE_PH.."r")
+
+	--remove remaining unsafe pipe symbols
 	if (string.find(str, "|")) then
 		str = string.gsub(str, "|", "¦")
 	end
+
+	-- restore safe color codes so they render in the copy frame
+	str = string.gsub(str, PIPE_PH, "|")
 
 	--add extra text for protected strings, to let folks know it's protected
 	if isOfficerChat then
