@@ -137,6 +137,7 @@ local function saveSettings(chatFrame)
 	if chatFrame.isMoving or chatFrame.isDragging then return end
 
 	local db = _G.XCHT_DB.frames[frameID]
+	if not db then return end
 
 	if _G.GetChatWindowInfo then
 		local name, fontSize, r, g, b, alpha, shown, locked, docked, uninteractable = _G.GetChatWindowInfo(frameID)
@@ -320,6 +321,7 @@ local function saveDebugInfo(chatFrame)
 	end
 
 	local debugDB = _G.XCHT_DB.debugInfo[frameID]
+	if not debugDB then return end
 	local channelList = chatFrame.channelList
 
 	if not channelList or #channelList < 1 then return end

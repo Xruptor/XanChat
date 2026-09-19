@@ -125,8 +125,14 @@ local CUSTOM_FILTER_EVENTS = {
 -- ============================================================================
 
 local function setupFilterUI()
-	if not XCHT_DB.filterList then
+	if type(XCHT_DB.filterList) ~= "table" then
 		XCHT_DB.filterList = {}
+	end
+	if type(XCHT_DB.filterList.core) ~= "table" then
+		XCHT_DB.filterList.core = {}
+	end
+	if type(XCHT_DB.filterList.custom) ~= "table" then
+		XCHT_DB.filterList.custom = {}
 	end
 
 	if addon.ApplyDefaults then
@@ -246,7 +252,7 @@ function addon:searchFilterList(event, text)
 		return true
 	end
 
-	for k, v in pairs(filterList.custom) do
+	for k, v in pairs(filterList.custom or {}) do
 		if v and strfind(event, k, 1, true) then
 			if addon.DebugPrint then addon.DebugPrint("searchFilterList: custom match key="..tostring(k)) end
 			return true
